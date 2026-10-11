@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Services and DNS · infra-sim</title>
+<meta name="description" content="Pods come and go, and each new one has a new IP address. A Service gives a changing group of pods one stable name and address. Understanding how a Service finds its pods is what lets you fix it when it finds none.">
+<meta property="og:title" content="Services and DNS">
+<meta property="og:description" content="Pods come and go, and each new one has a new IP address. A Service gives a changing group of pods one stable name and address. Understanding how a Service finds its pods is what lets you fix it when it finds none.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="11" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Services and DNS</h1>
+<p class="lead">Pods come and go, and each new one has a new IP address. A Service gives a changing group of pods one stable name and address. Understanding how a Service finds its pods is what lets you fix it when it finds none.</p>
+<div class="meta"><span class="badge">⏱ 40 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Expose pods with a <b>Service</b>, understand <b>selectors</b>, <b>endpoints</b> and <b>cluster DNS</b>, and diagnose a Service that does not answer.</p>
+  <p><b>Why it matters:</b> "all pods are Running but the app is down" is the most common Kubernetes support request, and it is almost always a Service problem that <code>kubectl get endpoints</code> reveals in five seconds.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Explain what a Service is and how it selects pods.</li>
+    <li>Distinguish <code>port</code>, <code>targetPort</code> and <code>nodePort</code>.</li>
+    <li>Choose between ClusterIP, NodePort and LoadBalancer.</li>
+    <li>Use Service DNS names within and across namespaces.</li>
+    <li>Test a Service from inside the cluster and read its endpoints.</li>
+  </ul>
+</div>
+
+<h2 id="the-situation">The situation</h2>
+<p>The front end must call the API. There are three API pods, their IP addresses change with every rollout, and the front end must neither know nor care. It should simply call <code>http://api:3000</code>.</p>
+
+<h2 id="what-a-service-is">What a Service is</h2>
+<p>A Service is a small object with three jobs: it has a <b>stable virtual IP</b> (the ClusterIP) and <b>DNS name</b>; it <b>selects</b> pods by label; and it <b>load-balances</b> connections across the selected pods that are ready.</p>
+
+<pre data-label="service.yaml"><code class="language-yaml">apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector:
+    app: api            # send traffic to pods with this label
+  ports:
+    - port: 3000        # the port of the Service itself
+      targetPort: 3000  # the port on the pods where traffic is delivered</code></pre>
+
+<pre data-label="How a request travels"><code class="language-plaintext"> web pod ──► api:3000 ──DNS──► 10.96.0.27:3000 ──► one of the ready pods matching app=api
+             (name)           (ClusterIP)          10.244.1.5:3000   10.244.2.4:3000</code></pre>
+
+<h3 id="endpoints-the-service-s-actual-targets">Endpoints: the Service's actual targets</h3>
+<p>For every Service, Kubernetes maintains a list of the pod IPs that currently match the selector <em>and</em> are ready. That list is the Service's <b>endpoints</b>, and it is the first thing to look at when a Service misbehaves.</p>
+
+<pre><code class="language-bash">kubectl get service api
+kubectl get endpoints api
+kubectl describe service api      # selector, ports and endpoints in one place</code></pre>
+
+<pre><code class="language-plaintext">NAME   TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)    AGE
+api    ClusterIP   10.96.0.27   &lt;none&gt;        3000/TCP   2m
+
+NAME   ENDPOINTS                         AGE
+api    10.244.1.5:3000,10.244.2.4:3000   2m</code></pre>
+
+<div class="callout warn"><span class="title">An empty endpoint list is not an error to Kubernetes</span>
+If the selector matches no pod, or no matching pod is ready, the endpoints are <code>&lt;none&gt;</code>. Nothing warns you. Clients get <i>connection refused</i> from the Service's IP. Selector and labels are compared as exact strings: <code>app: api</code> and <code>app: backend</code> are simply different.</div>
+
+<h2 id="the-three-port-numbers">The three port numbers</h2>
+<table>
+  <thead><tr><th scope="col">Field</th><th scope="col">Where it applies</th><th scope="col">Example</th></tr></thead>
+  <tbody>
+  <tr><td><code>port</code></td><td>On the Service. What clients connect to.</td><td><code>http://api:3000</code></td></tr>
+  <tr><td><code>targetPort</code></td><td>On the pod. Must be a port the container actually listens on. Defaults to <code>port</code>.</td><td>The app's listening port</td></tr>
+  <tr><td><code>nodePort</code></td><td>On every node (NodePort and LoadBalancer types only), range 30000–32767.</td><td><code>http://NODE-IP:30869</code></td></tr>
+  </tbody>
+</table>
+<p>A Service can translate: <code>port: 80, targetPort: 8080</code> lets clients say <code>http://web</code> while the app keeps listening on 8080.</p>
+
+<h2 id="service-types">Service types</h2>
+<table>
+  <thead><tr><th scope="col">Type</th><th scope="col">Reachable from</th><th scope="col">Use for</th></tr></thead>
+  <tbody>
+  <tr><td><code>ClusterIP</code> (default)</td><td>Inside the cluster only</td><td>Everything internal: APIs, databases</td></tr>
+  <tr><td><code>NodePort</code></td><td>Also from outside, on a high port of every node</td><td>Simple external access, test clusters</td></tr>
+  <tr><td><code>LoadBalancer</code></td><td>Also through an external load balancer the cloud provider creates</td><td>Public entry points in cloud environments</td></tr>
+  </tbody>
+</table>
+<p>For HTTP applications the usual production setup is ClusterIP Services behind one Ingress (Lesson 17).</p>
+
+<h2 id="cluster-dns">Cluster DNS</h2>
+<p>The cluster runs a DNS server (CoreDNS), and every pod is configured to use it. Each Service gets a name of the form <code>SERVICE.NAMESPACE.svc.cluster.local</code>.</p>
+<table>
+  <thead><tr><th scope="col">From a pod in namespace <code>shop</code></th><th scope="col">Resolves to</th></tr></thead>
+  <tbody>
+  <tr><td><code>api</code></td><td>Service <code>api</code> in the <b>same</b> namespace</td></tr>
+  <tr><td><code>api.payments</code></td><td>Service <code>api</code> in namespace <code>payments</code></td></tr>
+  <tr><td><code>api.payments.svc.cluster.local</code></td><td>The same, fully qualified</td></tr>
+  </tbody>
+</table>
+
+<div class="callout danger"><span class="title">The short name is namespace-relative</span>
+<code>http://api:3000</code> means "the Service <code>api</code> in <em>my</em> namespace". A pod in another namespace calling the same URL gets a name-resolution error, or worse, reaches a different Service that happens to have the same name.</div>
+
+<h2 id="creating-and-testing-a-service">Creating and testing a Service</h2>
+
+<pre><code class="language-bash">kubectl expose deployment web --port=80 --target-port=8080   # generates a Service from the Deployment&#x27;s selector
+kubectl get service,endpoints web
+
+# a ClusterIP is only reachable from inside, so test from a temporary pod
+kubectl run tmp --rm -it --restart=Never --image=busybox -- wget -qO- http://web
+
+# or forward a local port to the Service while you test
+kubectl port-forward service/web 8080:80 &amp;
+curl localhost:8080</code></pre>
+
+<div class="callout info"><span class="title">Why your shell can't curl a ClusterIP</span>
+ClusterIPs and pod IPs only exist inside the cluster's network. From your workstation they time out. Use a temporary pod, <code>kubectl port-forward</code>, a NodePort, or an Ingress.</div>
+
+<h2 id="the-service-checklist">The Service checklist</h2>
+<p>When a Service does not answer, three checks in this order find nearly every cause:</p>
+<ol>
+  <li><b>Are there endpoints?</b> <code>kubectl get endpoints NAME</code>. None → selector mismatch, or pods not ready (Lesson 14).</li>
+  <li><b>Do the endpoint ports match what the container listens on?</b> If not, fix <code>targetPort</code> (Lesson 17).</li>
+  <li><b>Is the client using the right name and port?</b> Same namespace? The Service's <code>port</code>, not the pod's?</li>
+</ol>
+
+<h2 id="scenario-1-give-the-pods-one-stable-address">Scenario 1: give the pods one stable address</h2>
+
+<section class="lab" data-lab="k-service"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-2-every-pod-is-running-and-the-shop-is-still-down">Scenario 2: every pod is Running, and the shop is still down</h2>
+<p>Nothing is crashing, so there is nothing in the logs. Start with step 1 of the checklist.</p>
+
+<section class="lab" data-lab="k-fix-service"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li>A Service is a stable name and IP in front of the ready pods that match its selector.</li>
+    <li>Endpoints are the Service's real targets. Empty endpoints mean no pod matches, or none is ready.</li>
+    <li><code>port</code> is on the Service, <code>targetPort</code> on the pod, <code>nodePort</code> on the nodes.</li>
+    <li>Short DNS names resolve within the caller's namespace; use <code>name.namespace</code> across namespaces.</li>
+    <li>Test ClusterIP Services from inside the cluster.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="c">
+<p class="q"><code>kubectl get endpoints api</code> shows <code>&lt;none&gt;</code>, and the api pods are Running and Ready. What is the most likely cause?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. The Service has the wrong port</button>
+<button class="opt" type="button" data-opt="b">B. DNS is not working</button>
+<button class="opt" type="button" data-opt="c">C. The Service's selector does not match the pods' labels</button>
+<button class="opt" type="button" data-opt="d">D. The pods need a restart</button>
+</div>
+<p class="explain">Endpoints are built from pods that match the selector and are ready. Ready pods that are not listed are not being selected.</p>
+</div>
+
+<div class="quiz" data-answer="a">
+<p class="q">A Service has <code>port: 80</code> and <code>targetPort: 8080</code>. Which URL does a client pod in the same namespace use?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. <code>http://web</code> (port 80)</button>
+<button class="opt" type="button" data-opt="b">B. <code>http://web:8080</code></button>
+<button class="opt" type="button" data-opt="c">C. The pod's IP on port 80</button>
+<button class="opt" type="button" data-opt="d">D. <code>http://web:30080</code></button>
+</div>
+<p class="explain">Clients talk to the Service's <code>port</code>. The Service forwards to <code>targetPort</code> on the pods.</p>
+</div>
+
+<div class="quiz" data-answer="b">
+<p class="q">A pod in namespace <code>shop</code> must call the Service <code>api</code> in namespace <code>payments</code>. Which host name works?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. <code>api</code></button>
+<button class="opt" type="button" data-opt="b">B. <code>api.payments</code></button>
+<button class="opt" type="button" data-opt="c">C. <code>payments.api</code></button>
+<button class="opt" type="button" data-opt="d">D. <code>api.shop</code></button>
+</div>
+<p class="explain">The pattern is SERVICE.NAMESPACE. The bare name <code>api</code> would look for a Service in the caller's own namespace.</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://kubernetes.io/docs/concepts/services-networking/service/" target="_blank" rel="noopener">Service</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/" target="_blank" rel="noopener">DNS for Services and Pods</a></li>
+  <li><a href="https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/" target="_blank" rel="noopener">Debug Services</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

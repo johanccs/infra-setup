@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Writing and Debugging Charts · infra-sim</title>
+<meta name="description" content="Sooner or later a chart fails to render, and the error mentions a line number, an angle-bracketed expression and &quot;nil pointer&quot;. This lesson opens the chart up: how templates turn values into YAML, and how to find out which of the two stages went wrong.">
+<meta property="og:title" content="Writing and Debugging Charts">
+<meta property="og:description" content="Sooner or later a chart fails to render, and the error mentions a line number, an angle-bracketed expression and &quot;nil pointer&quot;. This lesson opens the chart up: how templates turn values into YAML, and how to find out which of the two stages went wrong.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="21" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Writing and Debugging Charts</h1>
+<p class="lead">Sooner or later a chart fails to render, and the error mentions a line number, an angle-bracketed expression and "nil pointer". This lesson opens the chart up: how templates turn values into YAML, and how to find out which of the two stages went wrong.</p>
+<div class="meta"><span class="badge">⏱ 50 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Read and write <b>Helm templates</b>, and debug charts with <code>helm lint</code> and <code>helm template</code>.</p>
+  <p><b>Why it matters:</b> template errors happen before anything reaches the cluster, so no Kubernetes tool can help you. The fix is quick once you know that rendering has two stages and which message belongs to which.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Describe the layout of a chart.</li>
+    <li>Use values, built-in objects, pipelines, conditionals and loops in templates.</li>
+    <li>Control whitespace and indentation with <code>{{-</code> and <code>nindent</code>.</li>
+    <li>Tell a template error from a YAML parse error and locate each.</li>
+    <li>Render a chart locally to inspect its output.</li>
+  </ul>
+</div>
+
+<h2 id="the-layout-of-a-chart">The layout of a chart</h2>
+
+<pre><code class="language-plaintext">web/
+├── Chart.yaml            name, version, appVersion
+├── values.yaml           default values
+└── templates/
+    ├── _helpers.tpl      named snippets (&quot;define&quot;), not rendered by itself
+    ├── deployment.yaml   ┐
+    ├── service.yaml      │ templates: YAML with {{ ... }} placeholders
+    ├── ingress.yaml      ┘
+    └── NOTES.txt         text shown after install</code></pre>
+
+<pre><code class="language-bash">helm create hello          # scaffold a new chart
+helm lint hello            # static checks, including a test render
+helm template demo hello   # render locally and print the manifests; nothing is installed</code></pre>
+
+<h2 id="templates-in-five-steps">Templates in five steps</h2>
+<h3 id="s-1-values-and-built-in-objects">1. Values and built-in objects</h3>
+
+<pre data-label="templates/deployment.yaml (excerpt)"><code class="language-yaml">metadata:
+  name: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: &quot;{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}&quot;</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Object</th><th scope="col">Contains</th></tr></thead>
+  <tbody>
+  <tr><td><code>.Values</code></td><td>The merged values: chart defaults, your files, <code>--set</code></td></tr>
+  <tr><td><code>.Release</code></td><td><code>.Name</code>, <code>.Namespace</code>, <code>.Revision</code>, <code>.IsInstall</code>, <code>.IsUpgrade</code></td></tr>
+  <tr><td><code>.Chart</code></td><td>Fields of <code>Chart.yaml</code>, capitalised: <code>.Name</code>, <code>.Version</code>, <code>.AppVersion</code></td></tr>
+  </tbody>
+</table>
+
+<h3 id="s-2-pipelines-and-functions">2. Pipelines and functions</h3>
+<p>A value can be passed through functions with <code>|</code>, like a shell pipe:</p>
+<table>
+  <thead><tr><th scope="col">Expression</th><th scope="col">Effect</th></tr></thead>
+  <tbody>
+  <tr><td><code>{{ .Values.name | quote }}</code></td><td>Wraps the value in double quotes. Essential for strings that look like numbers or booleans.</td></tr>
+  <tr><td><code>{{ .Values.tag | default "latest" }}</code></td><td>Uses the fallback when the value is empty.</td></tr>
+  <tr><td><code>{{ required "image.tag is required" .Values.image.tag }}</code></td><td>Aborts rendering with your message when the value is missing.</td></tr>
+  <tr><td><code>{{ toYaml .Values.resources | nindent 12 }}</code></td><td>Dumps a whole structure as YAML, starting on a new line, indented 12 spaces.</td></tr>
+  <tr><td><code>{{ include "web.labels" . | nindent 4 }}</code></td><td>Inserts a named snippet from <code>_helpers.tpl</code>.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="s-3-conditionals-and-loops">3. Conditionals and loops</h3>
+
+<pre><code class="language-yaml">{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+# ...
+{{- end }}
+
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}</code></pre>
+
+<h3 id="s-4-whitespace">4. Whitespace</h3>
+<p>A template action leaves its own line behind as an empty line. A dash inside the braces removes whitespace on that side: <code>{{-</code> eats everything before the action up to the previous text, including the line break; <code>-}}</code> does the same after it. That is why control lines are written <code>{{- if … }}</code> and <code>{{- end }}</code>.</p>
+
+<h3 id="s-5-indentation-is-your-job">5. Indentation is your job</h3>
+<p>Helm inserts text; it knows nothing about YAML structure. Whatever a template produces must be valid YAML at the place where it lands. For multi-line blocks, <code>nindent N</code> is the tool: it starts a new line and indents every line by N spaces.</p>
+
+<div class="compare">
+  <div class="bad"><span class="tag">❌ Breaks as soon as the value has two lines</span>
+
+<pre><code class="language-yaml">          resources:
+            {{ toYaml .Values.resources }}</code></pre>
+  <p>Only the first line gets the 12 spaces written in the template. The second line starts at column 0.</p>
+  </div>
+  <div class="good"><span class="tag">✅ Every line indented</span>
+
+<pre><code class="language-yaml">          resources:
+            {{- toYaml .Values.resources | nindent 12 }}</code></pre>
+  <p><code>{{-</code> removes the template's own indentation; <code>nindent 12</code> adds a line break and indents all lines.</p>
+  </div>
+</div>
+
+<h2 id="two-stages-two-kinds-of-error">Two stages, two kinds of error</h2>
+
+<pre><code class="language-plaintext"> templates + values ──(1) evaluate Go templates──► text ──(2) parse as YAML──► manifests
+                        fails with &quot;template: …&quot;          fails with &quot;YAML parse error on …&quot;</code></pre>
+
+<h3 id="stage-1-template-errors">Stage 1: template errors</h3>
+
+<pre><code class="language-plaintext">Error: template: web/templates/service.yaml:11:23: executing &quot;web/templates/service.yaml&quot; at &lt;.Values.service.ports.http&gt;: nil pointer evaluating interface {}.http</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Part of the message</th><th scope="col">Meaning</th></tr></thead>
+  <tbody>
+  <tr><td><code>web/templates/service.yaml:11:23</code></td><td>File, line and column <em>in the template source</em>.</td></tr>
+  <tr><td><code>at &lt;.Values.service.ports.http&gt;</code></td><td>The expression that failed.</td></tr>
+  <tr><td><code>nil pointer evaluating interface {}.http</code></td><td>Something before <code>.http</code> does not exist: <code>.Values.service.ports</code> is undefined, so it has no field <code>http</code>.</td></tr>
+  </tbody>
+</table>
+
+<p>The fix is always the same comparison: open <code>values.yaml</code> and walk the path in the expression key by key. Typical causes are a typo, a renamed value, or a nested key that only exists when an optional section is filled in.</p>
+
+<table>
+  <thead><tr><th scope="col">Other stage-1 messages</th><th scope="col">Cause</th></tr></thead>
+  <tbody>
+  <tr><td><code>function "foo" not defined</code></td><td>A misspelt function name.</td></tr>
+  <tr><td><code>unexpected EOF</code> / <code>unexpected {{end}}</code></td><td>An <code>if</code>, <code>range</code> or <code>with</code> without its <code>end</code>, or one <code>end</code> too many.</td></tr>
+  <tr><td><code>error calling include: … no template "web.lables"</code></td><td>A misspelt name of a snippet defined in <code>_helpers.tpl</code>.</td></tr>
+  <tr><td><code>error calling required: …</code></td><td>The chart author demands a value you did not set. The message says which.</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn"><span class="title">A missing leaf value is not an error</span>
+<code>{{ .Values.image.tagg }}</code> (a typo in the <em>last</em> key) renders as an empty string without complaint, because looking up a missing key in an existing map is allowed. The result is an image like <code>shop/web:</code> and a pod in <code>InvalidImageName</code>. Charts guard important values with <code>required</code> or <code>default</code> for this reason.</div>
+
+<h3 id="stage-2-yaml-errors">Stage 2: YAML errors</h3>
+
+<pre><code class="language-plaintext">Error: YAML parse error on web/templates/deployment.yaml: error converting YAML to JSON: yaml: line 33: did not find expected &#x27;-&#x27; indicator</code></pre>
+
+<p>The templates ran, and their <em>output</em> is not valid YAML. Here the line number refers to the <b>rendered text</b>, not to the template file, so opening the template at line 33 misleads you. Look at what was produced:</p>
+
+<pre><code class="language-bash">helm template web ./web --debug      # prints the rendered output even when it is invalid</code></pre>
+
+<pre data-label="Rendered output around the reported line"><code class="language-yaml">          env:
+            - name: PORT
+              value: &quot;8080&quot;
+          - name: API_URL          # ← two spaces too far left: not part of the list above
+            value: &quot;http://api:3000&quot;</code></pre>
+
+<h2 id="a-chart-debugging-routine">A chart-debugging routine</h2>
+<ol>
+  <li><code>helm lint CHART</code>: reports the first problem of either stage, with the file.</li>
+  <li>Template error? Compare the quoted expression with <code>values.yaml</code>.</li>
+  <li>YAML error? <code>helm template … --debug</code> and look at the rendered text near the line.</li>
+  <li>Renders, but looks wrong? <code>helm template NAME CHART -f my-values.yaml -s templates/deployment.yaml</code> shows one file with your values.</li>
+  <li>Before a real upgrade: <code>helm upgrade … --dry-run</code> renders against the cluster and shows what would be applied.</li>
+</ol>
+
+<h2 id="scenario-1-create-a-chart-and-drive-it-with-values">Scenario 1: create a chart and drive it with values</h2>
+
+<section class="lab" data-lab="h-chart"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-2-the-chart-that-won-t-render">Scenario 2: the chart that won't render</h2>
+<p>Two mistakes, one per stage. Let <code>helm lint</code> tell you which stage you are in.</p>
+
+<section class="lab" data-lab="h-fix-template"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li>A chart is templates plus default values. <code>.Values</code>, <code>.Release</code> and <code>.Chart</code> feed the templates.</li>
+    <li>Helm produces text; correct YAML indentation is the template's responsibility. Use <code>nindent</code> for blocks.</li>
+    <li>Stage 1, "template: file:line … at &lt;expr&gt;": the expression is wrong; compare it with the values.</li>
+    <li>Stage 2, "YAML parse error … line N": the output is broken; the line refers to the rendered text. Use <code>helm template --debug</code>.</li>
+    <li><code>helm lint</code> and <code>helm template</code> need no cluster. Run them in CI.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="d">
+<p class="q">Rendering fails with <code>at &lt;.Values.database.host&gt;: nil pointer evaluating interface {}.host</code>. What is wrong?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. <code>host</code> is an empty string</button>
+<button class="opt" type="button" data-opt="b">B. The cluster is unreachable</button>
+<button class="opt" type="button" data-opt="c">C. The YAML indentation is wrong</button>
+<button class="opt" type="button" data-opt="d">D. <code>.Values.database</code> doesn't exist, so <code>.host</code> can't be read from it</button>
+</div>
+<p class="explain">The message names the field that could not be evaluated; the problem is its parent. Check whether <code>database:</code> is defined in the values.</p>
+</div>
+
+<div class="quiz" data-answer="a">
+<p class="q">Helm reports <code>YAML parse error on web/templates/deployment.yaml: … line 40</code>. The template file has 28 lines. Why?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. The line number refers to the rendered output, which is longer than the template</button>
+<button class="opt" type="button" data-opt="b">B. Helm counts blank lines twice</button>
+<button class="opt" type="button" data-opt="c">C. The error is in <code>values.yaml</code></button>
+<button class="opt" type="button" data-opt="d">D. The chart contains two files with the same name</button>
+</div>
+<p class="explain">Loops, includes and <code>toYaml</code> expand to many lines. Inspect the rendered text with <code>helm template --debug</code>.</p>
+</div>
+
+<div class="quiz" data-answer="b">
+<p class="q">What does <code>{{- toYaml .Values.resources | nindent 10 }}</code> do?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Indents only the first line by 10 spaces</button>
+<button class="opt" type="button" data-opt="b">B. Removes the whitespace before the action, then inserts the YAML on a new line with every line indented 10 spaces</button>
+<button class="opt" type="button" data-opt="c">C. Converts the YAML to JSON</button>
+<button class="opt" type="button" data-opt="d">D. Validates the values against a schema</button>
+</div>
+<p class="explain"><code>{{-</code> trims preceding whitespace including the newline; <code>nindent</code> supplies a fresh newline and consistent indentation for all lines.</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://helm.sh/docs/chart_template_guide/getting_started/" target="_blank" rel="noopener">Chart template guide</a></li>
+  <li><a href="https://helm.sh/docs/chart_template_guide/control_structures/" target="_blank" rel="noopener">Flow control and whitespace</a></li>
+  <li><a href="https://helm.sh/docs/chart_template_guide/debugging/" target="_blank" rel="noopener">Debugging templates</a></li>
+  <li><a href="https://helm.sh/docs/chart_template_guide/function_list/" target="_blank" rel="noopener">Template function list</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

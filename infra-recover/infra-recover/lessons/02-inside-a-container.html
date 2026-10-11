@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inside a Container: Logs, Exec, Inspect · infra-sim</title>
+<meta name="description" content="Three commands answer almost every question about a container: what did it say, what does it look like from the inside, and how was it configured. This lesson teaches them, and then uses them on a database that refuses to stay up.">
+<meta property="og:title" content="Inside a Container: Logs, Exec, Inspect">
+<meta property="og:description" content="Three commands answer almost every question about a container: what did it say, what does it look like from the inside, and how was it configured. This lesson teaches them, and then uses them on a database that refuses to stay up.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="2" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Inside a Container: Logs, Exec, Inspect</h1>
+<p class="lead">Three commands answer almost every question about a container: what did it say, what does it look like from the inside, and how was it configured. This lesson teaches them, and then uses them on a database that refuses to stay up.</p>
+<div class="meta"><span class="badge">⏱ 35 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Learn the <b>container lifecycle</b> and the three commands that explain a container's behaviour: <code>docker logs</code>, <code>docker exec</code> and <code>docker inspect</code>.</p>
+  <p><b>Why it matters:</b> troubleshooting is collecting evidence. These commands are where the evidence is. Engineers who reach for them first fix problems in minutes; those who guess restart things for hours.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Name the states a container moves through and what causes each transition.</li>
+    <li>Read a container's output and its exit code.</li>
+    <li>Run commands and open a shell inside a running container.</li>
+    <li>Find a container's configuration with <code>docker inspect</code>.</li>
+    <li>Diagnose a container that exits immediately after starting.</li>
+  </ul>
+</div>
+
+<h2 id="the-situation">The situation</h2>
+<p>A container is running on a machine you have just been handed. Nobody remembers how it was started. Later, a second container is started and vanishes from <code>docker ps</code> within a second. Both situations are solved with the same small toolkit.</p>
+
+<h2 id="the-lifecycle">The lifecycle</h2>
+
+<pre data-label="States of a container"><code class="language-plaintext">docker create            docker start                 main process exits
+     │                        │                              │
+     ▼                        ▼                              ▼
+  Created  ───────────────►  Running  ───────────────────►  Exited (code)
+                              ▲   │ docker stop / kill           │
+                              │   └──────────────────────────────┤
+                              └────────── docker start ──────────┘
+                                                                 │ docker rm
+                                                                 ▼
+                                                              (gone)</code></pre>
+
+<p><code>docker run</code> is <code>create</code> + <code>start</code>. The <b>STATUS</b> column of <code>docker ps -a</code> shows the state, and for an exited container the <b>exit code</b> of its main process:</p>
+
+<pre data-label="docker ps -a"><code class="language-plaintext">CONTAINER ID   IMAGE          COMMAND                  CREATED          STATUS                      PORTS     NAMES
+1abf541becdf   postgres:17    &quot;docker-entrypoint.s…&quot;   2 minutes ago    Exited (1) 2 minutes ago              db
+247720201ef0   shop/web:1.0   &quot;docker-entrypoint.s…&quot;   10 minutes ago   Up 10 minutes               ...       web</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Exit code</th><th scope="col">Usual meaning</th></tr></thead>
+  <tbody>
+  <tr><td><code>0</code></td><td>The process finished successfully. Normal for one-off jobs, suspicious for a server.</td></tr>
+  <tr><td><code>1</code> (or another small number)</td><td>The application reported an error. The reason is in the logs.</td></tr>
+  <tr><td><code>126</code> / <code>127</code></td><td>The command could not be executed / was not found in the image.</td></tr>
+  <tr><td><code>137</code></td><td>Killed with SIGKILL (128 + 9): <code>docker kill</code>, a stop that timed out, or the out-of-memory killer.</td></tr>
+  <tr><td><code>143</code></td><td>Terminated with SIGTERM (128 + 15): a normal <code>docker stop</code> of a process that exits on the signal.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="docker-logs-what-did-it-say">docker logs: what did it say?</h2>
+<p>Docker captures everything the main process writes to standard output and standard error. That stream is the container's log, and it is kept even after the container has exited.</p>
+
+<pre><code class="language-bash">docker logs web              # everything so far
+docker logs --tail 20 web    # the last 20 lines
+docker logs -f web           # follow new output (Ctrl+C to stop following)
+docker logs -t web           # prefix each line with a timestamp</code></pre>
+
+<div class="callout tip"><span class="title">Logs survive the crash</span>
+A container that died still has its logs until you remove it. That is why the first step with a container that "won't start" is never to run it again, but to read what the last attempt said: <code>docker ps -a</code>, then <code>docker logs NAME</code>.</div>
+
+<h2 id="docker-exec-look-from-the-inside">docker exec: look from the inside</h2>
+<p><code>docker exec</code> starts an <em>additional</em> process inside a running container. It shares the container's file system, network and environment, so it sees exactly what the application sees.</p>
+
+<pre><code class="language-bash">docker exec web env                 # the environment the app was given
+docker exec web ls /app             # files in the image
+docker exec -it web sh              # an interactive shell; leave with: exit</code></pre>
+
+<p><code>-i</code> keeps standard input open and <code>-t</code> allocates a terminal; together they give you an interactive session. Many small images contain <code>sh</code> but not <code>bash</code>:</p>
+
+<pre data-label="A classic"><code class="language-plaintext">$ docker exec -it web bash
+OCI runtime exec failed: exec failed: unable to start container process: exec: &quot;bash&quot;: executable file not found in $PATH: unknown</code></pre>
+
+<p>That message does not mean the container is broken. It means the image has no <code>bash</code>. Use <code>sh</code>.</p>
+
+<div class="callout warn"><span class="title">exec needs a running container</span>
+You can't exec into a container that has exited: there is nothing to attach to. For a container that dies at startup the evidence is in <code>docker logs</code> and <code>docker inspect</code>, not in a shell.</div>
+
+<h2 id="docker-inspect-how-was-it-configured">docker inspect: how was it configured?</h2>
+<p><code>docker inspect</code> prints everything Docker knows about an object as JSON: the image, the command, environment variables, mounts, port mappings, network addresses, the state and the exit code. The output is long, so pick out what you need with a Go template:</p>
+
+<pre><code class="language-bash">docker inspect web                                         # everything
+docker inspect -f &#x27;{{.State.Status}} {{.State.ExitCode}}&#x27; web
+docker inspect -f &#x27;{{json .Config.Env}}&#x27; web               # environment variables
+docker inspect -f &#x27;{{json .Mounts}}&#x27; web                   # volumes and bind mounts
+docker inspect -f &#x27;{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}&#x27; web</code></pre>
+
+<div class="callout info"><span class="title">What you can and cannot change afterwards</span>
+A container's image, command, environment variables, port mappings and mounts are fixed when it is <b>created</b>. <code>docker restart</code> re-runs the same configuration. To change any of them you remove the container and run a new one. This is by design: containers are meant to be replaced, not repaired.</div>
+
+<h2 id="scenario-1-explore-an-unknown-container">Scenario 1: explore an unknown container</h2>
+<p>Use the three commands to find out what a running container is doing.</p>
+
+<section class="lab" data-lab="d-lifecycle"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-2-the-container-that-exits-immediately">Scenario 2: the container that exits immediately</h2>
+<p>Now the toolkit pays off. Something was started, Docker printed an ID, and it is not running. Find out why before you fix it.</p>
+
+<section class="lab" data-lab="d-fix-exited"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li>A printed container ID means "created and started", not "working". Always check <code>docker ps</code>.</li>
+    <li><code>docker ps -a</code> shows exited containers and their exit code. <code>docker logs</code> shows why.</li>
+    <li><code>docker exec</code> runs an extra process inside a <em>running</em> container. Try <code>sh</code> when <code>bash</code> is missing.</li>
+    <li><code>docker inspect</code> shows the configuration a container was created with.</li>
+    <li>Configuration is fixed at creation. To change it, remove the container and run a new one.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="c">
+<p class="q">A container shows <code>Exited (1) 10 seconds ago</code>. What is the best next command?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. <code>docker restart NAME</code></button>
+<button class="opt" type="button" data-opt="b">B. <code>docker exec -it NAME sh</code></button>
+<button class="opt" type="button" data-opt="c">C. <code>docker logs NAME</code></button>
+<button class="opt" type="button" data-opt="d">D. <code>docker rmi IMAGE</code></button>
+</div>
+<p class="explain">Exit code 1 means the application reported an error, and it wrote the reason to its output. exec is impossible on an exited container, and a restart would repeat the same failure.</p>
+</div>
+
+<div class="quiz" data-answer="a">
+<p class="q">You started a container without the environment variable it needs. How do you add it?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Remove the container and run a new one with <code>-e</code></button>
+<button class="opt" type="button" data-opt="b">B. <code>docker exec NAME export VAR=value</code></button>
+<button class="opt" type="button" data-opt="c">C. <code>docker restart NAME -e VAR=value</code></button>
+<button class="opt" type="button" data-opt="d">D. Edit the image</button>
+</div>
+<p class="explain">The environment is part of the configuration fixed at creation. An <code>export</code> inside an exec session only affects that one extra process.</p>
+</div>
+
+<div class="quiz" data-answer="d">
+<p class="q"><code>docker exec -it api bash</code> fails with <code>executable file not found in $PATH</code>. What does that tell you?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. The container has crashed</button>
+<button class="opt" type="button" data-opt="b">B. Docker is misconfigured</button>
+<button class="opt" type="button" data-opt="c">C. You need to add <code>sudo</code></button>
+<button class="opt" type="button" data-opt="d">D. The image does not contain bash; try <code>sh</code></button>
+</div>
+<p class="explain">Small images (Alpine-based ones in particular) ship without bash. The container itself is fine.</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://docs.docker.com/reference/cli/docker/container/logs/" target="_blank" rel="noopener">docker container logs</a></li>
+  <li><a href="https://docs.docker.com/reference/cli/docker/container/exec/" target="_blank" rel="noopener">docker container exec</a></li>
+  <li><a href="https://docs.docker.com/reference/cli/docker/inspect/" target="_blank" rel="noopener">docker inspect</a></li>
+  <li><a href="https://hub.docker.com/_/postgres" target="_blank" rel="noopener">The official postgres image: environment variables</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Troubleshooting Argo CD and the Capstone · infra-sim</title>
+<meta name="description" content="Argo CD sits on top of everything you have learned: git, Helm, Kubernetes objects, pods. When it reports a problem, the cause can be at any of those levels. This last lesson gives you a map of where each Argo CD error comes from, and ends with an incident that needs the whole course.">
+<meta property="og:title" content="Troubleshooting Argo CD and the Capstone">
+<meta property="og:description" content="Argo CD sits on top of everything you have learned: git, Helm, Kubernetes objects, pods. When it reports a problem, the cause can be at any of those levels. This last lesson gives you a map of where each Argo CD error comes from, and ends with an incident that needs the whole course.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="25" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Troubleshooting Argo CD and the Capstone</h1>
+<p class="lead">Argo CD sits on top of everything you have learned: git, Helm, Kubernetes objects, pods. When it reports a problem, the cause can be at any of those levels. This last lesson gives you a map of where each Argo CD error comes from, and ends with an incident that needs the whole course.</p>
+<div class="meta"><span class="badge">⏱ 60 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Classify Argo CD problems by <b>stage</b> (generate, apply, run), fix each kind in the right place, and resolve a <b>multi-layer incident</b> end to end.</p>
+  <p><b>Why it matters:</b> "Argo CD is broken" is almost never true. Argo CD is usually reporting, quite precisely, that a path is wrong, a manifest was rejected, or a pod will not start. Knowing which stage failed sends you to git, to the Application, or to kubectl, and that is the difference between a five-minute fix and an afternoon.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Name the three stages of an Argo CD deployment and the status each failure produces.</li>
+    <li>Resolve a ComparisonError.</li>
+    <li>Resolve a failed sync.</li>
+    <li>Diagnose an application that is Synced but not Healthy.</li>
+    <li>Decide whether a fix belongs in git, in the Application, or in the cluster.</li>
+  </ul>
+</div>
+
+<h2 id="three-stages-three-kinds-of-failure">Three stages, three kinds of failure</h2>
+
+<pre><code class="language-plaintext">   git repo ──(1) GENERATE──► manifests ──(2) APPLY──► cluster objects ──(3) RUN──► working app
+                  │                          │                              │
+        ComparisonError              Sync failed / SyncError        Progressing / Degraded
+        Sync Status: Unknown         Sync Status: OutOfSync         Sync Status: Synced
+                  │                          │                              │
+        look at: repo URL, revision,  look at: the message per      look at: pods, with the
+        path, Helm values, YAML       resource; namespaces, RBAC,   debugging loop of Lesson 15
+                                      invalid fields</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Stage</th><th scope="col">Argo CD shows</th><th scope="col">Meaning</th><th scope="col">Fix belongs in</th></tr></thead>
+  <tbody>
+  <tr><td>1. Generate</td><td>Sync <code>Unknown</code>, condition <code>ComparisonError</code></td><td>Argo CD could not produce the desired manifests, so it has nothing to compare.</td><td>The Application's source settings, or the repository's content</td></tr>
+  <tr><td>2. Apply</td><td>Operation phase <code>Failed</code>, condition <code>SyncError</code></td><td>Manifests were generated; the cluster refused some of them.</td><td>The manifest in git, or the destination (namespace, permissions)</td></tr>
+  <tr><td>3. Run</td><td>Sync <code>Synced</code>, health <code>Progressing</code> or <code>Degraded</code></td><td>Everything was applied; the workload itself is unhealthy.</td><td>Whatever the pods need: image, config, secrets, resources</td></tr>
+  </tbody>
+</table>
+
+<p>Always begin with the same two commands:</p>
+
+<pre><code class="language-bash">argocd app list              # STATUS, HEALTH and CONDITIONS of every application
+argocd app get APP           # conditions with full messages, last operation, per-resource status</code></pre>
+
+<h2 id="stage-1-comparisonerror">Stage 1: ComparisonError</h2>
+
+<pre data-label="argocd app get web (excerpt)"><code class="language-plaintext">Sync Status:        Unknown
+Health Status:      Healthy
+
+CONDITION        MESSAGE                                                          LAST TRANSITION
+ComparisonError  Failed to load target state: failed to generate manifest for    2026-10-11 09:00:00 +0000 UTC
+                 source 1 of 1: rpc error: code = Unknown desc = apps/frontend:
+                 app path does not exist</code></pre>
+
+<p>Skip the boilerplate and read the end of the message:</p>
+<table>
+  <thead><tr><th scope="col">The message ends with</th><th scope="col">Cause</th><th scope="col">Fix</th></tr></thead>
+  <tbody>
+  <tr><td><code>PATH: app path does not exist</code></td><td>The directory isn't in the repository at that revision (renamed, typo, wrong branch).</td><td><code>argocd app set APP --path …</code></td></tr>
+  <tr><td><code>unable to resolve 'X' to a commit SHA</code></td><td>The branch or tag in <code>targetRevision</code> doesn't exist.</td><td><code>argocd app set APP --revision …</code></td></tr>
+  <tr><td><code>repository not found</code> / <code>authentication required</code></td><td>Wrong URL, or a private repository without credentials.</td><td><code>argocd repo add URL --username … --password …</code></td></tr>
+  <tr><td><code>helm template … failed … open …values.yaml: no such file</code></td><td>A Helm values file listed in the Application doesn't exist at that path.</td><td><code>argocd app set APP --values …</code></td></tr>
+  <tr><td><code>helm template … failed … nil pointer evaluating …</code></td><td>The chart doesn't render with these values (Lesson 21).</td><td>Fix the chart or values in git</td></tr>
+  <tr><td><code>error converting YAML to JSON: yaml: line N…</code></td><td>A manifest in the repository is not valid YAML.</td><td>Fix the file in git</td></tr>
+  </tbody>
+</table>
+
+<div class="callout info"><span class="title">Why Health says "Healthy" during a ComparisonError</span>
+Health describes the resources Argo CD currently manages. An application that never got past stage 1 manages none, and "nothing is unhealthy" reads as Healthy. An existing application that hits a ComparisonError keeps running its last synced state untouched. Either way, look at the conditions, not only at the health column.</div>
+
+<h2 id="stage-2-the-sync-fails">Stage 2: the sync fails</h2>
+
+<pre data-label="argocd app sync web (excerpt)"><code class="language-plaintext">Phase:              Failed
+Message:            one or more objects failed to apply, reason: namespaces &quot;storefront&quot; not found
+
+GROUP  KIND        NAMESPACE   NAME  STATUS     HEALTH   HOOK  MESSAGE
+apps   Deployment  storefront  web   OutOfSync  Missing        namespaces &quot;storefront&quot; not found
+       Service     storefront  web   OutOfSync  Missing        namespaces &quot;storefront&quot; not found</code></pre>
+
+<p>The per-resource MESSAGE column is exactly what <code>kubectl apply</code> would have printed for that object. You already know these messages:</p>
+<table>
+  <thead><tr><th scope="col">Message</th><th scope="col">Cause</th><th scope="col">Fix</th></tr></thead>
+  <tbody>
+  <tr><td><code>namespaces "X" not found</code></td><td>The destination namespace doesn't exist.</td><td><code>--sync-option CreateNamespace=true</code>, or create it</td></tr>
+  <tr><td><code>… is invalid: spec.…</code> / <code>unknown field …</code></td><td>The API server rejected the manifest (Lesson 10).</td><td>Fix the manifest in git</td></tr>
+  <tr><td><code>… is forbidden: … cannot create resource …</code></td><td>Argo CD's own permissions, or its project, don't allow this resource or destination.</td><td>The AppProject, or RBAC</td></tr>
+  <tr><td><code>field is immutable</code></td><td>The change can't be applied in place (a selector, a claim template).</td><td>Delete and recreate that object deliberately</td></tr>
+  </tbody>
+</table>
+<p>A failed automated sync is retried with increasing pauses, but only a change (a new commit, or a corrected setting) will make it succeed.</p>
+
+<h2 id="stage-3-synced-but-not-healthy">Stage 3: Synced, but not Healthy</h2>
+<p>This is the bad-commit signature from Lesson 24, or a dependency the manifests assume and nobody created. Argo CD has done its part. From here it is ordinary Kubernetes debugging:</p>
+
+<pre><code class="language-bash">argocd app get APP                      # which resource is Progressing or Degraded?
+kubectl -n NS get pods                  # status
+kubectl -n NS describe pod NAME         # events
+kubectl -n NS logs NAME                 # logs</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Health</th><th scope="col">What Argo CD saw</th></tr></thead>
+  <tbody>
+  <tr><td><code>Progressing</code></td><td>A Deployment whose rollout hasn't finished, a claim not yet bound, an Ingress without an address. May resolve by itself, or may be stuck.</td></tr>
+  <tr><td><code>Degraded</code></td><td>A definite failure: a Deployment that exceeded its progress deadline (ten minutes by default), a failed Job.</td></tr>
+  <tr><td><code>Missing</code></td><td>A declared resource doesn't exist in the cluster (not yet synced, or deleted by hand).</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn"><span class="title">Where does the fix go?</span>
+<ul>
+<li>The <b>manifest is wrong</b> (image tag, port, selector, resource limit): fix it <b>in git</b>. With self-heal, nothing else lasts.</li>
+<li>The <b>Application points at the wrong thing</b> (path, revision, values file, namespace): fix the <b>Application</b>, with <code>argocd app set</code> or in the manifest that defines it.</li>
+<li>Something the app needs is <b>deliberately not in git</b>, typically a Secret with credentials: create it <b>in the cluster</b> (or through the team's secret-management tool). Argo CD doesn't manage it, so it won't remove it.</li>
+</ul></div>
+
+<h2 id="scenario-1-comparisonerror">Scenario 1: ComparisonError</h2>
+
+<section class="lab" data-lab="a-fix-comparison"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-2-the-hot-fix-that-keeps-disappearing">Scenario 2: the hot-fix that keeps disappearing</h2>
+
+<section class="lab" data-lab="a-fix-badcommit"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="capstone-launch-day">Capstone: launch day</h2>
+<p>Everything in this course in one incident: three applications, three faults in three different stages, Helm values, a missing secret, a Service that points nowhere, an Ingress, and self-healing that will undo any shortcut. Take it one application at a time. For each, decide the stage first, then where the fix belongs.</p>
+
+<section class="lab" data-lab="a-capstone"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="the-method-one-last-time">The method, one last time</h2>
+<p>You have used the same approach on a single container, a Compose stack, pods, Services, Helm releases and Argo CD applications:</p>
+<ol>
+  <li><b>Look at the state</b> before touching anything: <code>docker ps -a</code>, <code>kubectl get</code>, <code>helm history</code>, <code>argocd app list</code>.</li>
+  <li><b>Find the message.</b> Every layer writes down why it stopped: logs, events, conditions.</li>
+  <li><b>Identify the layer</b> the message belongs to, and therefore where a fix must go.</li>
+  <li><b>Change one thing</b>, in the place where the change will last.</li>
+  <li><b>Test again</b>, and read the next message.</li>
+</ol>
+<p>The tools will keep changing. That loop will not.</p>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li>Generate → apply → run. ComparisonError, sync failure and unhealthy workloads each belong to one stage.</li>
+    <li>Sync <code>Unknown</code> with ComparisonError: the source (path, revision, values, YAML). Read the end of the message.</li>
+    <li>Sync failed: the per-resource message is the API server's own answer.</li>
+    <li>Synced but not Healthy: Argo CD is done; debug the pods as usual.</li>
+    <li>Manifests are fixed in git, pointers in the Application, and intentionally unmanaged prerequisites in the cluster.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="a">
+<p class="q">An application shows Sync Status <code>Unknown</code> and a <code>ComparisonError</code> ending in "app path does not exist". What should you check?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. The application's <code>path</code> against the directories in the repository at that revision</button>
+<button class="opt" type="button" data-opt="b">B. The pods in the destination namespace</button>
+<button class="opt" type="button" data-opt="c">C. The cluster's free capacity</button>
+<button class="opt" type="button" data-opt="d">D. The image registry</button>
+</div>
+<p class="explain">A ComparisonError means manifests could not be generated. The pods are not involved yet.</p>
+</div>
+
+<div class="quiz" data-answer="d">
+<p class="q">An application is <code>Synced</code> and has been <code>Progressing</code> for fifteen minutes; one pod is in ImagePullBackOff. Auto-sync with self-heal is on. Where do you fix it?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. <code>kubectl set image</code> on the Deployment</button>
+<button class="opt" type="button" data-opt="b">B. <code>argocd app sync</code></button>
+<button class="opt" type="button" data-opt="c">C. Delete the pod</button>
+<button class="opt" type="button" data-opt="d">D. Correct the image reference in git and push</button>
+</div>
+<p class="explain">The cluster matches git, so git contains the wrong tag. A kubectl change would be reverted, and a sync would re-apply the same mistake.</p>
+</div>
+
+<div class="quiz" data-answer="c">
+<p class="q">A database pod managed by Argo CD is in CreateContainerConfigError because the Secret <code>db-auth</code> doesn't exist. The team keeps credentials out of git on purpose. What is the appropriate fix?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Commit the Secret with the password to the repository</button>
+<button class="opt" type="button" data-opt="b">B. Disable self-heal</button>
+<button class="opt" type="button" data-opt="c">C. Create the Secret in the cluster (or via the team's secret manager); Argo CD does not manage it and will leave it alone</button>
+<button class="opt" type="button" data-opt="d">D. Remove the reference from the Deployment</button>
+</div>
+<p class="explain">Not everything belongs in git. Prerequisites that are intentionally unmanaged must be provided in the cluster, by a controlled process.</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://argo-cd.readthedocs.io/en/stable/operator-manual/troubleshooting/" target="_blank" rel="noopener">Argo CD troubleshooting tools</a></li>
+  <li><a href="https://argo-cd.readthedocs.io/en/stable/operator-manual/health/" target="_blank" rel="noopener">Resource health</a></li>
+  <li><a href="https://argo-cd.readthedocs.io/en/stable/user-guide/helm/" target="_blank" rel="noopener">Helm in Argo CD</a></li>
+  <li><a href="https://argo-cd.readthedocs.io/en/stable/operator-manual/secret-management/" target="_blank" rel="noopener">Secret management</a></li>
+  <li><a href="https://kubernetes.io/docs/tasks/debug/" target="_blank" rel="noopener">Kubernetes: monitoring, logging and debugging</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

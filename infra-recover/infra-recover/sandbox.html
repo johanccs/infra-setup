@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scenario library and sandbox · infra-sim</title>
+<meta name="description" content="All 51 Docker, Kubernetes, Helm and Argo CD scenarios in one place, plus a free-play sandbox terminal.">
+<meta property="og:title" content="Scenario library and sandbox · infra-sim">
+<meta property="og:description" content="Pick a broken Docker, Kubernetes, Helm or Argo CD setup and fix it in a simulated terminal.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/css/course.css">
+<script src="assets/js/theme-init.js"></script>
+</head>
+<body data-root="" data-page="sandbox">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+  <div class="home wide">
+    <h1>Scenario library and sandbox</h1>
+    <p class="lead">Every scenario of the course in one place. Pick one to load it into the sandbox below, or start an empty sandbox and experiment freely.</p>
+
+    <div class="goal">
+      <span class="title">🎯 How to use this page</span>
+      <p><b>🔧 Fix-it</b> scenarios start with something broken and ask you to find and repair it. <b>🧪 Hands-on</b> scenarios guide you through building something. Difficulty runs from <i>Easy</i> to <i>Expert</i>. Each scenario belongs to a lesson that explains the ideas behind it.</p>
+    </div>
+
+    <div class="lib-filters" id="lib-filters" role="group" aria-label="Filter scenarios"></div>
+    <div id="library"></div>
+
+    <h2 id="sandbox">Sandbox</h2>
+    <div id="stage"><p class="sim-note">Choose a scenario above, or <button type="button" class="icon-btn" id="free-btn">open an empty sandbox</button>.</p></div>
+
+    <h2 id="about-the-simulator">About the simulator</h2>
+    <p>The sandbox is a simulation written in JavaScript. No container, cluster or server exists anywhere: your commands change a model inside this page, and reloading the page resets it. It was built to make the <em>behaviour you need for learning and troubleshooting</em> realistic.</p>
+    <table>
+      <thead><tr><th scope="col">Tool</th><th scope="col">What is modelled</th><th scope="col">What is not</th></tr></thead>
+      <tbody>
+      <tr><td>Shell</td><td>Files, pipes, redirects, <code>&amp;&amp;</code>, <code>$(…)</code>, heredocs, <code>grep</code>, <code>sed -i</code>, <code>awk '{print $1}'</code>, <code>curl</code>, an editor (<code>nano</code>/<code>vi</code> open a dialog)</td><td>A real Linux system; installing software; interactive programs</td></tr>
+      <tr><td>Docker 29</td><td>Images and registries, container lifecycle, logs, exec, inspect, ports, env, restart policies, memory limits, volumes, bind mounts, networks and DNS, BuildKit-style builds with layer cache and multi-stage, Compose</td><td>Running your own code (a few practice apps behave realistically), CPU limits, Swarm, image contents beyond what the lessons need</td></tr>
+      <tr><td>Kubernetes 1.37</td><td>3 nodes, scheduler (requests, selectors, taints, cordon), kubelet (image pulls, crash loops, probes, OOM), Deployments and rollouts, StatefulSets, DaemonSets, Jobs, Services and endpoints, DNS, Ingress (Traefik), NetworkPolicy (ingress), ConfigMaps, Secrets, PVC/PV/StorageClass, RBAC, quotas, strict manifest validation</td><td>Custom resources other than Argo CD's, autoscaling, egress policies, node failures, admission webhooks</td></tr>
+      <tr><td>Helm 4</td><td>Repositories, Go templates with the common Sprig functions, values handling, releases and history, upgrade, rollback, <code>--wait</code>, lint, template</td><td>Subcharts, hooks, OCI registries, packaging</td></tr>
+      <tr><td>Argo CD 3</td><td>Applications (directory and Helm sources), projects, sync status and health, manual and automated sync, prune, self-heal, diff, history, rollback, a small git with clone/commit/push/revert</td><td>The web UI, ApplicationSets, sync hooks, Kustomize, multiple clusters</td></tr>
+      </tbody>
+    </table>
+    <p class="sim-note">Time in the sandbox runs at normal speed while you read, and fast-forwards while a command is waiting (<code>sleep 30</code> returns in a few seconds). Output formats follow the tool versions named above; details can differ slightly from your installation.</p>
+  </div>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="assets/js/infra-sim.js"></script>
+<script src="assets/js/course.js"></script>
+<script src="assets/js/terminal.js"></script>
+<script src="assets/js/sandbox.js"></script>
+<script src="assets/js/ai-assistant.js"></script>
+</body>
+</html>

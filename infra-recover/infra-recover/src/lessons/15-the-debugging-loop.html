@@ -1,0 +1,160 @@
+<h1>The Debugging Loop: Get, Describe, Logs</h1>
+<p class="lead">You have fixed several broken pods by now, each with a hint about where to look. This lesson removes the hints. It gives you one loop and one table that together tell you, for any pod status, where the explanation is.</p>
+<div class="meta"><span class="badge">⏱ 45 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Diagnose any unhealthy pod with the loop <b>get → describe → logs</b>, using the pod's <b>status</b> to decide where the evidence is.</p>
+  <p><b>Why it matters:</b> there are only about a dozen ways a pod fails to run. Each shows a characteristic status, and each status has one place where the cause is written down. Learn the mapping once and you can debug clusters you have never seen.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Run the debugging loop without prompting.</li>
+    <li>Say for each common pod status whether the cause is in the events or in the logs.</li>
+    <li>Use <code>kubectl logs --previous</code>, <code>-c</code> and label selectors.</li>
+    <li>Explain what "BackOff" means and why it is never the root cause.</li>
+    <li>Debug a pod whose command cannot be started.</li>
+  </ul>
+</div>
+
+<h2>The loop</h2>
+
+```plaintext
+ ┌─► 1. kubectl get pods            What is the STATUS? How many RESTARTS? How old?
+ │   2. kubectl describe pod NAME   State / Last State / Exit Code, and the Events at the bottom
+ │   3. kubectl logs NAME           What did the application say?  (--previous for the last crash)
+ │   4. Form ONE hypothesis, change ONE thing
+ └── 5. Watch the status change, and go round again
+```
+
+<p>It is the method from Lesson 8 with Kubernetes commands. Step 1 tells you whether step 2 or step 3 has the answer.</p>
+
+<h2>A pod's life, and where it can stop</h2>
+
+```plaintext
+ created ─► scheduled ─► image pulled ─► config resolved ─► container started ─► running ─► ready
+    │           │             │                 │                   │               │         │
+  rejected   Pending   ErrImagePull /   CreateContainer-    RunContainerError   CrashLoop-  Running
+  by API               ImagePullBackOff   ConfigError                           BackOff,    but 0/1
+                                                                                OOMKilled
+            └──────────── no container yet: read EVENTS ───────────┘└── container ran: read LOGS ──┘
+```
+
+<p>That last line is the rule. <b>If no container has run, there are no logs: the kubelet or scheduler reports the reason as an event. If a container ran and died, the application's own output has the reason.</b></p>
+
+<h2>The status table</h2>
+<table>
+  <tr><th>STATUS</th><th>Meaning</th><th>Evidence in</th><th>Usual causes</th></tr>
+  <tr><td><code>Pending</code></td><td>No node assigned yet.</td><td>Events: <code>FailedScheduling</code></td><td>Requests too large, node selector, taints, unbound volume (Lesson 16)</td></tr>
+  <tr><td><code>ContainerCreating</code> (for long)</td><td>Node assigned; waiting for volumes or network.</td><td>Events: <code>FailedMount</code></td><td>Missing ConfigMap/Secret volume, unbound claim</td></tr>
+  <tr><td><code>ErrImagePull</code> / <code>ImagePullBackOff</code></td><td>The image can't be pulled.</td><td>Events: <code>Failed to pull image …</code></td><td>Wrong name or tag, private registry (Lesson 13)</td></tr>
+  <tr><td><code>InvalidImageName</code></td><td>The image reference isn't even syntactically valid.</td><td>Events</td><td>Upper-case letters, a trailing colon, stray spaces</td></tr>
+  <tr><td><code>CreateContainerConfigError</code></td><td>A referenced ConfigMap, Secret or key doesn't exist.</td><td>Events: <code>Error: … not found</code></td><td>Typo in name or key, wrong namespace (Lesson 12)</td></tr>
+  <tr><td><code>RunContainerError</code></td><td>The runtime couldn't start the process.</td><td>Events: <code>executable file not found</code></td><td>Wrong <code>command</code>/<code>args</code>, binary missing from the image</td></tr>
+  <tr><td><code>CrashLoopBackOff</code></td><td>The container starts, exits, and is restarted with growing pauses.</td><td><b>Logs</b> (and <code>--previous</code>); Last State in describe</td><td>Application error, missing env var, unreachable dependency at startup</td></tr>
+  <tr><td><code>OOMKilled</code></td><td>Killed for exceeding its memory limit.</td><td>describe: Last State, Limits</td><td>Limit too low, memory leak (Lesson 14)</td></tr>
+  <tr><td><code>Error</code> / <code>Completed</code></td><td>The container exited with a non-zero / zero code and isn't being restarted (yet).</td><td>Logs</td><td>Jobs; or a server whose command ends immediately</td></tr>
+  <tr><td><code>Running</code>, READY <code>0/1</code></td><td>Alive but failing its readiness probe.</td><td>Events: <code>Unhealthy</code></td><td>Wrong probe, app not ready, dependency down (Lesson 14)</td></tr>
+  <tr><td><code>Init:…</code></td><td>An init container hasn't finished. Same statuses, prefixed.</td><td><code>kubectl logs NAME -c INIT-CONTAINER</code></td><td>The init container's own failure</td></tr>
+  <tr><td><code>Terminating</code> (for long)</td><td>Deletion requested; the container is slow to stop.</td><td>describe</td><td>Process ignores SIGTERM; finalizers</td></tr>
+</table>
+
+<div class="callout warn"><span class="title">"BackOff" is the waiting, not the problem</span>
+<code>CrashLoopBackOff</code> and <code>ImagePullBackOff</code> both mean: "this keeps failing, so I wait longer before each retry" (10 s, 20 s, 40 s … up to 5 minutes). Searching the web for "CrashLoopBackOff" leads nowhere, because it describes Kubernetes' reaction. The cause is one step earlier: the crash, or the failed pull.</div>
+
+<h2>Getting the right logs</h2>
+
+```bash
+kubectl logs web-5d4f8c7b9-x2x9z             # current container instance
+kubectl logs web-5d4f8c7b9-x2x9z --previous  # the instance before the last restart
+kubectl logs web-5d4f8c7b9-x2x9z -c sidecar  # a specific container in a multi-container pod
+kubectl logs deployment/web                  # one pod of the Deployment (kubectl picks it)
+kubectl logs -l app=web --tail=20            # the last lines of every pod with that label
+kubectl logs -f deployment/web               # follow
+```
+
+<table>
+  <tr><th>kubectl says</th><th>Meaning</th></tr>
+  <tr><td><code>container "x" in pod "y" is waiting to start: ContainerCreating</code> (or <code>trying and failing to pull image</code>)</td><td>No container has run yet. Go to the events.</td></tr>
+  <tr><td><code>previous terminated container "x" … not found</code></td><td>The container has not been restarted, so there is no previous instance.</td></tr>
+  <tr><td>Empty output</td><td>The process wrote nothing to stdout or stderr. It may log to a file inside the container, or it was killed before it could log.</td></tr>
+</table>
+
+<h2>describe, read properly</h2>
+<p>Three places in <code>kubectl describe pod</code> carry most of the information:</p>
+
+```plaintext
+Containers:
+  api:
+    Image:          shop/api:1.0            ← is this the image you expected?
+    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated              ← how the previous attempt ended
+      Reason:       Error
+      Exit Code:    1
+    Restart Count:  5
+    Environment:    <none>                  ← what the container was given
+...
+Events:                                     ← what the scheduler and kubelet did, and why they stopped
+  Warning  BackOff  3s (x12 over 2m)  kubelet  Back-off restarting failed container api in pod …
+```
+
+<p>Events are kept for about an hour and are aggregated: <code>(x12 over 2m)</code> means the same event occurred twelve times within two minutes. For the whole namespace in time order, use <code>kubectl get events --sort-by=.lastTimestamp</code> or <code>kubectl events</code>.</p>
+
+<div class="callout tip"><span class="title">When the pod won't stay up long enough to look inside</span>
+You can't <code>kubectl exec</code> into a container that keeps crashing. Reproduce the environment instead: start a temporary pod from the same image with a harmless command (<code>kubectl run debug --rm -it --restart=Never --image=IMAGE --command -- sh</code>) and inspect files and environment there, or compare the pod's <code>-o yaml</code> with a working one.</div>
+
+<h2>Scenario: three pods, three different failures</h2>
+<p>No per-pod story this time. Use the status table to decide, for each Deployment, whether to read events or logs, and fix the Deployment (not the pod).</p>
+
+:::lab k-debug
+
+<div class="takeaways">
+  <h2 class="box-title">🔑 Key takeaways</h2>
+  <ul>
+    <li>get → describe → logs → one change → repeat.</li>
+    <li>No container has run (Pending, ImagePull…, CreateContainerConfigError, RunContainerError): the cause is in the <b>events</b>.</li>
+    <li>A container ran and exited (CrashLoopBackOff, Error, OOMKilled): the cause is in the <b>logs</b> and in <b>Last State</b>.</li>
+    <li>"BackOff" is Kubernetes waiting between retries. Look for the failure that precedes it.</li>
+    <li>Fix the owner (Deployment), never the individual pod.</li>
+  </ul>
+</div>
+
+<h2>Quiz</h2>
+
+:::quiz c
+A pod is in `ImagePullBackOff`. You run `kubectl logs` and get "container is waiting to start". What now?
+a) Wait for the logs to appear
+b) Add `--previous`
+c) Read the events with `kubectl describe pod`: no container has run, so there are no logs
+d) Restart the node
+> The image was never pulled, so no container ever started. The registry's answer is recorded as an event.
+:::
+
+:::quiz a
+A pod shows `CrashLoopBackOff` with 8 restarts, and `kubectl logs` prints only a start-up line. Which command most likely shows the error?
+a) `kubectl logs POD --previous`
+b) `kubectl get pod POD -o wide`
+c) `kubectl top pod POD`
+d) `kubectl get nodes`
+> The current instance has only just started. The crash message belongs to the previous instance.
+:::
+
+:::quiz d
+What is the correct way to fix a pod that fails because its Deployment's template has a wrong environment variable?
+a) Edit the pod
+b) Delete the pod repeatedly until it works
+c) `kubectl exec` into it and export the variable
+d) Change the Deployment; it will replace the pod with a corrected one
+> Pods of a Deployment are created from its template. Any direct change to a pod is lost with the next replacement.
+:::
+
+<h2>Further reading</h2>
+<ul>
+  <li><a href="https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/" target="_blank" rel="noopener">Debug pods</a></li>
+  <li><a href="https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/" target="_blank" rel="noopener">Debug running pods</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/" target="_blank" rel="noopener">Pod lifecycle</a></li>
+  <li><a href="https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/" target="_blank" rel="noopener">kubectl logs</a></li>
+</ul>

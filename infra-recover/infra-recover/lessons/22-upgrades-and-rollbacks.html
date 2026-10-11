@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upgrades, Rollbacks and Broken Releases · infra-sim</title>
+<meta name="description" content="Installing a chart is the easy part. Releases live for years and are upgraded hundreds of times, and that is where values get lost, upgrades fail half-way, and a release ends up in a state where Helm refuses to touch it. This lesson covers each of those and the way out.">
+<meta property="og:title" content="Upgrades, Rollbacks and Broken Releases">
+<meta property="og:description" content="Installing a chart is the easy part. Releases live for years and are upgraded hundreds of times, and that is where values get lost, upgrades fail half-way, and a release ends up in a state where Helm refuses to touch it. This lesson covers each of those and the way out.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="22" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Upgrades, Rollbacks and Broken Releases</h1>
+<p class="lead">Installing a chart is the easy part. Releases live for years and are upgraded hundreds of times, and that is where values get lost, upgrades fail half-way, and a release ends up in a state where Helm refuses to touch it. This lesson covers each of those and the way out.</p>
+<div class="meta"><span class="badge">⏱ 45 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Upgrade releases without losing settings, use <code>--wait</code> and automatic rollback, read the <b>release history</b>, and repair <b>failed</b> and <b>pending</b> releases.</p>
+  <p><b>Why it matters:</b> a Helm release has its own state, separate from the state of the pods. When the two disagree (Helm says <i>failed</i>, the app runs; or Helm says <i>deployed</i>, the app is down; or Helm says <i>another operation is in progress</i> and nothing is running), you need to understand Helm's bookkeeping to proceed.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Predict which values an upgrade will use.</li>
+    <li>Make Helm verify a rollout and undo it automatically on failure.</li>
+    <li>Interpret every status in <code>helm history</code>.</li>
+    <li>Roll back a release.</li>
+    <li>Recover a release stuck in <code>pending-upgrade</code>.</li>
+  </ul>
+</div>
+
+<h2 id="which-values-does-an-upgrade-use">Which values does an upgrade use?</h2>
+<p>This is the most common Helm surprise. An upgrade computes the values <em>from scratch</em>:</p>
+<table>
+  <thead><tr><th scope="col">You run</th><th scope="col">Values used</th></tr></thead>
+  <tbody>
+  <tr><td><code>helm upgrade web shop/web</code> (no value flags at all)</td><td>The previous revision's overrides are reused.</td></tr>
+  <tr><td><code>helm upgrade web shop/web --set image.tag=1.1</code></td><td><b>Only</b> chart defaults plus <code>image.tag</code>. Earlier overrides are dropped.</td></tr>
+  <tr><td><code>… --reuse-values --set image.tag=1.1</code></td><td>Previous overrides, plus <code>image.tag</code>.</td></tr>
+  <tr><td><code>… -f values.yaml</code></td><td>Chart defaults plus exactly what the file says.</td></tr>
+  <tr><td><code>… --reset-values</code></td><td>Chart defaults only.</td></tr>
+  </tbody>
+</table>
+
+<div class="compare">
+  <div class="bad"><span class="tag">❌ The silent regression</span>
+
+<pre><code class="language-bash">helm install web shop/web --set replicaCount=3
+# three weeks later
+helm upgrade web shop/web --set image.tag=1.1
+# replicaCount is back to the chart default (2)</code></pre>
+  </div>
+  <div class="good"><span class="tag">✅ Values in a file, passed every time</span>
+
+<pre><code class="language-bash"># values-prod.yaml is in git and contains ALL overrides
+helm upgrade --install web shop/web \
+  -f values-prod.yaml --wait</code></pre>
+  <p>What is deployed is always "the chart plus this file". No history to remember.</p>
+  </div>
+</div>
+
+<pre><code class="language-bash">helm get values web -n shop           # what the current revision was given
+helm get values web -n shop --all     # merged with the chart&#x27;s defaults</code></pre>
+
+<div class="callout warn"><span class="title">--reuse-values and new chart versions</span>
+<code>--reuse-values</code> re-applies the old overrides on top of the <em>new</em> chart's defaults. That is usually what you want, but if the new chart renamed or restructured a value, your old override silently no longer applies. Read the chart's release notes on upgrades, and prefer a values file.</div>
+
+<h2 id="making-helm-check-its-own-work">Making Helm check its own work</h2>
+<table>
+  <thead><tr><th scope="col">Flag</th><th scope="col">Effect</th></tr></thead>
+  <tbody>
+  <tr><td><code>--wait</code></td><td>Wait until Deployments, StatefulSets and so on are ready. On timeout the command fails and the revision is marked <b>failed</b>.</td></tr>
+  <tr><td><code>--timeout 3m</code></td><td>How long <code>--wait</code> waits (default 5m).</td></tr>
+  <tr><td><code>--rollback-on-failure</code></td><td>Implies waiting. If the upgrade fails, Helm rolls back to the previous revision by itself. (Called <code>--atomic</code> before Helm 4; the old name still works with a deprecation warning.)</td></tr>
+  <tr><td><code>--dry-run</code></td><td>Render and validate, change nothing.</td></tr>
+  </tbody>
+</table>
+
+<pre data-label="An upgrade to a broken version, with --wait"><code class="language-plaintext">$ helm upgrade web shop/web --version 1.2.0 -n shop --wait --timeout 20s
+Error: UPGRADE FAILED: context deadline exceeded</code></pre>
+
+<p><i>Context deadline exceeded</i> is Helm's way of saying "I waited for the timeout and the workloads were still not ready". Note what happened in the cluster: Kubernetes started a rolling update, the new pod crashed, and the old pods kept serving (Lesson 13). Helm noticed only because of <code>--wait</code>. Without it the release would say <i>deployed</i> while the rollout is stuck.</p>
+
+<h2 id="reading-the-history">Reading the history</h2>
+
+<pre><code class="language-bash">helm history web -n shop</code></pre>
+
+<pre><code class="language-plaintext">REVISION	UPDATED                 	STATUS         	CHART    	APP VERSION	DESCRIPTION
+1       	Sun Oct 11 09:00:40 2026	deployed       	web-1.0.0	1.0        	Install complete
+2       	Sun Oct 11 09:01:20 2026	failed         	web-1.2.0	1.2        	Upgrade &quot;web&quot; failed: context deadline exceeded
+3       	Sun Oct 11 09:11:40 2026	pending-upgrade	web-1.2.0	1.2        	Preparing upgrade</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Status</th><th scope="col">Meaning</th></tr></thead>
+  <tbody>
+  <tr><td><code>deployed</code></td><td>The current, successfully applied revision. There is at most one.</td></tr>
+  <tr><td><code>superseded</code></td><td>An earlier revision that was replaced by a later successful one.</td></tr>
+  <tr><td><code>failed</code></td><td>The operation ended with an error. The cluster may be partly changed.</td></tr>
+  <tr><td><code>pending-install</code> / <code>pending-upgrade</code> / <code>pending-rollback</code></td><td>An operation started and has not recorded its end.</td></tr>
+  <tr><td><code>uninstalled</code></td><td>Removed, with history kept (<code>--keep-history</code>).</td></tr>
+  </tbody>
+</table>
+
+<h2 id="rollback">Rollback</h2>
+
+<pre><code class="language-bash">helm rollback web 1 -n shop      # to a specific revision; omit the number for &quot;the previous one&quot;
+helm history web -n shop</code></pre>
+
+<p>A rollback re-applies the stored manifest of the chosen revision and records that as a <b>new</b> revision ("Rollback to 1"). History is never rewritten. As with <code>kubectl rollout undo</code>, the cluster then performs a normal rolling update back to the old pod template.</p>
+
+<h2 id="another-operation-is-in-progress">"another operation is in progress"</h2>
+<p>Helm writes a revision record with a <i>pending</i> status <em>before</em> it starts changing the cluster, and updates it when it finishes. If the Helm process dies in between (a cancelled CI job, a closed laptop, a killed pod), the record stays pending forever. Helm treats a pending record as a lock:</p>
+
+<pre><code class="language-plaintext">$ helm upgrade web shop/web --version 2.0.0 -n shop
+Error: UPGRADE FAILED: another operation (install/upgrade/rollback) is in progress</code></pre>
+
+<p>No operation is in progress; only the record says so. Two more things make this confusing: <code>helm list</code> hides releases whose latest revision is pending (use <code>helm list -a</code>), and the application may be running perfectly well the whole time.</p>
+
+<table>
+  <thead><tr><th scope="col">Step</th><th scope="col">Command</th></tr></thead>
+  <tbody>
+  <tr><td>1. Make the release visible</td><td><code>helm list -n shop -a</code></td></tr>
+  <tr><td>2. Find the last good revision</td><td><code>helm history web -n shop</code></td></tr>
+  <tr><td>3. Roll back to it. This marks the stuck revision as failed and re-applies known-good manifests.</td><td><code>helm rollback web 1 -n shop</code></td></tr>
+  <tr><td>4. Run the upgrade again, this time with <code>--wait</code></td><td><code>helm upgrade web shop/web --version 2.0.0 -n shop --wait</code></td></tr>
+  </tbody>
+</table>
+
+<div class="callout danger"><span class="title">Don't reach for uninstall</span>
+<code>helm uninstall</code> also "fixes" a stuck release, by deleting the application and, depending on the chart, its volume claims. In production that is an outage and possibly data loss. Rollback first.</div>
+
+<div class="callout tip"><span class="title">Where Helm keeps this state</span>
+Each revision is a Secret named <code>sh.helm.release.v1.NAME.vN</code> in the release's namespace (<code>kubectl -n shop get secrets</code>). Its <code>status</code> label is what <code>helm history</code> shows. Knowing that these are just Secrets explains why Helm needs no server, and why deleting the namespace erases the release history too.</div>
+
+<h2 id="scenario-1-upgrade-without-losing-your-settings-then-roll-back">Scenario 1: upgrade without losing your settings, then roll back</h2>
+
+<section class="lab" data-lab="h-upgrade"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-2-another-operation-is-in-progress">Scenario 2: another operation is in progress</h2>
+
+<section class="lab" data-lab="h-fix-release"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li>Passing any <code>--set</code> or <code>-f</code> without <code>--reuse-values</code> drops earlier overrides. Keep all overrides in a values file and pass it on every upgrade.</li>
+    <li><code>--wait</code> makes Helm verify readiness; <code>--rollback-on-failure</code> also undoes a failed upgrade.</li>
+    <li><code>helm history</code> is the release's own state: deployed, superseded, failed, pending.</li>
+    <li>A pending revision left by a killed Helm process blocks further operations. <code>helm list -a</code> shows it; <code>helm rollback</code> clears it.</li>
+    <li>A rollback creates a new revision from an old manifest. Uninstall is not a repair tool.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="c">
+<p class="q">A release was installed with <code>--set replicaCount=5</code>. Later someone runs <code>helm upgrade web shop/web --set image.tag=2.0</code>. How many replicas does the release have now?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. 5</button>
+<button class="opt" type="button" data-opt="b">B. 0</button>
+<button class="opt" type="button" data-opt="c">C. The chart's default</button>
+<button class="opt" type="button" data-opt="d">D. The upgrade fails</button>
+</div>
+<p class="explain">Giving a value flag without <code>--reuse-values</code> recomputes the values from the chart defaults plus only the new flags.</p>
+</div>
+
+<div class="quiz" data-answer="a">
+<p class="q"><code>helm upgrade</code> fails with "another operation (install/upgrade/rollback) is in progress", and <code>helm list</code> shows no release. What is the state?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. The latest revision is stuck in a pending status; <code>helm list -a</code> shows it and a rollback clears it</button>
+<button class="opt" type="button" data-opt="b">B. Another user is upgrading right now; wait</button>
+<button class="opt" type="button" data-opt="c">C. The release was uninstalled</button>
+<button class="opt" type="button" data-opt="d">D. The cluster is out of capacity</button>
+</div>
+<p class="explain">A killed Helm process leaves a pending record that acts as a lock. Nothing is actually running.</p>
+</div>
+
+<div class="quiz" data-answer="d">
+<p class="q">What does <code>helm rollback web 2</code> do to the history?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Deletes all revisions after 2</button>
+<button class="opt" type="button" data-opt="b">B. Changes revision 2's status back to deployed</button>
+<button class="opt" type="button" data-opt="c">C. Nothing; rollbacks are not recorded</button>
+<button class="opt" type="button" data-opt="d">D. Adds a new revision whose content equals revision 2</button>
+</div>
+<p class="explain">History is append-only. The rollback is recorded as the newest revision, described as "Rollback to 2".</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://helm.sh/docs/helm/helm_upgrade/" target="_blank" rel="noopener">helm upgrade</a></li>
+  <li><a href="https://helm.sh/docs/helm/helm_rollback/" target="_blank" rel="noopener">helm rollback</a></li>
+  <li><a href="https://helm.sh/docs/helm/helm_history/" target="_blank" rel="noopener">helm history</a></li>
+  <li><a href="https://helm.sh/docs/topics/advanced/#storage-backends" target="_blank" rel="noopener">Storage backends: where releases are recorded</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

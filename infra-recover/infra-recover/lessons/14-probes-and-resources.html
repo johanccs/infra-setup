@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Health Probes, Requests and Limits · infra-sim</title>
+<meta name="description" content="Kubernetes can only keep an application healthy if it knows what &quot;healthy&quot; means and how much the application needs. You tell it with probes and with resource settings. Both are powerful, and both are a frequent source of self-inflicted outages.">
+<meta property="og:title" content="Health Probes, Requests and Limits">
+<meta property="og:description" content="Kubernetes can only keep an application healthy if it knows what &quot;healthy&quot; means and how much the application needs. You tell it with probes and with resource settings. Both are powerful, and both are a frequent source of self-inflicted outages.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="14" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Health Probes, Requests and Limits</h1>
+<p class="lead">Kubernetes can only keep an application healthy if it knows what "healthy" means and how much the application needs. You tell it with probes and with resource settings. Both are powerful, and both are a frequent source of self-inflicted outages.</p>
+<div class="meta"><span class="badge">⏱ 45 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Configure <b>readiness and liveness probes</b> and <b>resource requests and limits</b>, and diagnose <b>OOMKilled</b> containers and pods that are <b>Running but not Ready</b>.</p>
+  <p><b>Why it matters:</b> without probes, broken pods receive traffic. With wrong probes, healthy pods are cut off or killed. Without requests the scheduler is blind; with limits that are too low the kernel kills your process. Getting these four settings right prevents a large share of production incidents.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Explain what readiness and liveness probes do when they fail.</li>
+    <li>Write HTTP, TCP and exec probes.</li>
+    <li>Explain the difference between requests and limits, for CPU and for memory.</li>
+    <li>Recognise and fix an <code>OOMKilled</code> container.</li>
+    <li>Explain "Running, 0/1 Ready" and find the cause.</li>
+  </ul>
+</div>
+
+<h2 id="the-situation">The situation</h2>
+<p>Two changes were made to the shop this week "to make it more robust": probes on the front end, and memory limits on the API. One of each was configured wrongly, and both took the shop down.</p>
+
+<h2 id="probes">Probes</h2>
+<p>A probe is a check the kubelet runs against a container at regular intervals.</p>
+<table>
+  <thead><tr><th scope="col">Probe</th><th scope="col">Question</th><th scope="col">When it fails</th></tr></thead>
+  <tbody>
+  <tr><td><b>Readiness</b></td><td>Can this pod take requests right now?</td><td>The pod is removed from every Service's endpoints. It keeps running and is <b>not</b> restarted.</td></tr>
+  <tr><td><b>Liveness</b></td><td>Is this container stuck beyond recovery?</td><td>The container is <b>killed and restarted</b>.</td></tr>
+  <tr><td><b>Startup</b></td><td>Has a slow-starting app finished starting?</td><td>Liveness and readiness are held back until it succeeds.</td></tr>
+  </tbody>
+</table>
+
+<pre><code class="language-yaml">containers:
+  - name: web
+    image: shop/web:1.0
+    ports:
+      - containerPort: 8080
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: 8080
+      periodSeconds: 5
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 8080
+      initialDelaySeconds: 10
+      failureThreshold: 3</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Mechanism</th><th scope="col">Succeeds when</th></tr></thead>
+  <tbody>
+  <tr><td><code>httpGet</code></td><td>The response status is between 200 and 399.</td></tr>
+  <tr><td><code>tcpSocket</code></td><td>The port accepts a connection.</td></tr>
+  <tr><td><code>exec</code></td><td>The command exits with code 0.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="running-is-not-ready">Running is not Ready</h3>
+<p>The READY column of <code>kubectl get pods</code> counts containers that pass their readiness probe. A pod can be <b>Running</b> and <b>0/1</b> at the same time:</p>
+
+<pre><code class="language-plaintext">NAME                   READY   STATUS    RESTARTS   AGE
+web-jm5q9ndbwk-7kxvh   0/1     Running   0          3m</code></pre>
+
+<pre data-label="kubectl describe pod (events)"><code class="language-plaintext">  Warning  Unhealthy  5s (x36 over 3m)  kubelet  Readiness probe failed: Get &quot;http://10.244.1.7:80/healthz&quot;: dial tcp 10.244.1.7:80: connect: connection refused</code></pre>
+
+<p>The message contains everything: which probe, the exact URL, and the error class you know from Lesson 6. <i>Connection refused</i> on port 80 for an app that listens on 8080 is a wrong port in the probe, not a broken app. <i>statuscode: 404</i> would be a wrong path; <i>statuscode: 503</i> would be the application itself declaring that it is not ready.</p>
+
+<div class="compare">
+  <div class="bad"><span class="tag">❌ Probes that cause outages</span>
+  <ul>
+    <li>A liveness probe that checks a dependency (the database). When the database hiccups, every pod is restarted at once.</li>
+    <li>A liveness probe with too short a delay on a slow-starting app: killed before it finishes starting, forever.</li>
+    <li>A probe pointing at the wrong port or path.</li>
+  </ul>
+  </div>
+  <div class="good"><span class="tag">✅ Probes that help</span>
+  <ul>
+    <li>Readiness: "can I serve a request?", including the dependencies you can't work without.</li>
+    <li>Liveness: only "is this process hopelessly stuck?". Keep it cheap and independent of other services.</li>
+    <li>Slow start: a <code>startupProbe</code> instead of a huge <code>initialDelaySeconds</code>.</li>
+  </ul>
+  </div>
+</div>
+
+<h2 id="requests-and-limits">Requests and limits</h2>
+<p>Each container can state what it needs and what it may use at most.</p>
+
+<pre><code class="language-yaml">resources:
+  requests:            # used by the SCHEDULER to place the pod
+    cpu: 100m          # 100 millicores = a tenth of a CPU
+    memory: 128Mi
+  limits:              # ENFORCED on the node while the container runs
+    memory: 256Mi</code></pre>
+
+<table>
+  <thead><tr><td></td><th scope="col">Request</th><th scope="col">Limit</th></tr></thead>
+  <tbody>
+  <tr><td>Used by</td><td>The scheduler: a node must have this much unreserved</td><td>The kubelet and the kernel, at run time</td></tr>
+  <tr><td>CPU exceeded</td><td rowspan="2">A request is a reservation, not a cap</td><td>The container is <b>throttled</b> (slowed down), never killed</td></tr>
+  <tr><td>Memory exceeded</td><td>The container is <b>killed</b>: <code>OOMKilled</code>, exit code 137</td></tr>
+  <tr><td>If omitted</td><td>The scheduler assumes zero: pods may be packed onto a node that cannot hold them</td><td>No ceiling: one leaking pod can starve its neighbours</td></tr>
+  </tbody>
+</table>
+
+<p>Units: CPU in cores (<code>0.5</code>) or millicores (<code>500m</code>); memory in bytes with suffixes, where <code>Mi</code> and <code>Gi</code> are powers of two. Beware of <code>128m</code> for memory: that is 0.128 <em>bytes</em>, a typo for <code>128Mi</code>.</p>
+
+<p>The combination of requests and limits determines the pod's <b>QoS class</b>, which decides who is evicted first when a node runs out of memory: <code>Guaranteed</code> (requests equal limits for everything), <code>Burstable</code> (some set), <code>BestEffort</code> (none set; first to go).</p>
+
+<h3 id="oomkilled">OOMKilled</h3>
+
+<pre data-label="kubectl describe pod (excerpt)"><code class="language-plaintext">    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       OOMKilled
+      Exit Code:    137
+    Restart Count:  6
+    Limits:
+      memory:  64Mi</code></pre>
+
+<p>You have met exit code 137 in Lesson 8. In Kubernetes the reason is spelled out: the container exceeded its memory limit and the kernel killed it. The application's log shows nothing unusual, because a killed process does not get to write a last line.</p>
+
+<pre><code class="language-bash">kubectl top pods                       # current usage (needs the metrics server)
+kubectl set resources deployment/api --requests=memory=128Mi --limits=memory=256Mi</code></pre>
+
+<div class="callout warn"><span class="title">Size limits from measurements</span>
+Measure the working set under realistic load with <code>kubectl top pods</code>, add headroom, and set the limit there. Raising the limit cures an undersized limit. It only postpones the kill if the application leaks memory.</div>
+
+<h2 id="scenario-1-add-probes-and-resources">Scenario 1: add probes and resources</h2>
+
+<section class="lab" data-lab="k-probes"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-2-oomkilled">Scenario 2: OOMKilled</h2>
+
+<section class="lab" data-lab="k-fix-oom"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-3-running-but-0-1-ready">Scenario 3: Running, but 0/1 Ready</h2>
+
+<section class="lab" data-lab="k-fix-readiness"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li>Readiness failing: no traffic, no restart. Liveness failing: restart.</li>
+    <li>"Running 0/1" means the readiness probe fails; the Unhealthy event gives the URL and the error.</li>
+    <li>Requests are for scheduling; limits are enforced. CPU over the limit is throttled, memory over the limit is killed.</li>
+    <li><code>OOMKilled</code> / exit code 137: compare the memory limit with real usage (<code>kubectl top pods</code>).</li>
+    <li>A wrong probe can take down a healthy application. Keep liveness probes simple.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="b">
+<p class="q">A pod's readiness probe has been failing for ten minutes. What has Kubernetes done?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Restarted the container several times</button>
+<button class="opt" type="button" data-opt="b">B. Removed the pod from Service endpoints; the container keeps running</button>
+<button class="opt" type="button" data-opt="c">C. Deleted the pod and created a new one</button>
+<button class="opt" type="button" data-opt="d">D. Marked the node as NotReady</button>
+</div>
+<p class="explain">Readiness controls traffic only. Restarts are the liveness probe's job.</p>
+</div>
+
+<div class="quiz" data-answer="d">
+<p class="q">A container has <code>limits.memory: 64Mi</code> and its process needs 120 MiB. What happens?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. It is slowed down</button>
+<button class="opt" type="button" data-opt="b">B. It is moved to a bigger node</button>
+<button class="opt" type="button" data-opt="c">C. The limit is raised automatically</button>
+<button class="opt" type="button" data-opt="d">D. It is killed (OOMKilled, exit code 137) and restarted, over and over</button>
+</div>
+<p class="explain">Memory can't be throttled. Exceeding the limit triggers the kernel's OOM killer.</p>
+</div>
+
+<div class="quiz" data-answer="a">
+<p class="q">Why is it risky to let a liveness probe check the database connection?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. A short database outage would restart every pod at once, turning a hiccup into a full outage</button>
+<button class="opt" type="button" data-opt="b">B. Liveness probes can't open network connections</button>
+<button class="opt" type="button" data-opt="c">C. The database would be restarted</button>
+<button class="opt" type="button" data-opt="d">D. It disables the readiness probe</button>
+</div>
+<p class="explain">Liveness should only detect a process that cannot recover by itself. Dependency checks belong in readiness.</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/" target="_blank" rel="noopener">Liveness, readiness and startup probes</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/" target="_blank" rel="noopener">Resource management for pods and containers</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/" target="_blank" rel="noopener">Pod Quality of Service classes</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

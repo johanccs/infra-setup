@@ -1,0 +1,19 @@
+{
+  "name": "infra-sim",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Scenario-based Docker, Kubernetes, Helm and Argo CD course with an in-browser simulator (static site).",
+  "scripts": {
+    "build": "python3 build.py",
+    "validate": "html-validate index.html sandbox.html 404.html \"lessons/*.html\"",
+    "test:sim": "node tests/lab-tests.mjs && node tests/lesson-commands.mjs",
+    "test:site": "node tests/run-tests.mjs",
+    "test": "node tests/lab-tests.mjs && node tests/lesson-commands.mjs && node tests/run-tests.mjs"
+  },
+  "devDependencies": {
+    "axe-core": "4.14.0",
+    "html-validate": "11.16.2",
+    "js-yaml": "4.1.0",
+    "playwright": "1.63.0"
+  }
+}

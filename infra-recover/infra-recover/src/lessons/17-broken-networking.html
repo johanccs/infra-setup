@@ -1,0 +1,208 @@
+<h1>Broken Networking: Services, Ingress, Policies</h1>
+<p class="lead">A request crosses several hops between a user and a container, and any of them can be misconfigured while every pod reports Running. This lesson gives you a checklist that walks the path hop by hop, and adds the two objects at its edges: Ingress and NetworkPolicy.</p>
+<div class="meta"><span class="badge">⏱ 50 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Debug connectivity systematically from <b>Ingress</b> through <b>Service</b> to <b>pod</b>, and recognise the signature of a <b>NetworkPolicy</b>.</p>
+  <p><b>Why it matters:</b> networking faults produce no crashing pod and no log line. The only evidence is the error the <em>client</em> gets, and a handful of objects you must know to inspect. With a fixed order of checks, these become some of the quickest problems to solve.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Walk a request's path and test each hop.</li>
+    <li>Diagnose selector, readiness and <code>targetPort</code> problems from endpoints.</li>
+    <li>Create an Ingress and explain what 404 and 503 from the ingress controller mean.</li>
+    <li>Explain how a NetworkPolicy changes a pod's behaviour.</li>
+    <li>Tell "refused" from "timed out" and say which layer each points to.</li>
+  </ul>
+</div>
+
+<h2>The path of a request</h2>
+
+```plaintext
+ user ──► DNS ──► ingress controller ──► Service ──► endpoints ──► pod:port ──► container
+          (1)          (2)                 (3)          (4)          (5)
+                    host/path rule       selector     ready pods   targetPort =
+                    → backend Service    → pods       only         listening port?
+```
+
+<p>Debug from the inside out: prove the pod works, then the Service, then the Ingress. Each step that passes shrinks the search.</p>
+
+<h2>The checklist</h2>
+<table>
+  <tr><th>#</th><th>Check</th><th>Command</th><th>If it fails</th></tr>
+  <tr><td>1</td><td>Are the pods Running <em>and Ready</em>?</td><td><code>kubectl get pods -o wide</code></td><td>Lessons 14 and 15</td></tr>
+  <tr><td>2</td><td>Does the app answer on its own port?</td><td><code>kubectl exec POD -- wget -qO- localhost:8080</code> or <code>kubectl port-forward pod/POD 8080:8080</code></td><td>The app, or the port it listens on</td></tr>
+  <tr><td>3</td><td>Does the Service have endpoints?</td><td><code>kubectl get endpoints SVC</code></td><td>Selector does not match, or pods not ready</td></tr>
+  <tr><td>4</td><td>Do the endpoint ports equal the listening port?</td><td>Compare with step 2</td><td>Wrong <code>targetPort</code></td></tr>
+  <tr><td>5</td><td>Does the Service answer from another pod?</td><td><code>kubectl run tmp --rm -it --restart=Never --image=busybox -- wget -qO- http://SVC</code></td><td>Name/namespace, Service <code>port</code>, or a NetworkPolicy</td></tr>
+  <tr><td>6</td><td>Does the Ingress route to it?</td><td><code>kubectl describe ingress NAME</code>, <code>curl -i http://HOST/</code></td><td>Class, host, path, backend</td></tr>
+</table>
+
+<h3>The error class, once more</h3>
+<table>
+  <tr><th>Client sees</th><th>Layer to suspect</th></tr>
+  <tr><td>Can't resolve the name</td><td>Service name or namespace wrong; Service doesn't exist</td></tr>
+  <tr><td>Connection refused, from the Service IP</td><td>No endpoints (step 3), or endpoints on a port nobody listens on (step 4)</td></tr>
+  <tr><td>Timeout</td><td>A NetworkPolicy dropping packets; a Service port that doesn't exist</td></tr>
+  <tr><td>HTTP 404 / 503 from the proxy</td><td>Ingress: no matching rule / no healthy backend</td></tr>
+  <tr><td>HTTP 5xx from the app</td><td>The application or its dependencies; read its logs</td></tr>
+</table>
+
+<h2>Ingress</h2>
+<p>A Service of type ClusterIP is only reachable inside the cluster. An <b>Ingress</b> publishes HTTP services to the outside under host names and paths, through one shared entry point.</p>
+
+```yaml label="ingress.yaml"
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+spec:
+  ingressClassName: traefik          # which controller should handle this
+  rules:
+    - host: shop.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web            # a Service in the SAME namespace
+                port:
+                  number: 80         # the Service's port, not the pod's
+```
+
+<p>An Ingress is only a set of rules. The work is done by an <b>ingress controller</b>: a reverse proxy running in the cluster that watches Ingress objects and configures itself. Without a controller that claims the Ingress's class, the object exists and nothing happens.</p>
+
+```bash
+kubectl get ingressclass
+kubectl get ingress                 # ADDRESS empty = no controller picked it up
+kubectl describe ingress shop       # each rule, resolved to backend endpoints
+curl -i http://shop.local/
+```
+
+```plaintext label="kubectl describe ingress shop (excerpt)"
+Rules:
+  Host        Path  Backends
+  ----        ----  --------
+  shop.local
+              /   web:80 (10.244.1.3:8080,10.244.2.3:8080)
+```
+
+<table>
+  <tr><th>Symptom</th><th>Meaning</th><th>Look at</th></tr>
+  <tr><td>ADDRESS column stays empty</td><td>No controller handles this Ingress.</td><td><code>ingressClassName</code> versus <code>kubectl get ingressclass</code></td></tr>
+  <tr><td><code>404</code> from the proxy</td><td>The controller has no rule for this host and path.</td><td>Host header, path, class</td></tr>
+  <tr><td><code>503</code> from the proxy</td><td>A rule matched, but its backend has no ready endpoints or doesn't exist.</td><td><code>describe ingress</code>: backend Service name and port; then the Service checklist</td></tr>
+</table>
+
+<div class="callout info"><span class="title">Which controller, and what about the Gateway API?</span>
+The sandbox cluster runs Traefik with the class <code>traefik</code>, so its error pages say <i>404 page not found</i> and <i>no available server</i>. Other controllers word them differently, but the meaning of 404 and 503 is the same. The widely used community controller <b>ingress-nginx was retired in March 2026</b>; clusters that relied on it are moving to other controllers or to the <b>Gateway API</b> (<code>Gateway</code> and <code>HTTPRoute</code> objects), which is the successor to Ingress for new setups. The Ingress API itself remains stable and supported, and the debugging steps here carry over directly.</div>
+
+<h2>NetworkPolicy</h2>
+<p>By default every pod can talk to every other pod in the cluster. A <b>NetworkPolicy</b> restricts that. The rule that surprises people:</p>
+<div class="callout warn"><span class="title">Selected means isolated</span>
+As soon as <em>any</em> NetworkPolicy selects a pod for ingress, that pod accepts <b>only</b> the connections that some policy explicitly allows. Everything else is dropped silently. Policies are additive allow-lists; there is no "deny" rule.</div>
+
+```yaml label="Typical pair: deny everything, then allow what is needed"
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}              # every pod in this namespace
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-from-web
+spec:
+  podSelector:
+    matchLabels:
+      app: api                 # protects the api pods
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: web         # only pods with this label may connect
+      ports:
+        - port: 3000
+```
+
+```bash
+kubectl get networkpolicy
+kubectl describe networkpolicy allow-api-from-web
+kubectl get pods --show-labels       # do the labels in "from" match real pods?
+```
+
+<p>Because dropped packets get no reply, the client waits and then reports a <b>timeout</b>. Between two healthy pods with populated endpoints, a timeout is the fingerprint of a NetworkPolicy. And like Services, policies are tied to pods by labels only: a <code>from</code> selector with a label no pod carries is perfectly valid and allows nobody.</p>
+
+<h2>Scenario 1: route outside traffic with an Ingress</h2>
+
+:::lab k-ingress
+
+<h2>Scenario 2: endpoints exist, connection refused</h2>
+<p>Step 3 of the checklist passes. Go on to step 4.</p>
+
+:::lab k-fix-targetport
+
+<h2>Scenario 3: 404 page not found</h2>
+
+:::lab k-fix-ingress
+
+<h2>Scenario 4: it worked until we "secured" the namespace</h2>
+<p>The hardest of the four. Note the error class before you look at anything else.</p>
+
+:::lab k-fix-netpol
+
+<div class="takeaways">
+  <h2 class="box-title">🔑 Key takeaways</h2>
+  <ul>
+    <li>Check in order: pod ready → app answers locally → endpoints exist → ports match → Service from another pod → Ingress.</li>
+    <li>Refused at a Service: no endpoints or wrong <code>targetPort</code>. Timeout between healthy pods: NetworkPolicy.</li>
+    <li>An Ingress needs a controller that claims its class. Empty ADDRESS = nobody did.</li>
+    <li>404 from the proxy = no rule matched; 503 = rule matched, backend unavailable.</li>
+    <li>A pod selected by any NetworkPolicy accepts only what policies allow. Policies match by label.</li>
+  </ul>
+</div>
+
+<h2>Quiz</h2>
+
+:::quiz c
+`kubectl get endpoints web` shows `10.244.1.3:80,10.244.2.3:80`, the pods are Ready, and requests to the Service are refused. What is the most likely cause?
+a) The selector matches no pods
+b) DNS is broken
+c) `targetPort` is 80, but the containers listen on another port
+d) A NetworkPolicy
+> Endpoints exist, so selection and readiness are fine. The endpoint port comes from `targetPort`; if the app listens elsewhere, the connection is refused.
+:::
+
+:::quiz b
+An Ingress has had no ADDRESS for an hour. What do you check first?
+a) The pods' logs
+b) Whether its `ingressClassName` matches a class that a running controller handles
+c) The Service's selector
+d) The node's disk space
+> A controller only acts on Ingresses of its class. An unclaimed Ingress gets no address and no route.
+:::
+
+:::quiz a
+After adding NetworkPolicies, calls from `web` to `api` hang and then time out. Pods and endpoints are healthy. Why a timeout?
+a) A policy silently drops the packets, so the client gets no answer at all
+b) The api pods are too slow
+c) The Service has no endpoints
+d) The image is wrong
+> "Refused" needs something to send a refusal. A policy drop sends nothing, so the client waits until its timeout.
+:::
+
+<h2>Further reading</h2>
+<ul>
+  <li><a href="https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/" target="_blank" rel="noopener">Debug Services</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/services-networking/ingress/" target="_blank" rel="noopener">Ingress</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/services-networking/gateway/" target="_blank" rel="noopener">Gateway API</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/services-networking/network-policies/" target="_blank" rel="noopener">Network Policies</a></li>
+</ul>

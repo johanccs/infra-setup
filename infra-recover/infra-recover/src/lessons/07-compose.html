@@ -1,0 +1,183 @@
+<h1>Docker Compose: A Whole Stack in One File</h1>
+<p class="lead">Three containers, a network, a volume, five environment variables: typing that as <code>docker run</code> commands every time is slow and error-prone. Compose describes the whole application in one file that you can read, review and commit.</p>
+<div class="meta"><span class="badge">⏱ 40 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Describe a multi-container application in a <b>Compose file</b>, operate it with <code>docker compose</code>, and debug a stack that "started" but does not work.</p>
+  <p><b>Why it matters:</b> Compose is how most teams run their application locally and in CI. It is also your first contact with <em>declarative</em> configuration, the idea Kubernetes is built on.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Read and write a Compose file with services, ports, environment, volumes and dependencies.</li>
+    <li>Start, inspect, update and remove a stack.</li>
+    <li>Explain how services find each other.</li>
+    <li>Say what <code>depends_on</code> guarantees and what it does not.</li>
+    <li>Debug a stack one service at a time.</li>
+  </ul>
+</div>
+
+<h2>The situation</h2>
+<p>In Lesson 6 you started the database and the API by hand. A new colleague needs the same setup on their machine, and next month there will be five services. The commands have to become a file.</p>
+
+<h2>The Compose file</h2>
+
+```yaml label="compose.yaml"
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+
+  api:
+    image: shop/api:1.0
+    environment:
+      DATABASE_URL: postgres://shop:secret@db:5432/shop
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+
+volumes:
+  dbdata:
+```
+
+<p>Every key maps to something you already know:</p>
+<table>
+  <tr><th>Compose</th><th><code>docker run</code> equivalent</th></tr>
+  <tr><td>Service name (<code>db</code>, <code>api</code>)</td><td><code>--name</code>, and the DNS name on the project's network</td></tr>
+  <tr><td><code>image:</code></td><td>The image argument</td></tr>
+  <tr><td><code>environment:</code></td><td><code>-e</code></td></tr>
+  <tr><td><code>ports:</code></td><td><code>-p</code> (quote the values: <code>"3000:3000"</code>)</td></tr>
+  <tr><td><code>volumes:</code> under a service</td><td><code>-v</code></td></tr>
+  <tr><td>Top-level <code>volumes:</code></td><td><code>docker volume create</code></td></tr>
+  <tr><td><code>build: .</code></td><td><code>docker build</code> for that service</td></tr>
+</table>
+
+<div class="callout info"><span class="title">The network comes for free</span>
+Compose creates one user-defined network per project and attaches every service to it. That is why the API can use the host name <code>db</code>: <b>the service name is the DNS name</b>. Nearly every "service A can't find service B" problem in Compose is a host name that does not match a service name.</div>
+
+<h2>Operating a stack</h2>
+
+```bash
+docker compose up -d          # create and start everything, in the background
+docker compose ps             # containers of this project (add -a for stopped ones)
+docker compose logs api       # one service's output; add -f to follow
+docker compose exec db psql -U shop -c "SELECT 1"
+docker compose down           # remove containers and the network; keep volumes
+docker compose down -v        # ...and delete the volumes: your data is gone
+```
+
+```plaintext label="docker compose up -d"
+[+] Running 4/4
+ ✔ Network shop_default    Created                     0.1s
+ ✔ Volume "shop_dbdata"    Created                     0.2s
+ ✔ Container shop-db-1     Started                     0.3s
+ ✔ Container shop-api-1    Started                     0.4s
+```
+
+<p>Names are prefixed with the <b>project name</b>, which defaults to the name of the directory containing the file. The same file in two directories gives two independent stacks.</p>
+
+<h3>up is declarative</h3>
+<p><code>docker compose up -d</code> does not mean "start". It means "make reality match this file". Run it again after editing the file and Compose changes only what differs: a new service is created, a service whose configuration changed is recreated, everything else is left running.</p>
+
+<div class="callout warn"><span class="title">"Started" is not "working"</span>
+Compose reports <b>Started</b> as soon as the container's process has been launched. A database that exits one second later because of a missing password was still "Started". After <code>up</code>, always look at <code>docker compose ps -a</code>: a healthy stack shows every service as <b>Up</b>.</div>
+
+<h2>depends_on, and what it does not promise</h2>
+<p><code>depends_on</code> controls <em>start order</em>: Compose starts <code>db</code> before <code>api</code>. It does <b>not</b> wait until the database is ready to accept connections, which can take several seconds. An application that connects immediately and gives up on the first failure will crash on a cold start.</p>
+<p>There are two proper remedies. Make the application retry its connection, which it needs anyway for restarts in production. Or give the dependency a <code>healthcheck</code> and require <code>condition: service_healthy</code>:</p>
+
+```yaml
+services:
+  db:
+    image: postgres:17
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop"]
+      interval: 5s
+      retries: 10
+  api:
+    depends_on:
+      db:
+        condition: service_healthy
+```
+
+<h2>Debugging a stack: outside in</h2>
+<p>When the application as a whole is broken, follow a request from the outside inwards, and at each hop ask the same three questions.</p>
+<ol>
+  <li><b>Is it running?</b> <code>docker compose ps -a</code>. Anything <i>Exited</i> or <i>Restarting</i>?</li>
+  <li><b>What does it say?</b> <code>docker compose logs SERVICE</code>.</li>
+  <li><b>Can I reach it, and can it reach the next hop?</b> <code>curl</code> the published port; read the error class (Lesson 6).</li>
+</ol>
+
+```plaintext label="Example: following the request"
+curl localhost:8080           → "Products: unavailable (api responded 500 …)"   web is fine; look at api
+curl localhost:3000/products  → "getaddrinfo ENOTFOUND database"                 api can't resolve its db host
+compose.yaml                  → DATABASE_URL uses "database", the service is "db"
+```
+
+<div class="callout tip"><span class="title">Validate before you start</span>
+<code>docker compose config</code> parses the file and prints the result with all defaults filled in, or an error with the offending key. It catches indentation mistakes and references to undefined volumes or services before any container is touched.</div>
+
+<h2>Scenario 1: the whole shop in one file</h2>
+
+:::lab d-compose
+
+<h2>Scenario 2: three typos, one broken stack</h2>
+<p>Everything "Started". Nothing works. Three independent mistakes, each with its own signature.</p>
+
+:::lab d-fix-compose
+
+<div class="takeaways">
+  <h2 class="box-title">🔑 Key takeaways</h2>
+  <ul>
+    <li>A Compose file declares services, their configuration, volumes and dependencies.</li>
+    <li>Each project gets its own network; service names are DNS names.</li>
+    <li><code>up -d</code> reconciles reality with the file and only changes what differs.</li>
+    <li>"Started" only means launched. Check <code>docker compose ps -a</code> and the logs.</li>
+    <li><code>depends_on</code> orders startup; it does not wait for readiness unless you add a health check.</li>
+    <li><code>down</code> keeps named volumes, <code>down -v</code> deletes them.</li>
+  </ul>
+</div>
+
+<h2>Quiz</h2>
+
+:::quiz b
+In a Compose project, service `web` must call service `api` on port 3000. Which URL does `web` use?
+a) `http://localhost:3000`
+b) `http://api:3000`
+c) `http://shop-api-1.local:3000`
+d) The host's IP address and a published port
+> Services share the project network, where each service name resolves to its container. `localhost` would be the web container itself.
+:::
+
+:::quiz c
+You change one service's environment in `compose.yaml` and run `docker compose up -d` again. What happens?
+a) Nothing; you must run `down` first
+b) All containers are recreated
+c) Only the changed service's container is recreated
+d) Compose reports an error because the stack is already up
+> `up` compares the desired configuration with the running containers and recreates only those that differ.
+:::
+
+:::quiz a
+`api` has `depends_on: [db]` and crashes on a cold start with "connection refused", but works when started a few seconds later. Why?
+a) `depends_on` only orders startup; the database process was not ready yet
+b) The service name is wrong
+c) The database port must be published
+d) Compose started the services in the wrong order
+> Start order is not readiness. Use a health check with `condition: service_healthy`, and make the app retry.
+:::
+
+<h2>Further reading</h2>
+<ul>
+  <li><a href="https://docs.docker.com/compose/" target="_blank" rel="noopener">Docker Compose documentation</a></li>
+  <li><a href="https://docs.docker.com/reference/compose-file/" target="_blank" rel="noopener">Compose file reference</a></li>
+  <li><a href="https://docs.docker.com/compose/how-tos/startup-order/" target="_blank" rel="noopener">Control startup order</a></li>
+  <li><a href="https://docs.docker.com/compose/how-tos/networking/" target="_blank" rel="noopener">Networking in Compose</a></li>
+</ul>

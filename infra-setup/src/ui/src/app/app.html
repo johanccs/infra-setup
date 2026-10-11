@@ -1,0 +1,24 @@
+<main>
+  <h1>Todo</h1>
+
+  @if (info(); as i) {
+    <p class="info">Version <b>{{ i.version }}</b> · answered by <code>{{ i.host }}</code></p>
+  }
+
+  <form (ngSubmit)="add()">
+    <input name="title" [ngModel]="newTitle()" (ngModelChange)="newTitle.set($event)"
+           placeholder="What needs doing?" aria-label="New todo" />
+    <button type="submit">Add</button>
+  </form>
+
+  <ul>
+    @for (t of todos(); track t.id) {
+      <li [class.done]="t.done">
+        <label><input type="checkbox" [checked]="t.done" (change)="toggle(t)" /> {{ t.title }}</label>
+        <button (click)="remove(t)" aria-label="Delete">✕</button>
+      </li>
+    } @empty {
+      <li class="empty">Nothing to do yet.</li>
+    }
+  </ul>
+</main>

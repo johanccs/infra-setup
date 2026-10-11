@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Building Images: Dockerfile, Layers and Cache · infra-sim</title>
+<meta name="description" content="So far you have run other people&#x27;s images. Now you package your own application, learn why the order of lines in a Dockerfile matters, and debug a build that fails and an image that builds but will not run.">
+<meta property="og:title" content="Building Images: Dockerfile, Layers and Cache">
+<meta property="og:description" content="So far you have run other people&#x27;s images. Now you package your own application, learn why the order of lines in a Dockerfile matters, and debug a build that fails and an image that builds but will not run.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="4" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Building Images: Dockerfile, Layers and Cache</h1>
+<p class="lead">So far you have run other people's images. Now you package your own application, learn why the order of lines in a Dockerfile matters, and debug a build that fails and an image that builds but will not run.</p>
+<div class="meta"><span class="badge">⏱ 45 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Write a <b>Dockerfile</b>, understand <b>layers</b> and the <b>build cache</b>, and tell <b>build-time</b> failures from <b>run-time</b> failures.</p>
+  <p><b>Why it matters:</b> when a deployment fails with <i>Cannot find module</i> or <i>executable file not found</i>, the cause is in the Dockerfile. You can only find it if you know what each instruction did to the image.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Explain what each common Dockerfile instruction does.</li>
+    <li>Order instructions so that rebuilds are fast.</li>
+    <li>Read BuildKit's output, including a failed step.</li>
+    <li>Distinguish an error in the build from an error when the container starts.</li>
+    <li>Describe what a multi-stage build is for.</li>
+  </ul>
+</div>
+
+<h2 id="the-situation">The situation</h2>
+<p>You wrote a small web service. It runs on your laptop with <code>node server.js</code>. To ship it, the team needs an image. A Dockerfile is the recipe that turns your source directory into one.</p>
+
+<h2 id="a-good-dockerfile">A good Dockerfile</h2>
+
+<pre data-label="Dockerfile"><code class="language-dockerfile">FROM node:24-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY . .
+EXPOSE 3000
+CMD [&quot;node&quot;, &quot;server.js&quot;]</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Instruction</th><th scope="col">What it does</th><th scope="col">When it takes effect</th></tr></thead>
+  <tbody>
+  <tr><td><code>FROM</code></td><td>Starts from an existing image (the <em>base</em>).</td><td>Build</td></tr>
+  <tr><td><code>WORKDIR</code></td><td>Sets (and creates) the directory later instructions and the container work in.</td><td>Build and run</td></tr>
+  <tr><td><code>COPY</code></td><td>Copies files from the <em>build context</em> (the directory you pass to <code>docker build</code>) into the image.</td><td>Build</td></tr>
+  <tr><td><code>RUN</code></td><td>Executes a command <em>during the build</em> and saves the result as a layer.</td><td>Build</td></tr>
+  <tr><td><code>ENV</code></td><td>Sets an environment variable for later build steps and for containers.</td><td>Build and run</td></tr>
+  <tr><td><code>EXPOSE</code></td><td>Documents the port the app listens on. Publishes nothing.</td><td>Metadata</td></tr>
+  <tr><td><code>CMD</code></td><td>The default command a container runs. Not executed during the build.</td><td>Run</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn"><span class="title">RUN versus CMD</span>
+<code>RUN</code> happens once, while the image is built. <code>CMD</code> happens every time a container starts. A typo in a <code>RUN</code> line breaks the build. A typo in <code>CMD</code> builds a perfectly "successful" image that crashes the moment you run it.</div>
+
+<h2 id="building">Building</h2>
+
+<pre><code class="language-bash">docker build -t hello:1.0 .
+#            │            └─ build context: the directory whose files COPY can see
+#            └─ name:tag for the resulting image</code></pre>
+
+<pre data-label="BuildKit output (shortened)"><code class="language-plaintext">[+] Building 3.2s (10/10) FINISHED                            docker:default
+ =&gt; [internal] load build definition from Dockerfile                      0.0s
+ =&gt; [internal] load metadata for docker.io/library/node:24-alpine         0.6s
+ =&gt; [internal] load build context                                         0.0s
+ =&gt; [1/5] FROM docker.io/library/node:24-alpine@sha256:90712d2c6438…      0.0s
+ =&gt; [2/5] WORKDIR /app                                                    0.0s
+ =&gt; [3/5] COPY package*.json ./                                           0.0s
+ =&gt; [4/5] RUN npm ci --omit=dev                                           2.4s
+ =&gt; [5/5] COPY . .                                                        0.0s
+ =&gt; exporting to image                                                    0.1s
+ =&gt; =&gt; naming to docker.io/library/hello:1.0                              0.0s</code></pre>
+
+<h2 id="layers-and-the-build-cache">Layers and the build cache</h2>
+<p>Every instruction that changes the file system produces a <b>layer</b>. Docker remembers each layer together with the instruction and the inputs that produced it. On the next build, a step whose instruction and inputs are unchanged is not executed again: its layer is taken from the <b>cache</b>, and the output says <code>CACHED</code>.</p>
+<p>The catch: once one step has to run, <b>every step after it runs too</b>. So the order of instructions decides how much work a rebuild repeats.</p>
+
+<div class="compare">
+  <div class="bad"><span class="tag">❌ Slow: every code change reinstalls everything</span>
+
+<pre><code class="language-dockerfile">FROM node:24-alpine
+WORKDIR /app
+COPY . .
+RUN npm ci --omit=dev
+CMD [&quot;node&quot;, &quot;server.js&quot;]</code></pre>
+  <p>Editing <code>server.js</code> changes the input of <code>COPY . .</code>, so that layer and the slow <code>npm ci</code> after it are rebuilt.</p>
+  </div>
+  <div class="good"><span class="tag">✅ Fast: dependencies stay cached</span>
+
+<pre><code class="language-dockerfile">FROM node:24-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY . .
+CMD [&quot;node&quot;, &quot;server.js&quot;]</code></pre>
+  <p>The package files rarely change, so <code>npm ci</code> stays cached. Only the last <code>COPY</code> is redone.</p>
+  </div>
+</div>
+<p>The rule of thumb: <b>what changes least goes first, what changes most goes last</b>.</p>
+
+<h2 id="when-the-build-fails">When the build fails</h2>
+<p>BuildKit marks the failing step with <code>ERROR</code>, prints that step's output, and then shows the Dockerfile with <code>&gt;&gt;&gt;</code> in front of the line:</p>
+
+<pre><code class="language-plaintext"> =&gt; ERROR [4/4] RUN npm ci --omit=dev                                     1.2s
+------
+ &gt; [4/4] RUN npm ci --omit=dev:
+0.216 npm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open &#x27;/app/package.json&#x27;
+------
+Dockerfile:4
+--------------------
+   3 |     COPY server.js .
+   4 | &gt;&gt;&gt; RUN npm ci --omit=dev
+   5 |     EXPOSE 3000
+--------------------
+ERROR: failed to build: failed to solve: process &quot;/bin/sh -c npm ci --omit=dev&quot; did not complete successfully: exit code: 254</code></pre>
+
+<p>Read it bottom-up: which line, which command, and then the command's own message. Here <code>npm</code> cannot find <code>package.json</code> <em>inside the image</em>, because no earlier instruction copied it there.</p>
+
+<table>
+  <thead><tr><th scope="col">Symptom</th><th scope="col">Typical cause</th></tr></thead>
+  <tbody>
+  <tr><td><code>failed to compute cache key: "/x": not found</code></td><td><code>COPY</code> names a file that is not in the build context (wrong path, or excluded by <code>.dockerignore</code>).</td></tr>
+  <tr><td><code>/bin/sh: apt-get: not found</code></td><td>Wrong package manager for the base image. Alpine uses <code>apk</code>, Debian and Ubuntu use <code>apt-get</code>.</td></tr>
+  <tr><td><code>pull access denied … repository does not exist</code> on <code>FROM</code></td><td>A typo in the base image name or tag.</td></tr>
+  <tr><td>Build succeeds; container exits with <code>Cannot find module</code></td><td><code>CMD</code> points at a file that is not where it says, or dependencies were never installed.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="smaller-images-multi-stage-builds">Smaller images: multi-stage builds</h2>
+<p>Build tools are needed to <em>produce</em> the application but not to <em>run</em> it. A multi-stage Dockerfile uses one stage to build and a second, clean stage that copies only the result:</p>
+
+<pre data-label="Dockerfile (multi-stage)"><code class="language-dockerfile">FROM node:24-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM nginx:1.29-alpine
+COPY --from=build /app/dist /usr/share/nginx/html</code></pre>
+
+<p>The final image contains nginx and the built files, and nothing of Node.js, <code>node_modules</code> or your source code. Smaller images pull faster and have fewer packages that can contain vulnerabilities.</p>
+
+<div class="callout tip"><span class="title">Two more habits</span>
+<ul>
+<li>Add a <code>.dockerignore</code> file listing <code>node_modules</code>, <code>.git</code> and local secrets, so they are neither sent to the builder nor copied by <code>COPY . .</code>.</li>
+<li>Prefer the JSON form <code>CMD ["node", "server.js"]</code>. The plain form <code>CMD node server.js</code> wraps your process in a shell, which then receives the stop signal instead of your application.</li>
+</ul></div>
+
+<h2 id="scenario-1-build-your-own-image">Scenario 1: build your own image</h2>
+
+<section class="lab" data-lab="d-build"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-2-the-build-that-fails-then-the-image-that-crashes">Scenario 2: the build that fails, then the image that crashes</h2>
+<p>Two mistakes, two different places to find the evidence: the build output for one, <code>docker logs</code> for the other.</p>
+
+<section class="lab" data-lab="d-fix-build"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li>A Dockerfile is a list of instructions; file-changing instructions create layers.</li>
+    <li><code>RUN</code> executes at build time, <code>CMD</code> at container start. Each fails in a different place.</li>
+    <li>A changed step invalidates the cache for all later steps: copy dependency manifests and install before copying the source.</li>
+    <li>Build errors: read the <code>&gt;&gt;&gt;</code> line and the step output above it. Run-time errors: <code>docker logs</code>.</li>
+    <li>Images are immutable. After changing the Dockerfile, rebuild and create a new container.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="c">
+<p class="q">You change one line in <code>server.js</code> and rebuild the "fast" Dockerfile from this lesson. Which steps are executed again?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. All of them</button>
+<button class="opt" type="button" data-opt="b">B. <code>RUN npm ci</code> and everything after it</button>
+<button class="opt" type="button" data-opt="c">C. Only <code>COPY . .</code> (and the export)</button>
+<button class="opt" type="button" data-opt="d">D. None; the image is identical</button>
+</div>
+<p class="explain">The package files did not change, so the steps up to and including <code>npm ci</code> are cached. <code>COPY . .</code> has new input and is redone.</p>
+</div>
+
+<div class="quiz" data-answer="a">
+<p class="q">A build ends with <code>/bin/sh: apt-get: not found</code> on a <code>RUN apt-get install -y curl</code> line. The base image is <code>node:24-alpine</code>. What is wrong?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Alpine uses <code>apk</code>, not <code>apt-get</code></button>
+<button class="opt" type="button" data-opt="b">B. The network is down</button>
+<button class="opt" type="button" data-opt="c">C. <code>curl</code> does not exist for Node</button>
+<button class="opt" type="button" data-opt="d">D. <code>RUN</code> needs <code>sudo</code></button>
+</div>
+<p class="explain">The command itself is missing from the base image. On Alpine the equivalent is <code>RUN apk add --no-cache curl</code>.</p>
+</div>
+
+<div class="quiz" data-answer="b">
+<p class="q"><code>docker build</code> succeeds, but <code>docker run</code> exits at once with <code>Error: Cannot find module &#x27;/app/app.js&#x27;</code>. Where is the mistake most likely?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. In a <code>RUN</code> instruction</button>
+<button class="opt" type="button" data-opt="b">B. In <code>CMD</code> (or in which files were copied to where)</button>
+<button class="opt" type="button" data-opt="c">C. In <code>EXPOSE</code></button>
+<button class="opt" type="button" data-opt="d">D. In the build cache</button>
+</div>
+<p class="explain">A successful build proves the instructions ran, not that <code>CMD</code> names a file that exists in the image. The container's log names the missing file.</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://docs.docker.com/reference/dockerfile/" target="_blank" rel="noopener">Dockerfile reference</a></li>
+  <li><a href="https://docs.docker.com/build/cache/" target="_blank" rel="noopener">Docker build cache</a></li>
+  <li><a href="https://docs.docker.com/build/building/multi-stage/" target="_blank" rel="noopener">Multi-stage builds</a></li>
+  <li><a href="https://docs.docker.com/build/building/best-practices/" target="_blank" rel="noopener">Building best practices</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

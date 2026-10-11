@@ -1,0 +1,213 @@
+<h1>GitOps with Argo CD: Your First Application</h1>
+<p class="lead">So far, <em>you</em> ran <code>kubectl apply</code> and <code>helm upgrade</code>. With GitOps, nobody does. The desired state lives in a git repository, and a controller in the cluster keeps the cluster equal to it. Argo CD is the most widely used such controller.</p>
+<div class="meta"><span class="badge">⏱ 40 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Understand the <b>GitOps</b> model, and create, sync and inspect an Argo CD <b>Application</b>.</p>
+  <p><b>Why it matters:</b> in a GitOps setup, the two questions you ask about every deployment problem are new: "does the cluster match git?" and "is what is in git actually working?". Argo CD answers them with two separate statuses, and reading those correctly is most of the skill.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Explain GitOps and how it differs from running kubectl in a pipeline.</li>
+    <li>Describe an Application's source and destination.</li>
+    <li>Distinguish <b>sync status</b> from <b>health status</b>.</li>
+    <li>Create and synchronise an application with the <code>argocd</code> CLI.</li>
+    <li>Find the Application object with kubectl.</li>
+  </ul>
+</div>
+
+<h2>The situation</h2>
+<p>Three people deploy the shop, each with their own kubeconfig and their own habits. Nobody can say with certainty what is running in production, or who changed the replica count last Tuesday. The team decides: from now on, production is whatever is on the <code>main</code> branch of the <code>gitops</code> repository.</p>
+
+<h2>What GitOps means</h2>
+<table>
+  <tr><th></th><th>Push: pipeline runs kubectl/helm</th><th>Pull: GitOps</th></tr>
+  <tr><td>Who changes the cluster</td><td>CI jobs and people, from outside</td><td>A controller inside the cluster</td></tr>
+  <tr><td>Source of truth</td><td>Whatever was applied last</td><td>The git repository</td></tr>
+  <tr><td>Manual change in the cluster</td><td>Stays, unnoticed, until something overwrites it</td><td>Detected as drift; optionally reverted</td></tr>
+  <tr><td>Audit trail</td><td>Pipeline logs, if kept</td><td>Git history: who, what, when, why, reviewed by whom</td></tr>
+  <tr><td>Rollback</td><td>Re-run an old pipeline, hopefully</td><td><code>git revert</code></td></tr>
+  <tr><td>Cluster credentials</td><td>Stored in the CI system</td><td>Never leave the cluster</td></tr>
+</table>
+
+<p>It is the reconciliation idea from Lesson 9, one level up: Kubernetes makes pods match Deployments; Argo CD makes Deployments match git.</p>
+
+<h2>Argo CD in the cluster</h2>
+<p>Argo CD is itself a set of pods, by convention in the namespace <code>argocd</code>:</p>
+
+```bash
+kubectl -n argocd get pods
+```
+
+<table>
+  <tr><th>Component</th><th>Job</th></tr>
+  <tr><td><code>argocd-repo-server</code></td><td>Fetches repositories and <em>generates manifests</em> from them (plain YAML, Helm, Kustomize).</td></tr>
+  <tr><td><code>argocd-application-controller</code></td><td>Compares generated manifests with the live cluster and performs syncs.</td></tr>
+  <tr><td><code>argocd-server</code></td><td>The API and web UI that the <code>argocd</code> CLI talks to.</td></tr>
+</table>
+
+<p>In the sandbox the CLI is already logged in. On a real installation you would first run <code>argocd login HOST</code>.</p>
+
+<h2>The Application</h2>
+<p>An <b>Application</b> connects a place in git to a place in a cluster.</p>
+
+```yaml label="An Application as a manifest"
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shop
+  namespace: argocd
+spec:
+  project: default
+  source:                                   # WHERE the desired state is
+    repoURL: https://git.shop.example/shop/gitops.git
+    targetRevision: HEAD                    # a branch, tag or commit
+    path: apps                              # directory inside the repository
+    directory:
+      recurse: true
+  destination:                              # WHERE it should be applied
+    server: https://kubernetes.default.svc  # "the cluster Argo CD runs in"
+    namespace: shop
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+```
+
+<p>The same thing with the CLI:</p>
+
+```bash
+argocd app create shop \
+  --repo https://git.shop.example/shop/gitops.git \
+  --path apps --directory-recurse \
+  --dest-server https://kubernetes.default.svc \
+  --dest-namespace shop \
+  --sync-option CreateNamespace=true
+```
+
+<div class="callout info"><span class="title">An Application is just a Kubernetes object</span>
+<code>kubectl -n argocd get applications</code> lists them. That means Applications can themselves be stored in git and managed by another Application (the "app of apps" pattern), so even the list of what is deployed is under version control.</div>
+
+<h2>Two statuses</h2>
+
+```bash
+argocd app list
+argocd app get shop
+```
+
+```plaintext label="argocd app get shop, before the first sync (excerpt)"
+Name:               argocd/shop
+Project:            default
+Server:             https://kubernetes.default.svc
+Namespace:          shop
+Source:
+- Repo:             https://git.shop.example/shop/gitops.git
+  Target:           HEAD
+  Path:             apps
+Sync Policy:        Manual
+Sync Status:        OutOfSync from HEAD (ba66957)
+Health Status:      Missing
+
+GROUP  KIND        NAMESPACE  NAME  STATUS     HEALTH   HOOK  MESSAGE
+apps   Deployment  shop       api   OutOfSync  Missing
+       Service     shop       api   OutOfSync  Missing
+apps   Deployment  shop       web   OutOfSync  Missing
+       Service     shop       web   OutOfSync  Missing
+```
+
+<table>
+  <tr><th>Sync status</th><th>Question: does the cluster match git?</th></tr>
+  <tr><td><code>Synced</code></td><td>Every resource in git exists in the cluster with the declared content.</td></tr>
+  <tr><td><code>OutOfSync</code></td><td>Something differs: git has a change not yet applied, or the cluster was changed by hand.</td></tr>
+  <tr><td><code>Unknown</code></td><td>Argo CD could not determine the desired state at all (Lesson 25).</td></tr>
+</table>
+<table>
+  <tr><th>Health status</th><th>Question: is it actually working?</th></tr>
+  <tr><td><code>Healthy</code></td><td>All resources are fine: Deployments fully rolled out, and so on.</td></tr>
+  <tr><td><code>Progressing</code></td><td>Not healthy yet, but may become so: a rollout is under way, pods are starting.</td></tr>
+  <tr><td><code>Degraded</code></td><td>Something failed: a Deployment exceeded its progress deadline, a Job failed.</td></tr>
+  <tr><td><code>Missing</code></td><td>A resource declared in git does not exist in the cluster.</td></tr>
+</table>
+
+<div class="callout warn"><span class="title">The two are independent</span>
+<b>Synced and Degraded</b> is common and important: the cluster matches git exactly, and what is in git does not work. <b>OutOfSync and Healthy</b> is just as possible: everything runs, but someone changed something by hand. Always read both.</div>
+
+<h2>Sync</h2>
+
+```bash
+argocd app sync shop            # apply what is in git
+argocd app wait shop --health   # block until it is healthy (or time out)
+kubectl -n shop get pods
+```
+
+<p>A sync is, at its core, a <code>kubectl apply</code> of the generated manifests, performed by the controller. Each resource then reports its own result:</p>
+
+```plaintext
+Operation:          Sync
+Sync Revision:      ba6695702e37edf552b1f0cdb0cca3fa4f38b355
+Phase:              Succeeded
+Message:            successfully synced (all tasks run)
+
+GROUP  KIND        NAMESPACE  NAME  STATUS  HEALTH       HOOK  MESSAGE
+       Service     shop       web   Synced  Healthy            service/web created
+apps   Deployment  shop       web   Synced  Progressing        deployment.apps/web created
+```
+
+<p>Right after the sync the application is <code>Synced</code> and <code>Progressing</code>: the Deployments exist, the pods are still starting. A minute later it is <code>Healthy</code>. With <b>manual</b> sync policy, which is the default, Argo CD only applies changes when you ask. The next lesson switches to automated sync.</p>
+
+<div class="callout tip"><span class="title">How quickly does Argo CD notice a commit?</span>
+It polls each repository every few minutes. To make it look immediately, refresh the application: <code>argocd app get shop --refresh</code>. In production, a webhook from the git server triggers the refresh the moment a commit is pushed.</div>
+
+<h2>Scenario: your first Argo CD Application</h2>
+
+:::lab a-first
+
+<div class="takeaways">
+  <h2 class="box-title">🔑 Key takeaways</h2>
+  <ul>
+    <li>GitOps: git holds the desired state; a controller in the cluster makes the cluster match it.</li>
+    <li>An Application = source (repo, revision, path) + destination (cluster, namespace).</li>
+    <li>Sync status answers "cluster equals git?"; health status answers "does it work?". They are independent.</li>
+    <li>A sync applies the generated manifests; health follows once the workloads are ready.</li>
+    <li>Applications are Kubernetes objects in the <code>argocd</code> namespace.</li>
+  </ul>
+</div>
+
+<h2>Quiz</h2>
+
+:::quiz b
+An application is `Synced` and `Degraded`. What does that mean?
+a) Argo CD can't reach the git repository
+b) The cluster matches git, but the deployed resources are not working
+c) Someone changed the cluster by hand
+d) The sync is still running
+> Sync status only compares declarations. Health looks at whether the resources function. Here the fault is in what git declares, or in something the manifests depend on.
+:::
+
+:::quiz d
+What does an Application's `destination` specify?
+a) The git branch to read
+b) The directory inside the repository
+c) The container registry
+d) The cluster and namespace to deploy to
+> Source says where the desired state comes from; destination says where it is applied.
+:::
+
+:::quiz a
+With the default (manual) sync policy, a new commit is pushed to the repository. What does Argo CD do?
+a) Detects it on its next refresh and shows the application as OutOfSync, without applying it
+b) Applies it immediately
+c) Deletes the application
+d) Nothing; it never looks at git again after creation
+> Manual policy means Argo CD reports the difference and waits for `argocd app sync`.
+:::
+
+<h2>Further reading</h2>
+<ul>
+  <li><a href="https://argo-cd.readthedocs.io/en/stable/core_concepts/" target="_blank" rel="noopener">Argo CD core concepts</a></li>
+  <li><a href="https://argo-cd.readthedocs.io/en/stable/getting_started/" target="_blank" rel="noopener">Getting started</a></li>
+  <li><a href="https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/" target="_blank" rel="noopener">Declarative setup: Applications as manifests</a></li>
+  <li><a href="https://opengitops.dev/" target="_blank" rel="noopener">OpenGitOps principles</a></li>
+</ul>

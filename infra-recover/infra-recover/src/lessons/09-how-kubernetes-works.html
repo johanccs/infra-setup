@@ -1,0 +1,171 @@
+<h1>How Kubernetes Works</h1>
+<p class="lead">Docker runs containers on one machine. Kubernetes runs them on many, keeps them running, and lets you describe what you want instead of what to do. Before the first YAML file, this lesson gives you the map.</p>
+<div class="meta"><span class="badge">⏱ 35 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Understand the <b>parts of a cluster</b>, the idea of <b>desired state</b>, and the basic <code>kubectl</code> commands for looking around.</p>
+  <p><b>Why it matters:</b> Kubernetes error messages name its components: the scheduler could not place a pod, the kubelet could not pull an image, the API server rejected a field. Knowing who does what tells you where each problem lives.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Name the control-plane and node components and their jobs.</li>
+    <li>Explain "desired state" and "reconciliation".</li>
+    <li>List, describe and delete objects with <code>kubectl</code>.</li>
+    <li>Explain what a pod is and how it differs from a container.</li>
+    <li>Follow a pod's creation through its events.</li>
+  </ul>
+</div>
+
+<h2>The situation</h2>
+<p>The shop outgrew a single Docker host. One machine is a single point of failure, and somebody had to notice and react whenever a container died. The team moved to a three-node Kubernetes cluster, and you have just been given access.</p>
+
+<h2>What Kubernetes adds</h2>
+<table>
+  <tr><th>Need</th><th>With plain Docker</th><th>With Kubernetes</th></tr>
+  <tr><td>Run 4 copies across machines</td><td>You choose machines and start each one</td><td>You say "4 replicas"; the scheduler places them</td></tr>
+  <tr><td>A container dies</td><td>Restart policy on that one host</td><td>Recreated automatically, on another node if necessary</td></tr>
+  <tr><td>A machine dies</td><td>Everything on it is down until you act</td><td>Its pods are recreated on the remaining nodes</td></tr>
+  <tr><td>Find a service</td><td>Container names on one network</td><td>A stable name and virtual IP per Service, cluster-wide</td></tr>
+  <tr><td>Release a new version</td><td>Stop old, start new, by hand</td><td>Rolling update with automatic pause on failure, and rollback</td></tr>
+</table>
+
+<h2>The parts of a cluster</h2>
+
+```plaintext label="A cluster"
+            ┌──────────────── control plane (cp-1) ────────────────┐
+ kubectl ──►│ API server ◄──► etcd (the cluster's database)        │
+            │     ▲    ▲                                           │
+            │     │    └── controller manager (keeps counts right) │
+            │     └─────── scheduler (picks a node for each pod)   │
+            └─────┼────────────────────────────────────────────────┘
+                  │ every component talks only to the API server
+        ┌─────────┴──────────┐              ┌────────────────────┐
+        │ worker-1           │              │ worker-2           │
+        │  kubelet           │              │  kubelet           │
+        │  container runtime │              │  container runtime │
+        │  kube-proxy        │              │  kube-proxy        │
+        │  [pod] [pod] [pod] │              │  [pod] [pod]       │
+        └────────────────────┘              └────────────────────┘
+```
+
+<table>
+  <tr><th>Component</th><th>Job</th><th>You notice it when</th></tr>
+  <tr><td><b>API server</b></td><td>The only entry point. Validates and stores every object.</td><td>A manifest is rejected: <i>error from server…</i></td></tr>
+  <tr><td><b>etcd</b></td><td>Stores the cluster's state.</td><td>Rarely, as a user</td></tr>
+  <tr><td><b>Scheduler</b></td><td>Assigns each new pod to a node that fits.</td><td>A pod stays <i>Pending</i>: <i>FailedScheduling</i></td></tr>
+  <tr><td><b>Controller manager</b></td><td>Runs the control loops (Deployments, ReplicaSets, Jobs, …).</td><td>Pods are created, replaced, scaled</td></tr>
+  <tr><td><b>kubelet</b></td><td>On each node: starts and watches the containers of the pods assigned to it, runs probes.</td><td><i>ImagePullBackOff</i>, <i>CrashLoopBackOff</i>, probe failures</td></tr>
+  <tr><td><b>Container runtime</b></td><td>Actually runs containers (containerd). Docker is not involved.</td><td><i>failed to create containerd task…</i></td></tr>
+  <tr><td><b>kube-proxy</b></td><td>Makes Service IPs work on each node.</td><td>Service routing</td></tr>
+</table>
+
+<h2>Desired state and reconciliation</h2>
+<p>This is the idea everything else rests on. You do not tell Kubernetes to <em>do</em> something. You store an object that describes what you <em>want</em>, and controllers work continuously to make reality match.</p>
+
+```plaintext
+ you:        "there should be 3 replicas of web"   (desired state, stored in the API)
+ controller: counts 2 running  →  creates 1
+ later:      a node dies, 1 pod is gone  →  counts 2  →  creates 1
+ forever:    observe  →  compare  →  act
+```
+
+<p>The practical consequence: you fix things by changing the <b>declaration</b>, and you never need to "restart Kubernetes" to make it notice. It is always looking.</p>
+
+<h2>Pods</h2>
+<p>The smallest thing Kubernetes runs is a <b>pod</b>: one or more containers that share a network address and can share storage. Most pods contain exactly one container. Think of a pod as "a container plus the wrapper Kubernetes needs": an IP address, labels, a restart policy, a place on a node.</p>
+<div class="callout info"><span class="title">Pods are disposable</span>
+A pod is never repaired or moved. When something goes wrong it is replaced by a new pod, with a new name and a new IP address. That is why you rarely create pods directly (the next lesson introduces Deployments) and why nothing should depend on a pod's IP (Lesson 11 introduces Services).</div>
+
+<h2>kubectl: looking around</h2>
+<p><code>kubectl</code> talks to the API server. Nearly every command follows the pattern <code>kubectl VERB TYPE [NAME] [flags]</code>.</p>
+
+```bash
+kubectl get nodes -o wide          # the machines
+kubectl get pods                   # pods in the current namespace (default)
+kubectl get pods -A                # pods in all namespaces
+kubectl get pods -o wide           # adds the pod's IP and node
+kubectl describe pod NAME          # everything about one pod, with its events
+kubectl logs NAME                  # the container's output
+kubectl delete pod NAME
+kubectl api-resources              # every object type the cluster knows
+```
+
+```plaintext label="kubectl get nodes"
+NAME       STATUS   ROLES           AGE   VERSION
+cp-1       Ready    control-plane   4d    v1.37.0
+worker-1   Ready    <none>          4d    v1.37.0
+worker-2   Ready    <none>          4d    v1.37.0
+```
+
+<p><b>Namespaces</b> divide a cluster into named areas. The cluster's own components live in <code>kube-system</code>; your objects go to <code>default</code> unless you say otherwise with <code>-n NAME</code>. Lesson 19 covers them properly.</p>
+
+<h2>Reading a pod's events</h2>
+<p>The bottom of <code>kubectl describe pod</code> is the most useful block of text in Kubernetes. Each line is one component reporting what it did:</p>
+
+```plaintext label="Events of a healthy pod"
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  12s   default-scheduler  Successfully assigned default/hello to worker-1
+  Normal  Pulling    12s   kubelet            Pulling image "nginx:1.29"
+  Normal  Pulled     10s   kubelet            Successfully pulled image "nginx:1.29" in 2s (2s including waiting). Image size: 192000000 bytes.
+  Normal  Created    10s   kubelet            Created container: hello
+  Normal  Started    10s   kubelet            Started container hello
+```
+
+<p>Scheduled → Pulling → Pulled → Created → Started. When a pod is unhealthy, this chain stops somewhere and a <b>Warning</b> line says why. Finding that line is the core of Lessons 15 to 17.</p>
+
+<h2>Scenario: a tour of the cluster</h2>
+
+:::lab k-tour
+
+<div class="takeaways">
+  <h2 class="box-title">🔑 Key takeaways</h2>
+  <ul>
+    <li>Everything goes through the API server; controllers, the scheduler and the kubelets all react to what is stored there.</li>
+    <li>You declare desired state. Controllers reconcile continuously: observe, compare, act.</li>
+    <li>A pod is one or more containers with a shared IP. Pods are replaced, never repaired.</li>
+    <li><code>kubectl get</code> lists, <code>describe</code> explains (with events), <code>logs</code> shows output.</li>
+    <li>The events of a pod tell the story of its start: Scheduled, Pulling, Pulled, Created, Started.</li>
+  </ul>
+</div>
+
+<h2>Quiz</h2>
+
+:::quiz c
+Which component decides on which node a new pod runs?
+a) The kubelet
+b) etcd
+c) The scheduler
+d) kube-proxy
+> The scheduler assigns pods to nodes. The kubelet on the chosen node then starts the containers.
+:::
+
+:::quiz a
+What does "reconciliation" mean in Kubernetes?
+a) Controllers continuously compare the desired state with the actual state and act on the difference
+b) Pods are restarted every few minutes
+c) kubectl retries failed commands
+d) Nodes synchronise their clocks
+> You store what you want; control loops keep making reality match it, for as long as the object exists.
+:::
+
+:::quiz b
+A pod's events end with `Scheduled` and `Pulling`, and nothing after that for several minutes. Which component is working on it, and on what?
+a) The scheduler, choosing a node
+b) The kubelet on the assigned node, pulling the image
+c) The API server, validating the manifest
+d) The controller manager, counting replicas
+> Scheduling is finished (the pod has a node). Pulling images is the kubelet's job, so the delay or failure is there.
+:::
+
+<h2>Further reading</h2>
+<ul>
+  <li><a href="https://kubernetes.io/docs/concepts/overview/components/" target="_blank" rel="noopener">Kubernetes components</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/workloads/pods/" target="_blank" rel="noopener">Pods</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/architecture/controller/" target="_blank" rel="noopener">Controllers</a></li>
+  <li><a href="https://kubernetes.io/docs/reference/kubectl/quick-reference/" target="_blank" rel="noopener">kubectl quick reference</a></li>
+</ul>

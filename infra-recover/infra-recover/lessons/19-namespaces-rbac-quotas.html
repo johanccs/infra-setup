@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Namespaces, RBAC and Quotas · infra-sim</title>
+<meta name="description" content="On a shared cluster, some failures have nothing to do with your application: the cluster simply refuses what you ask, because of who you are or how much you have already used. These refusals are precise. This lesson shows how to read them and how to grant exactly what is missing.">
+<meta property="og:title" content="Namespaces, RBAC and Quotas">
+<meta property="og:description" content="On a shared cluster, some failures have nothing to do with your application: the cluster simply refuses what you ask, because of who you are or how much you have already used. These refusals are precise. This lesson shows how to read them and how to grant exactly what is missing.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="19" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Namespaces, RBAC and Quotas</h1>
+<p class="lead">On a shared cluster, some failures have nothing to do with your application: the cluster simply refuses what you ask, because of who you are or how much you have already used. These refusals are precise. This lesson shows how to read them and how to grant exactly what is missing.</p>
+<div class="meta"><span class="badge">⏱ 45 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Organise a cluster with <b>namespaces</b>, control access with <b>RBAC</b>, and understand how <b>ResourceQuotas</b> block the creation of pods.</p>
+  <p><b>Why it matters:</b> <i>Forbidden</i> errors and quota limits stop deployments in every company that shares clusters between teams. The quick "fix" is to grant admin rights; the correct fix takes the same time and does not create a security problem.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Work with namespaces and set a default namespace for kubectl.</li>
+    <li>Explain subjects, Roles and RoleBindings, and create them.</li>
+    <li>Take a <i>Forbidden</i> message apart into user, verb, resource and namespace.</li>
+    <li>Test permissions with <code>kubectl auth can-i</code> and impersonation.</li>
+    <li>Find out why a workload has fewer pods than replicas when a quota is involved.</li>
+  </ul>
+</div>
+
+<h2 id="namespaces">Namespaces</h2>
+<p>A namespace is a named partition of the cluster. Most objects live in exactly one: pods, Deployments, Services, ConfigMaps, Secrets, claims. Names only have to be unique within a namespace, and permissions, quotas and network policies are attached per namespace.</p>
+
+<pre><code class="language-bash">kubectl get namespaces
+kubectl create namespace team-a
+kubectl get pods -n team-a                 # one namespace
+kubectl get pods -A                        # all namespaces
+kubectl config set-context --current --namespace=team-a    # change your default
+kubectl config view --minify | grep namespace              # check what it is</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Namespaced</th><th scope="col">Cluster-wide</th></tr></thead>
+  <tbody>
+  <tr><td>Pods, Deployments, Services, ConfigMaps, Secrets, PVCs, Ingresses, Roles, RoleBindings, ServiceAccounts, NetworkPolicies, ResourceQuotas</td><td>Nodes, Namespaces, PersistentVolumes, StorageClasses, IngressClasses, ClusterRoles, ClusterRoleBindings</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn"><span class="title">"No resources found" is often the wrong namespace</span>
+Before concluding that something is missing, check which namespace you are looking at. <code>kubectl get pods -A | grep NAME</code> finds an object wherever it lives. And remember from earlier lessons: a pod can only reference ConfigMaps, Secrets and claims in its own namespace, and short Service names resolve within the caller's namespace.</div>
+
+<div class="callout danger"><span class="title">Deleting a namespace deletes everything in it</span>
+<code>kubectl delete namespace team-a</code> removes all its workloads, Secrets and claims, and with them, usually, the data on their volumes.</div>
+
+<h2 id="rbac-who-may-do-what">RBAC: who may do what</h2>
+<p>Every request to the API server comes from an identity: a human <b>user</b>, or a <b>ServiceAccount</b>, which is the identity pods and automation use. Role-based access control decides whether the request is allowed. Nothing is allowed unless a rule grants it.</p>
+
+<pre><code class="language-plaintext"> subject                    RoleBinding                  Role
+ (User, Group or      ───── &quot;these subjects get ───────► &quot;may get, list, patch
+  ServiceAccount)            this role, in THIS            deployments&quot;
+                             namespace&quot;</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Object</th><th scope="col">Scope</th><th scope="col">Contains</th></tr></thead>
+  <tbody>
+  <tr><td><b>Role</b></td><td>One namespace</td><td>Rules: verbs on resources</td></tr>
+  <tr><td><b>ClusterRole</b></td><td>Cluster-wide (or reusable in any namespace)</td><td>Rules</td></tr>
+  <tr><td><b>RoleBinding</b></td><td>One namespace</td><td>Subjects + a reference to a Role or ClusterRole</td></tr>
+  <tr><td><b>ClusterRoleBinding</b></td><td>All namespaces</td><td>Subjects + a ClusterRole</td></tr>
+  </tbody>
+</table>
+
+<pre data-label="A role and its binding"><code class="language-yaml">apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deploy-manager
+  namespace: team-a
+rules:
+  - apiGroups: [&quot;apps&quot;]                  # &quot;&quot; is the core group: pods, services, secrets…
+    resources: [&quot;deployments&quot;]
+    verbs: [&quot;get&quot;, &quot;list&quot;, &quot;watch&quot;, &quot;create&quot;, &quot;update&quot;, &quot;patch&quot;]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployer-binding
+  namespace: team-a
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+    namespace: team-a
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: deploy-manager</code></pre>
+
+<pre><code class="language-bash">kubectl create serviceaccount deployer
+kubectl create role deploy-manager --verb=get,list,watch,create,update,patch --resource=deployments
+kubectl create rolebinding deployer-binding --role=deploy-manager --serviceaccount=team-a:deployer</code></pre>
+
+<h3 id="verbs">Verbs</h3>
+<table>
+  <thead><tr><th scope="col">kubectl command</th><th scope="col">Verb(s) needed</th></tr></thead>
+  <tbody>
+  <tr><td><code>get NAME</code> / <code>get</code> (list) / <code>-w</code></td><td><code>get</code> / <code>list</code> / <code>watch</code></td></tr>
+  <tr><td><code>create</code>, first <code>apply</code></td><td><code>create</code></td></tr>
+  <tr><td><code>apply</code> on an existing object, <code>patch</code>, <code>scale</code>, <code>set image</code>, <code>rollout restart</code>, <code>rollout undo</code></td><td><code>patch</code> (plus <code>get</code>)</td></tr>
+  <tr><td><code>edit</code>, <code>replace</code></td><td><code>update</code></td></tr>
+  <tr><td><code>delete</code></td><td><code>delete</code></td></tr>
+  <tr><td><code>logs</code> / <code>exec</code></td><td><code>get</code> on <code>pods/log</code> / <code>create</code> on <code>pods/exec</code></td></tr>
+  </tbody>
+</table>
+
+<h3 id="reading-forbidden">Reading Forbidden</h3>
+
+<pre><code class="language-plaintext">Error from server (Forbidden): deployments.apps &quot;web&quot; is forbidden: User &quot;system:serviceaccount:shop:ci&quot;
+cannot patch resource &quot;deployments&quot; in API group &quot;apps&quot; in the namespace &quot;shop&quot;</code></pre>
+
+<p>The message is a complete work order:</p>
+<table>
+  <thead><tr><th scope="col">Part</th><th scope="col">Value here</th><th scope="col">Goes into</th></tr></thead>
+  <tbody>
+  <tr><td>Who</td><td><code>system:serviceaccount:shop:ci</code> = ServiceAccount <code>ci</code> in namespace <code>shop</code></td><td>The binding's <code>subjects</code></td></tr>
+  <tr><td>Verb</td><td><code>patch</code></td><td>The role's <code>verbs</code></td></tr>
+  <tr><td>Resource</td><td><code>deployments</code></td><td>The role's <code>resources</code></td></tr>
+  <tr><td>API group</td><td><code>apps</code></td><td>The role's <code>apiGroups</code></td></tr>
+  <tr><td>Where</td><td>namespace <code>shop</code></td><td>The namespace of the Role and RoleBinding</td></tr>
+  </tbody>
+</table>
+
+<pre><code class="language-bash">kubectl auth can-i patch deployments -n shop --as=system:serviceaccount:shop:ci    # yes / no
+kubectl auth can-i --list -n shop --as=system:serviceaccount:shop:ci               # everything it may do
+kubectl get rolebindings -n shop -o wide                                           # who is bound to what</code></pre>
+
+<div class="compare">
+  <div class="bad"><span class="tag">❌ "Just make it work"</span>
+
+<pre><code class="language-bash">kubectl create clusterrolebinding ci-admin \
+  --clusterrole=cluster-admin \
+  --serviceaccount=shop:ci</code></pre>
+  <p>The pipeline can now read every Secret and delete every namespace in the cluster. A leaked CI token becomes a full compromise.</p>
+  </div>
+  <div class="good"><span class="tag">✅ Least privilege</span>
+  <p>Add the one missing verb to the existing Role, in the one namespace, and verify with <code>auth can-i</code>. It takes the same thirty seconds.</p>
+  </div>
+</div>
+
+<h2 id="resourcequotas">ResourceQuotas</h2>
+<p>A <b>ResourceQuota</b> caps what a namespace may consume in total: number of pods, sum of CPU and memory requests and limits, number of Services or claims.</p>
+
+<pre><code class="language-yaml">apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: shop-quota
+  namespace: shop
+spec:
+  hard:
+    pods: &quot;8&quot;
+    requests.cpu: &quot;2&quot;
+    requests.memory: 2Gi</code></pre>
+
+<pre><code class="language-bash">kubectl describe resourcequota -n shop       # Used versus Hard</code></pre>
+
+<p>A quota is enforced when an object is <em>created</em>: the API server refuses a pod that would exceed it. The consequence is a symptom that looks unlike anything so far:</p>
+
+<pre data-label="kubectl get deployment web; kubectl get pods"><code class="language-plaintext">NAME   READY   UP-TO-DATE   AVAILABLE   AGE
+web    2/4     2            2           10m
+
+NAME                   READY   STATUS    RESTARTS   AGE
+web-lz4hfd75pd-l2r7l   1/1     Running   0          10m
+web-lz4hfd75pd-ljbzj   1/1     Running   0          10m</code></pre>
+
+<p>Two pods are missing, and there is no Pending or failing pod to describe, because the missing pods were never stored. The refusal was reported to whoever tried to create them: the <b>ReplicaSet</b>.</p>
+
+<pre data-label="kubectl describe replicaset -l app=web (events)"><code class="language-plaintext">  Warning  FailedCreate  15s  replicaset-controller  Error creating: pods &quot;web-lz4hfd75pd-j6fdt&quot; is forbidden: exceeded quota: shop-quota, requested: pods=1, used: pods=4, limited: pods=4</code></pre>
+
+<div class="callout info"><span class="title">Go up the ownership chain</span>
+When a Deployment has fewer pods than it should and no pod looks unhealthy, look one level up: <code>kubectl describe replicaset</code>, or <code>kubectl get events</code> for the namespace. The same applies to Jobs and StatefulSets. A second quota effect: if a quota covers <code>requests.cpu</code> or <code>requests.memory</code>, every pod <em>must</em> declare those requests, or it is rejected with <i>must specify requests.cpu</i>.</div>
+
+<h2 id="scenario-1-a-namespace-and-a-least-privilege-service-account">Scenario 1: a namespace and a least-privilege service account</h2>
+
+<section class="lab" data-lab="k-ns"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-2-forbidden">Scenario 2: Forbidden</h2>
+
+<section class="lab" data-lab="k-fix-rbac"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-3-scaled-to-4-stuck-at-2-and-nothing-is-pending">Scenario 3: scaled to 4, stuck at 2, and nothing is Pending</h2>
+
+<section class="lab" data-lab="k-fix-quota"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li>Namespaces partition names, permissions, quotas and policies. Check your namespace before anything else.</li>
+    <li>RBAC = subject + Role (verbs on resources) + RoleBinding, per namespace. Nothing is allowed by default.</li>
+    <li>A <i>Forbidden</i> message names user, verb, resource, group and namespace: grant exactly that.</li>
+    <li><code>kubectl auth can-i … --as=…</code> tests permissions without switching identity.</li>
+    <li>Quotas reject pods at creation. Missing pods with no Pending pod: read the ReplicaSet's events.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="c">
+<p class="q">A ServiceAccount may <code>get</code> and <code>list</code> Deployments. Which command will it be refused?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. <code>kubectl get deployments</code></button>
+<button class="opt" type="button" data-opt="b">B. <code>kubectl get deployment web -o yaml</code></button>
+<button class="opt" type="button" data-opt="c">C. <code>kubectl rollout restart deployment/web</code></button>
+<button class="opt" type="button" data-opt="d">D. <code>kubectl describe deployment web</code></button>
+</div>
+<p class="explain">A rollout restart patches the Deployment's pod template, which needs the <code>patch</code> verb.</p>
+</div>
+
+<div class="quiz" data-answer="a">
+<p class="q">What does a RoleBinding in namespace <code>shop</code> that references the ClusterRole <code>view</code> grant?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Read access to the resources <code>view</code> covers, in namespace <code>shop</code> only</button>
+<button class="opt" type="button" data-opt="b">B. Read access in every namespace</button>
+<button class="opt" type="button" data-opt="c">C. Nothing; a RoleBinding can't reference a ClusterRole</button>
+<button class="opt" type="button" data-opt="d">D. Admin access in <code>shop</code></button>
+</div>
+<p class="explain">A RoleBinding limits whatever role it references to its own namespace. This is how one ClusterRole is reused across namespaces.</p>
+</div>
+
+<div class="quiz" data-answer="b">
+<p class="q">A Deployment wants 6 replicas and has 3. No pod is Pending or failing. Where do you look?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. The node's kubelet logs</button>
+<button class="opt" type="button" data-opt="b">B. The ReplicaSet's events (<code>kubectl describe rs</code>) for FailedCreate, for example a quota</button>
+<button class="opt" type="button" data-opt="c">C. The container logs of the running pods</button>
+<button class="opt" type="button" data-opt="d">D. The Service's endpoints</button>
+</div>
+<p class="explain">Pods that were rejected at admission never exist. The controller that tried to create them records the reason.</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/" target="_blank" rel="noopener">Namespaces</a></li>
+  <li><a href="https://kubernetes.io/docs/reference/access-authn-authz/rbac/" target="_blank" rel="noopener">Using RBAC authorization</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/policy/resource-quotas/" target="_blank" rel="noopener">Resource Quotas</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/security/rbac-good-practices/" target="_blank" rel="noopener">RBAC good practices</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

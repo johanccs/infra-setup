@@ -1,0 +1,165 @@
+<h1>Volumes: Data That Survives the Container</h1>
+<p class="lead">Containers are meant to be thrown away and replaced. Databases are not. This lesson explains where a container's data really lives and how to keep the part that matters.</p>
+<div class="meta"><span class="badge">⏱ 35 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Understand the container's <b>writable layer</b>, and use <b>named volumes</b> and <b>bind mounts</b> to store data outside it.</p>
+  <p><b>Why it matters:</b> "we redeployed and the data is gone" is one of the few container mistakes that cannot be undone. It is easy to avoid once you know which path must be on a volume.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Explain what happens to files written inside a container.</li>
+    <li>Create, mount, inspect and remove named volumes.</li>
+    <li>Choose between a named volume and a bind mount.</li>
+    <li>Recognise an anonymous volume and explain where it came from.</li>
+    <li>Find out why data disappeared when a container was replaced.</li>
+  </ul>
+</div>
+
+<h2>The situation</h2>
+<p>The shop stores its orders in PostgreSQL, running in a container. Every deployment replaces that container with a new one. The orders have to still be there afterwards.</p>
+
+<h2>Where files go by default</h2>
+<p>An image is a stack of read-only layers. When a container is created, Docker adds one thin <b>writable layer</b> on top. Every file the container creates or changes ends up there.</p>
+
+```plaintext label="A container's file system"
+┌──────────────────────────────┐
+│ writable layer (this container only)   ← deleted by docker rm
+├──────────────────────────────┤
+│ image layer: application code          ┐
+│ image layer: dependencies              │ read-only, shared by all
+│ image layer: base operating system     ┘ containers of this image
+└──────────────────────────────┘
+```
+
+<table>
+  <tr><th>Action</th><th>Writable layer</th></tr>
+  <tr><td><code>docker stop</code> / <code>docker start</code> / <code>docker restart</code></td><td>Kept. It is the same container.</td></tr>
+  <tr><td><code>docker rm</code>, then <code>docker run</code> again</td><td><b>Gone.</b> The new container starts from the image.</td></tr>
+  <tr><td>Deploying a new image version</td><td><b>Gone.</b> A new version always means a new container.</td></tr>
+</table>
+
+<h2>Named volumes</h2>
+<p>A <b>volume</b> is storage that Docker manages separately from any container. You mount it at a path; whatever the container writes below that path goes to the volume. The volume has its own lifetime and survives the container.</p>
+
+```bash
+docker volume create dbdata                 # optional: run creates it on first use
+docker run -d --name db \
+  -e POSTGRES_PASSWORD=secret \
+  -v dbdata:/var/lib/postgresql/data \
+  postgres:17
+#    │      └─ path inside the container
+#    └─ volume name
+
+docker volume ls
+docker volume inspect dbdata
+```
+
+<p>Remove the container, run a new one with the same <code>-v</code>, and the database finds its files again. Its log even says so:</p>
+
+```plaintext
+PostgreSQL Database directory appears to contain a database; Skipping initialization
+```
+
+<div class="callout warn"><span class="title">The path must be the one the application writes to</span>
+A volume protects exactly the directory it is mounted on, and nothing else. Mounting <code>dbdata</code> at <code>/data</code> does nothing for a database that keeps its files in <code>/var/lib/postgresql/data</code>. The correct path is part of each image's documentation.</div>
+
+<div class="callout info"><span class="title">An initialised volume ignores new settings</span>
+The PostgreSQL image reads <code>POSTGRES_PASSWORD</code>, <code>POSTGRES_USER</code> and <code>POSTGRES_DB</code> only when it initialises an <em>empty</em> data directory. Start it later with a different password on the same volume and the old password still applies. This surprises people regularly: "I changed the password in the config and it has no effect."</div>
+
+<h2>Bind mounts</h2>
+<p>A <b>bind mount</b> maps a directory or file of the host into the container. Docker recognises it by the path on the left-hand side:</p>
+
+```bash
+docker run -d --name site -p 8080:80 \
+  -v ./public:/usr/share/nginx/html:ro \
+  nginx:1.29
+#    │                              └─ read-only inside the container
+#    └─ starts with ./ or / : a host path, not a volume name
+```
+
+<table>
+  <tr><th></th><th>Named volume</th><th>Bind mount</th></tr>
+  <tr><td>Written as</td><td><code>-v name:/path</code></td><td><code>-v /host/path:/path</code> or <code>-v ./dir:/path</code></td></tr>
+  <tr><td>Stored</td><td>In Docker's own storage area</td><td>Wherever the host path points</td></tr>
+  <tr><td>Best for</td><td>Application data: databases, uploads</td><td>Injecting configuration files; live source code during development</td></tr>
+  <tr><td>Watch out for</td><td>Easy to forget it exists (<code>docker volume ls</code>)</td><td>Ties the container to one machine's directory layout and permissions</td></tr>
+</table>
+
+<h2>Anonymous volumes</h2>
+<p>An image can declare a path as a volume in its Dockerfile (<code>VOLUME /var/lib/postgresql/data</code>). If you start a container <em>without</em> mounting anything there, Docker silently creates an <b>anonymous volume</b> for it, named with a long random ID:</p>
+
+```plaintext label="docker volume ls"
+DRIVER    VOLUME NAME
+local     dbdata
+local     f116cb4717682c4bd02be4da511fb48186c2b233e00fe79b2819bd1950e4245c
+```
+
+<p>The data in it survives <code>stop</code> and <code>start</code>, which makes everything look fine. But a new container gets a <em>new</em> anonymous volume, so the old data is orphaned the moment you replace the container. This is the mechanism behind most "we lost the data" stories.</p>
+
+```bash
+docker inspect -f '{{json .Mounts}}' db     # what is mounted where, and from which volume
+docker volume prune                         # delete anonymous volumes no container uses
+```
+
+<div class="callout danger"><span class="title">Commands that delete data</span>
+<code>docker volume rm NAME</code>, <code>docker volume prune</code>, <code>docker rm -v</code> and, in the next lessons, <code>docker compose down -v</code> delete volumes for good. There is no undo. Removing a container never deletes a <em>named</em> volume.</div>
+
+<h2>Scenario 1: data that survives</h2>
+
+:::lab d-volumes
+
+<h2>Scenario 2: the orders vanish after every deploy</h2>
+<p>The team says they use a volume, and <code>docker volume ls</code> agrees. Look at where it is mounted.</p>
+
+:::lab d-fix-volume
+
+<div class="takeaways">
+  <h2 class="box-title">🔑 Key takeaways</h2>
+  <ul>
+    <li>Files written in a container go to its writable layer, which is deleted with the container.</li>
+    <li>A named volume has its own lifetime. Mount it at the exact directory the application stores data in.</li>
+    <li>Bind mounts map host paths and are best for configuration and development.</li>
+    <li>Images that declare <code>VOLUME</code> get an anonymous volume if you mount nothing: data survives restarts but not replacement.</li>
+    <li><code>docker inspect -f '{{json .Mounts}}'</code> shows the truth about what is stored where.</li>
+  </ul>
+</div>
+
+<h2>Quiz</h2>
+
+:::quiz b
+A container wrote a file to `/tmp/report.txt` (no volume there). Which action loses the file?
+a) `docker stop` followed by `docker start`
+b) `docker rm` followed by a new `docker run`
+c) `docker restart`
+d) Running `docker exec` in it
+> Stop, start and restart keep the same container and its writable layer. Removing the container deletes that layer.
+:::
+
+:::quiz d
+What does `-v ./conf:/etc/app` create?
+a) A named volume called `./conf`
+b) An anonymous volume
+c) A copy of the directory inside the image
+d) A bind mount of the host directory `./conf`
+> A left-hand side that starts with `/` or `./` is a host path. A plain name would be a named volume.
+:::
+
+:::quiz a
+PostgreSQL runs with `-v dbdata:/data`. After replacing the container the tables are empty. Why?
+a) The database writes to `/var/lib/postgresql/data`, which was not on the named volume
+b) Named volumes are emptied when a container is removed
+c) The volume was mounted read-only
+d) PostgreSQL does not support volumes
+> The named volume was mounted on a path the database never uses. The real data went to an anonymous volume that the new container does not share.
+:::
+
+<h2>Further reading</h2>
+<ul>
+  <li><a href="https://docs.docker.com/engine/storage/volumes/" target="_blank" rel="noopener">Volumes</a></li>
+  <li><a href="https://docs.docker.com/engine/storage/bind-mounts/" target="_blank" rel="noopener">Bind mounts</a></li>
+  <li><a href="https://docs.docker.com/engine/storage/" target="_blank" rel="noopener">Storage overview</a></li>
+</ul>

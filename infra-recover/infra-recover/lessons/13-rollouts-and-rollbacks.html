@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rollouts and Rollbacks · infra-sim</title>
+<meta name="description" content="Releasing a new version without downtime, and getting back quickly when the new version is bad, is the main reason teams adopt Deployments. This lesson shows what happens during a rollout, how to read a stuck one, and how to undo it.">
+<meta property="og:title" content="Rollouts and Rollbacks">
+<meta property="og:description" content="Releasing a new version without downtime, and getting back quickly when the new version is bad, is the main reason teams adopt Deployments. This lesson shows what happens during a rollout, how to read a stuck one, and how to undo it.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="13" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Rollouts and Rollbacks</h1>
+<p class="lead">Releasing a new version without downtime, and getting back quickly when the new version is bad, is the main reason teams adopt Deployments. This lesson shows what happens during a rollout, how to read a stuck one, and how to undo it.</p>
+<div class="meta"><span class="badge">⏱ 40 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Understand the <b>rolling update</b>, follow it with <code>kubectl rollout</code>, and recover from a release that never becomes ready.</p>
+  <p><b>Why it matters:</b> a failed release at five in the afternoon is the classic moment of pressure. If you know that a stuck rollout is safe, and that one command returns to the previous version, you can act calmly.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Describe how a rolling update replaces pods step by step.</li>
+    <li>Explain <code>maxSurge</code> and <code>maxUnavailable</code>.</li>
+    <li>Follow, inspect and undo a rollout.</li>
+    <li>Explain why a failed rollout usually causes no outage.</li>
+    <li>Diagnose <code>ImagePullBackOff</code> during a release.</li>
+  </ul>
+</div>
+
+<h2 id="the-situation">The situation</h2>
+<p>Three replicas of the front end serve customers. Version 1.1 is ready to ship. Tomorrow there will be a 1.2, and that one will have a bug nobody caught in testing.</p>
+
+<h2 id="what-triggers-a-rollout">What triggers a rollout</h2>
+<p>A rollout starts whenever the <b>pod template</b> of a Deployment changes: the image, an environment variable, a resource limit, a label. Changing only <code>replicas</code> is scaling, not a rollout.</p>
+
+<pre><code class="language-bash">kubectl set image deployment/web web=shop/web:1.1       # quick; or edit the file and apply
+kubectl rollout status deployment/web</code></pre>
+
+<pre><code class="language-plaintext">Waiting for deployment &quot;web&quot; rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment &quot;web&quot; rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment &quot;web&quot; rollout to finish: 1 old replicas are pending termination...
+deployment &quot;web&quot; successfully rolled out</code></pre>
+
+<h2 id="how-a-rolling-update-works">How a rolling update works</h2>
+<p>The Deployment creates a <b>new ReplicaSet</b> for the new template and shifts pods from the old ReplicaSet to the new one in small steps:</p>
+
+<pre data-label="3 replicas, default settings"><code class="language-plaintext"> old RS: ●●●   new RS:        start
+ old RS: ●●●   new RS: ○      one extra pod is started (surge)
+ old RS: ●●    new RS: ●      the new pod is Ready → one old pod is removed
+ old RS: ●●    new RS: ●○     next new pod starts ...
+ old RS:       new RS: ●●●    done; the old ReplicaSet stays, scaled to 0</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Setting</th><th scope="col">Meaning</th><th scope="col">Default</th></tr></thead>
+  <tbody>
+  <tr><td><code>maxSurge</code></td><td>How many pods above the desired count may exist during the update.</td><td>25% (rounded up)</td></tr>
+  <tr><td><code>maxUnavailable</code></td><td>How many pods below the desired count may be unavailable.</td><td>25% (rounded down)</td></tr>
+  </tbody>
+</table>
+<p>With three replicas that means: at most one extra pod, and never fewer than three available. The decisive rule is that <b>an old pod is only removed after a new pod has become Ready</b>.</p>
+
+<div class="callout tip"><span class="title">A stuck rollout is a safe rollout</span>
+If the new version cannot start (bad image tag, crash at startup, failing readiness probe), its first pod never becomes Ready, so no old pod is removed. The release hangs, the old version keeps serving, and customers notice nothing. This protection depends on a meaningful readiness probe (Lesson 14): without one, a pod counts as ready the moment its process starts.</div>
+
+<h2 id="history-and-rollback">History and rollback</h2>
+<p>Old ReplicaSets are kept (ten by default) precisely so that you can go back.</p>
+
+<pre><code class="language-bash">kubectl rollout history deployment/web
+kubectl rollout history deployment/web --revision=2    # what that revision&#x27;s pod template was
+kubectl rollout undo deployment/web                    # back to the previous revision
+kubectl rollout undo deployment/web --to-revision=1</code></pre>
+
+<pre><code class="language-plaintext">deployment.apps/web
+REVISION  CHANGE-CAUSE
+1         &lt;none&gt;
+2         &lt;none&gt;</code></pre>
+
+<p><code>undo</code> does not build or pull anything new: it sets the Deployment's pod template back to that of an earlier ReplicaSet, and a normal rolling update towards the old version follows. The old revision is re-issued under a new number, so after undoing revision 3 the history lists 1, 3 and 4: what used to be revision 2 is now revision 4.</p>
+
+<div class="compare">
+  <div class="bad"><span class="tag">❌ Under pressure</span>
+  <p>Deleting the failing pods, editing things live, or scaling the Deployment down and up. The broken template is still there, so the same pods come straight back.</p>
+  </div>
+  <div class="good"><span class="tag">✅ What works</span>
+  <p><code>kubectl rollout undo</code>, confirm with <code>rollout status</code>, and then find the cause from the failed pod's events and logs without time pressure.</p>
+  </div>
+</div>
+
+<h2 id="reading-a-stuck-rollout">Reading a stuck rollout</h2>
+
+<pre data-label="kubectl get deployment web; kubectl get pods"><code class="language-plaintext">NAME   READY   UP-TO-DATE   AVAILABLE   AGE
+web    3/3     1            3           12m
+
+NAME                   READY   STATUS             RESTARTS   AGE
+web-c6g9q7brjz-dwx29   1/1     Running            0          12m
+web-c6g9q7brjz-mvjrq   1/1     Running            0          12m
+web-c6g9q7brjz-vvxfp   1/1     Running            0          12m
+web-rhrcvrmcl2-pb8kr   0/1     ImagePullBackOff   0          90s</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Column</th><th scope="col">Meaning here</th></tr></thead>
+  <tbody>
+  <tr><td><code>READY 3/3</code></td><td>Three pods are ready (the old ones). Customers are fine.</td></tr>
+  <tr><td><code>UP-TO-DATE 1</code></td><td>Only one pod has the new template.</td></tr>
+  <tr><td>Two different hashes in the pod names</td><td>Two ReplicaSets are active: a rollout is in progress.</td></tr>
+  </tbody>
+</table>
+
+<p>The new pod's status tells you what kind of failure it is. <b>ImagePullBackOff</b> is the most frequent one during releases:</p>
+
+<pre data-label="kubectl describe pod web-rhrcvrmcl2-pb8kr (events)"><code class="language-plaintext">  Normal   Pulling  8s (x2 over 20s)  kubelet  Pulling image &quot;nginx:9.99&quot;
+  Warning  Failed   6s (x2 over 18s)  kubelet  Failed to pull image &quot;nginx:9.99&quot;: … docker.io/library/nginx:9.99: not found
+  Warning  Failed   6s (x2 over 18s)  kubelet  Error: ErrImagePull
+  Normal   BackOff  4s (x2 over 16s)  kubelet  Back-off pulling image &quot;nginx:9.99&quot;</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Registry's answer in the event</th><th scope="col">Cause</th></tr></thead>
+  <tbody>
+  <tr><td><code>…: not found</code> / <code>manifest unknown</code></td><td>The repository exists but the tag does not: a typo, or the image was never pushed.</td></tr>
+  <tr><td><code>pull access denied, repository does not exist or may require authorization</code></td><td>A typo in the image <em>name</em>, or a private repository without credentials (<code>imagePullSecrets</code>).</td></tr>
+  <tr><td><code>401 Unauthorized</code></td><td>Private registry; the pull secret is missing or wrong.</td></tr>
+  </tbody>
+</table>
+
+<div class="callout info"><span class="title">ErrImagePull and ImagePullBackOff are one problem</span>
+<code>ErrImagePull</code> is the failed attempt; <code>ImagePullBackOff</code> is the kubelet waiting before the next attempt, with pauses that grow up to five minutes. The pod alternates between the two. Fixing the image reference fixes both.</div>
+
+<h2 id="scenario-1-roll-forward-hit-a-bad-release-roll-back">Scenario 1: roll forward, hit a bad release, roll back</h2>
+
+<section class="lab" data-lab="k-rollout"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-2-the-pipeline-says-timed-out-waiting-for-the-condition">Scenario 2: the pipeline says "timed out waiting for the condition"</h2>
+<p>First establish whether customers are affected. Then find the cause. Then clean up.</p>
+
+<section class="lab" data-lab="k-fix-rollout"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li>A change to the pod template starts a rollout: a new ReplicaSet grows while the old one shrinks.</li>
+    <li>Old pods are removed only when new ones are Ready, so a release that cannot start stalls safely.</li>
+    <li><code>kubectl rollout status</code> follows, <code>history</code> lists, <code>undo</code> returns to an earlier template.</li>
+    <li><code>READY</code> high and <code>UP-TO-DATE</code> low means: stuck rollout, old version still serving.</li>
+    <li><code>ImagePullBackOff</code>: read the registry's answer in the pod's events; it distinguishes a wrong tag from a wrong name or missing credentials.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="a">
+<p class="q">A Deployment with 4 replicas is updated to an image tag that does not exist. With default settings, what do customers experience?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Nothing: the old pods keep serving because no new pod becomes Ready</button>
+<button class="opt" type="button" data-opt="b">B. A full outage until someone rolls back</button>
+<button class="opt" type="button" data-opt="c">C. Half of the requests fail</button>
+<button class="opt" type="button" data-opt="d">D. The Deployment is deleted</button>
+</div>
+<p class="explain">The rolling update only removes old pods as new ones become ready. A pod in ImagePullBackOff never does.</p>
+</div>
+
+<div class="quiz" data-answer="c">
+<p class="q">Which change triggers a rollout?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Changing <code>spec.replicas</code> from 3 to 5</button>
+<button class="opt" type="button" data-opt="b">B. Adding a label to the Deployment's own metadata</button>
+<button class="opt" type="button" data-opt="c">C. Changing an environment variable in the pod template</button>
+<button class="opt" type="button" data-opt="d">D. Running <code>kubectl get deployment</code></button>
+</div>
+<p class="explain">Only changes to <code>spec.template</code> create a new ReplicaSet. Changing replicas just scales the current one.</p>
+</div>
+
+<div class="quiz" data-answer="b">
+<p class="q">What does <code>kubectl rollout undo deployment/web</code> do?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Deletes the newest pods</button>
+<button class="opt" type="button" data-opt="b">B. Sets the pod template back to the previous revision's, which starts a rolling update towards it</button>
+<button class="opt" type="button" data-opt="c">C. Restores a backup of the cluster</button>
+<button class="opt" type="button" data-opt="d">D. Restarts the pods with the same template</button>
+</div>
+<p class="explain">The previous ReplicaSet still exists with its template. Undo points the Deployment back at it.</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#updating-a-deployment" target="_blank" rel="noopener">Updating a Deployment</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-back-a-deployment" target="_blank" rel="noopener">Rolling back a Deployment</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/containers/images/" target="_blank" rel="noopener">Images: pull policy, private registries and ImagePullBackOff</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

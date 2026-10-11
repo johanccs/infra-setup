@@ -1,0 +1,193 @@
+<h1>Sync Policies, Drift and Rolling Back with Git</h1>
+<p class="lead">With manual sync, Argo CD is a reporting tool. Turn on automated sync, pruning and self-healing, and git becomes the only way to change production. That is powerful, and it changes how you fix things at three in the morning.</p>
+<div class="meta"><span class="badge">⏱ 45 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Configure <b>automated sync</b>, <b>prune</b> and <b>self-heal</b>, deploy and roll back through <b>git</b>, and investigate <b>drift</b>.</p>
+  <p><b>Why it matters:</b> on a self-healing application, a kubectl hot-fix disappears within seconds. If you don't know why, you will fight the system. If you do, you will fix the problem in the one place where the fix lasts.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Explain what automated sync, prune and self-heal each do.</li>
+    <li>Deploy a change by committing to git.</li>
+    <li>Use <code>argocd app diff</code> to see exactly what differs.</li>
+    <li>Roll back with <code>git revert</code>, and say when <code>argocd app rollback</code> applies.</li>
+    <li>Tell a pending commit from drift.</li>
+  </ul>
+</div>
+
+<h2>The situation</h2>
+<p>The shop is managed by Argo CD. The team wants deployments to happen when a pull request is merged, wants deleted manifests to disappear from the cluster, and wants to stop finding surprises left behind by late-night kubectl sessions.</p>
+
+<h2>Three switches</h2>
+<table>
+  <tr><th>Setting</th><th>Off (default)</th><th>On</th></tr>
+  <tr><td><b>Automated sync</b></td><td>New commits show as OutOfSync until someone runs <code>argocd app sync</code>.</td><td>New commits are applied automatically.</td></tr>
+  <tr><td><b>Prune</b></td><td>A resource removed from git stays in the cluster, shown as OutOfSync ("requires pruning").</td><td>Resources removed from git are deleted from the cluster.</td></tr>
+  <tr><td><b>Self-heal</b></td><td>A manual change in the cluster shows as OutOfSync and stays.</td><td>Manual changes are reverted to the git state within seconds.</td></tr>
+</table>
+
+```bash
+argocd app set shop --sync-policy automated --auto-prune --self-heal
+argocd app get shop        # Sync Policy: Automated (Prune)
+```
+
+```yaml label="The same in the Application manifest"
+spec:
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+```
+
+<div class="callout warn"><span class="title">Prune deletes</span>
+With prune enabled, deleting a file from the repository (or moving it outside the application's path, or a rendering change that drops a resource) deletes the object from the cluster, including a StatefulSet or a Namespace. Review deletions in pull requests as carefully as additions. For objects that must never be pruned there is the annotation <code>argocd.argoproj.io/sync-options: Prune=false</code>.</div>
+
+<h2>Deploying is committing</h2>
+
+```bash
+git clone https://git.shop.example/shop/gitops.git
+cd gitops
+sed -i 's/replicas: 2/replicas: 3/' apps/web/deployment.yaml
+git diff                                 # review your own change
+git add .
+git commit -m "web: scale to 3 replicas"
+git push
+
+argocd app get shop --refresh            # don't wait for the next poll
+kubectl -n shop get deployment web
+```
+
+<p>Nothing else is needed. In a real team the push would be a pull request, reviewed and merged by someone else, and that review is the approval step for production.</p>
+
+```bash
+argocd app history shop
+```
+
+```plaintext
+ID  DATE                           REVISION
+0   2026-10-11 09:00:02 +0000 UTC  HEAD (ba66957)
+1   2026-10-11 09:01:22 +0000 UTC  HEAD (d6b6dac)
+```
+
+<h2>Drift</h2>
+<p><b>Drift</b> is any difference between the live cluster and git that did not come from git. Somebody ran <code>kubectl scale</code>, <code>kubectl set image</code> or <code>kubectl edit</code>.</p>
+
+```bash
+kubectl -n shop scale deployment web --replicas=1    # someone "just tries something"
+argocd app diff shop
+```
+
+```plaintext label="argocd app diff: < is the live cluster, > is git"
+===== apps/Deployment shop/web ======
+10c10
+<   replicas: 1
+---
+>   replicas: 3
+```
+
+<table>
+  <tr><th>Policy</th><th>What happens next</th></tr>
+  <tr><td>Manual sync</td><td>The app stays <code>OutOfSync</code>. The change remains until someone syncs.</td></tr>
+  <tr><td>Automated, no self-heal</td><td>Still <code>OutOfSync</code>: automated sync reacts to new <em>commits</em>, not to drift.</td></tr>
+  <tr><td>Automated with self-heal</td><td>After a few seconds Argo CD re-applies git. The Deployment is back at 3.</td></tr>
+</table>
+
+<h3>OutOfSync: which side moved?</h3>
+<table>
+  <tr><th>Clue</th><th>Git moved (pending change)</th><th>Cluster moved (drift)</th></tr>
+  <tr><td>Revision in <code>argocd app get</code></td><td>A new commit hash</td><td>Same commit as the last sync</td></tr>
+  <tr><td><code>argocd app history</code></td><td>Last entry is older than the newest commit</td><td>Last entry is the current commit</td></tr>
+  <tr><td><code>git log</code></td><td>A recent commit touching that file</td><td>Nothing recent</td></tr>
+</table>
+<p>In both cases <code>argocd app diff</code> shows the exact fields, and <code>argocd app sync</code> makes the cluster equal to git.</p>
+
+<h2>Rolling back</h2>
+<div class="compare">
+  <div class="bad"><span class="tag">❌ Fighting the controller</span>
+
+```bash
+kubectl -n shop set image deploy/web web=shop/web:1.0
+# ...ten seconds later it is 1.2 again
+```
+  <p>With self-heal on, every manual correction is drift, and drift is reverted. The cluster is faithfully reproducing a mistake that lives in git.</p>
+  </div>
+  <div class="good"><span class="tag">✅ Fixing the source</span>
+
+```bash
+git revert HEAD --no-edit
+git push
+argocd app get shop --refresh
+```
+  <p>A revert is a new commit that undoes an old one. The history keeps the record of what went wrong and when it was undone.</p>
+  </div>
+</div>
+
+<p>There is also <code>argocd app rollback APP ID</code>, which re-applies an earlier entry of the application's history. It only works with automated sync <b>disabled</b>; otherwise Argo CD refuses (<i>rollback cannot be initiated when auto-sync is enabled</i>), because it would immediately sync forward to git again. On automated applications, git is the rollback mechanism.</p>
+
+<div class="callout info"><span class="title">Emergency procedure</span>
+If you truly must change the cluster by hand during an incident on a self-healing application, first switch the application to manual (<code>argocd app set APP --sync-policy none</code>), make the change, and afterwards put the same change into git before re-enabling automation. Otherwise the next sync silently undoes your fix.</div>
+
+<h2>What Argo CD ignores</h2>
+<p>Argo CD only tracks resources that it created from the application's manifests, plus the fields those manifests specify. Pods created by a Deployment, status fields, and fields set by other controllers are not drift. Objects created by hand in the same namespace are simply not part of the application: they are neither reported nor pruned.</p>
+
+<h2>Scenario 1: change production with a commit</h2>
+
+:::lab a-gitops
+
+<h2>Scenario 2: OutOfSync, who changed production?</h2>
+
+:::lab a-fix-drift
+
+<div class="takeaways">
+  <h2 class="box-title">🔑 Key takeaways</h2>
+  <ul>
+    <li>Automated sync applies new commits; prune deletes what left git; self-heal reverts manual changes.</li>
+    <li>With these on, a deployment is a commit and a rollback is a <code>git revert</code>.</li>
+    <li><code>argocd app diff</code> shows the exact difference between live and git.</li>
+    <li>OutOfSync has two causes: an unapplied commit, or drift. The revision tells you which.</li>
+    <li>On a self-healing app, manual fixes vanish. Fix git, or switch to manual first.</li>
+  </ul>
+</div>
+
+<h2>Quiz</h2>
+
+:::quiz c
+An application has automated sync with self-heal. Someone runs `kubectl scale deployment web --replicas=10`. What happens?
+a) The Deployment stays at 10 and the app shows OutOfSync
+b) Argo CD commits `replicas: 10` to git
+c) Within seconds Argo CD sets the replica count back to the value in git
+d) The application is deleted
+> Self-heal treats any deviation from git on a managed field as drift and re-applies the declared state.
+:::
+
+:::quiz a
+A manifest file is deleted from the repository. Automated sync is on, prune is off. What is the result?
+a) The resource stays in the cluster and the app is OutOfSync until someone syncs with prune
+b) The resource is deleted from the cluster
+c) Argo CD restores the file in git
+d) The sync fails
+> Without prune, Argo CD never deletes. It reports that the resource "requires pruning".
+:::
+
+:::quiz b
+A bad commit broke production on an application with automated sync and self-heal. What is the right way back?
+a) `kubectl rollout undo`
+b) `git revert` the commit and push
+c) `argocd app rollback` with the previous ID
+d) Delete the pods
+> Git is the source of truth. `kubectl rollout undo` would be reverted as drift, and `argocd app rollback` is refused while auto-sync is enabled.
+:::
+
+<h2>Further reading</h2>
+<ul>
+  <li><a href="https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/" target="_blank" rel="noopener">Automated sync policy</a></li>
+  <li><a href="https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/" target="_blank" rel="noopener">Sync options</a></li>
+  <li><a href="https://argo-cd.readthedocs.io/en/stable/user-guide/diffing/" target="_blank" rel="noopener">Diffing customization</a></li>
+  <li><a href="https://git-scm.com/docs/git-revert" target="_blank" rel="noopener">git revert</a></li>
+</ul>

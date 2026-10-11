@@ -1,0 +1,153 @@
+<h1>Troubleshooting Docker: A Method</h1>
+<p class="lead">You have now met most of the ways a container can fail, one at a time. Real incidents rarely come one at a time. This lesson turns what you learned into a method you can apply when you don't yet know what is wrong.</p>
+<div class="meta"><span class="badge">⏱ 45 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Apply a repeatable <b>four-step method</b> to any misbehaving container, and solve an incident with several simultaneous faults.</p>
+  <p><b>Why it matters:</b> under pressure people restart things, change three settings at once and lose track of what helped. A method keeps you calm and fast, and it is the same method you will use on Kubernetes.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Work through state, logs, configuration and connectivity in order.</li>
+    <li>Interpret exit codes, including 137 and OOM kills.</li>
+    <li>Set and check memory limits.</li>
+    <li>Untangle several faults by fixing one visible error at a time.</li>
+    <li>Clean up a Docker host safely.</li>
+  </ul>
+</div>
+
+<h2>The method: four questions, in this order</h2>
+<table>
+  <tr><th>#</th><th>Question</th><th>Command</th><th>You learn</th></tr>
+  <tr><td>1</td><td><b>State</b>: is it running? Since when? How did it end?</td><td><code>docker ps -a</code></td><td>Up / Exited (code) / Restarting / Created; ports; age</td></tr>
+  <tr><td>2</td><td><b>Logs</b>: what did the process say?</td><td><code>docker logs --tail 50 NAME</code></td><td>The application's own error message</td></tr>
+  <tr><td>3</td><td><b>Configuration</b>: how was it started?</td><td><code>docker inspect NAME</code></td><td>Image and tag, env, ports, mounts, networks, limits, restart count</td></tr>
+  <tr><td>4</td><td><b>Connectivity</b>: can it be reached, and can it reach what it needs?</td><td><code>curl</code>, <code>docker exec … wget/nc/nslookup</code>, <code>docker network inspect</code></td><td>Error class: not found / refused / reset / timed out / auth</td></tr>
+</table>
+<p>The order matters. There is no point testing connectivity to a container that is not running, and no point reading configuration before the logs have told you what to look for.</p>
+
+<div class="callout tip"><span class="title">Three rules that save hours</span>
+<ol style="margin:0;padding-left:20px">
+<li><b>Read before you change.</b> Collect the state and the message first. A restart destroys evidence and usually reproduces the failure.</li>
+<li><b>One change at a time.</b> Then test again. If you change three things and it works, you learned nothing; if it doesn't, you may have added a fault.</li>
+<li><b>Fix the error you can see.</b> When several things are broken, each fix reveals the next message. That is progress, not failure.</li>
+</ol></div>
+
+<h2>What the state tells you</h2>
+<table>
+  <tr><th>STATUS</th><th>Meaning</th><th>Next step</th></tr>
+  <tr><td><code>Up 3 hours</code></td><td>The process is alive. If it misbehaves, the problem is inside it or around it.</td><td>Logs, then connectivity</td></tr>
+  <tr><td><code>Exited (0)</code></td><td>Finished normally. Wrong for a server: was the right command started?</td><td>Logs; <code>inspect</code> the command</td></tr>
+  <tr><td><code>Exited (1)</code></td><td>The application failed.</td><td>Logs</td></tr>
+  <tr><td><code>Exited (127)</code></td><td>The command does not exist in the image.</td><td><code>inspect</code>: Path, Args, image tag</td></tr>
+  <tr><td><code>Exited (137)</code></td><td>Killed: by <code>docker kill</code>, a stop timeout, or the OOM killer.</td><td><code>inspect -f '{{.State.OOMKilled}}'</code></td></tr>
+  <tr><td><code>Restarting (N) …</code></td><td>Crash loop under a restart policy.</td><td>Logs (the same error repeats)</td></tr>
+  <tr><td><code>Created</code></td><td>Never started, typically because <code>docker run</code> failed on a port or network. No logs exist.</td><td>Free the resource, <code>docker start</code></td></tr>
+</table>
+
+<h2>Memory limits and exit code 137</h2>
+<p>A container can use as much of the host's memory as it likes unless you limit it. A limit is enforced by the kernel: when the container's processes need more than the limit, the kernel's <b>out-of-memory killer</b> ends one with SIGKILL. The process cannot catch that signal and logs nothing.</p>
+
+```bash
+docker run -d --name api -m 256m shop/api:1.0      # hard limit: 256 MiB
+
+docker stats --no-stream                            # current usage versus limit
+docker inspect -f '{{.State.ExitCode}} {{.State.OOMKilled}}' api
+```
+
+```plaintext label="docker stats --no-stream"
+CONTAINER ID   NAME   CPU %   MEM USAGE / LIMIT   MEM %    NET I/O      BLOCK I/O   PIDS
+ee8fe5ec7647   api    0.60%   125.8MiB / 256MiB   49.14%   1.2kB / 0B   0B / 0B     11
+```
+
+<div class="compare">
+  <div class="bad"><span class="tag">❌ Misreading 137</span>
+  <p>"Exit code 137 and nothing in the logs: the app is silently broken." Then an afternoon is spent in the application's code.</p>
+  </div>
+  <div class="good"><span class="tag">✅ Reading it correctly</span>
+  <p>137 = 128 + 9 = killed from outside. Check <code>OOMKilled</code>. If it is true, compare the limit with real usage (<code>docker stats</code>) and raise the limit or reduce the usage.</p>
+  </div>
+</div>
+
+<h2>Keeping a host tidy</h2>
+<p>Stopped containers, unused images and forgotten volumes pile up and eventually fill the disk, which causes its own strange failures.</p>
+
+```bash
+docker system df            # what uses space: images, containers, volumes, build cache
+docker container prune      # remove all stopped containers
+docker image prune          # remove dangling images (add -a for all unused ones)
+docker system prune         # containers + networks + dangling images + build cache
+```
+
+<div class="callout danger"><span class="title">Prune with care</span>
+<code>docker system prune</code> never deletes named volumes unless you add <code>--volumes</code>. With that flag it deletes every volume no container currently uses, including the database volume of a stack you merely stopped. Read the confirmation prompt.</div>
+
+<h2>Scenario 1: exit code 137</h2>
+<p>Start with state and logs. Notice what the logs do <em>not</em> contain.</p>
+
+:::lab d-fix-oom
+
+<h2>Scenario 2: Monday morning, the shop is down</h2>
+<p>This is the Docker capstone: four containers, several faults, no description of what was changed. Apply the method to one container at a time, and let each error message lead you to the next step. Use the hints only when you are stuck for more than a few minutes.</p>
+
+:::lab d-capstone
+
+<h2>What changes in Kubernetes</h2>
+<p>From the next lesson on, Kubernetes starts the containers for you, on several machines. The four questions stay exactly the same; only the commands change.</p>
+<table>
+  <tr><th>Question</th><th>Docker</th><th>Kubernetes</th></tr>
+  <tr><td>State</td><td><code>docker ps -a</code></td><td><code>kubectl get pods</code></td></tr>
+  <tr><td>Logs</td><td><code>docker logs</code></td><td><code>kubectl logs</code></td></tr>
+  <tr><td>Configuration and events</td><td><code>docker inspect</code></td><td><code>kubectl describe</code>, <code>kubectl get -o yaml</code></td></tr>
+  <tr><td>Connectivity</td><td><code>docker exec</code>, <code>curl</code></td><td><code>kubectl exec</code>, <code>kubectl get endpoints</code></td></tr>
+</table>
+
+<div class="takeaways">
+  <h2 class="box-title">🔑 Key takeaways</h2>
+  <ul>
+    <li>State → logs → configuration → connectivity. Always in that order.</li>
+    <li>Read first, change one thing, test again.</li>
+    <li>Exit codes above 128 mean "killed by signal". 137 with <code>OOMKilled: true</code> is a memory limit, not an application bug.</li>
+    <li>A <i>Created</i> container never ran and has no logs; a <i>Restarting</i> one fails the same way on every attempt.</li>
+    <li>With several faults, each fix uncovers the next error. Follow the messages.</li>
+  </ul>
+</div>
+
+<h2>Quiz</h2>
+
+:::quiz b
+A container is `Restarting (1) 4 seconds ago`. What should you do first?
+a) `docker restart` it
+b) `docker logs --tail 50` to read the error it repeats
+c) Remove its restart policy
+d) Reboot the host
+> The container fails on every attempt for the same reason, and the reason is in its output. Restarting adds one more identical failure.
+:::
+
+:::quiz d
+A container exits with code 137, `OOMKilled` is `true`, and its logs end with normal request lines. What is the cause?
+a) An unhandled exception
+b) A wrong `CMD`
+c) A failed image pull
+d) The process exceeded the container's memory limit and was killed by the kernel
+> SIGKILL cannot be caught, so nothing is logged. The fix is to size the limit from measured usage, or to reduce the usage.
+:::
+
+:::quiz a
+You fixed a crash at startup, and now the app answers with "password authentication failed". What does that tell you?
+a) You made progress: the app starts, reaches the database, and the next fault is the credentials
+b) Your fix was wrong; undo it
+c) The network is broken
+d) The image must be rebuilt
+> A new, later-stage error is evidence that the earlier stages now work. Authentication can only fail after name resolution and the connection succeeded.
+:::
+
+<h2>Further reading</h2>
+<ul>
+  <li><a href="https://docs.docker.com/engine/containers/resource_constraints/" target="_blank" rel="noopener">Resource constraints (memory and CPU limits)</a></li>
+  <li><a href="https://docs.docker.com/reference/cli/docker/container/stats/" target="_blank" rel="noopener">docker container stats</a></li>
+  <li><a href="https://docs.docker.com/engine/manage-resources/pruning/" target="_blank" rel="noopener">Prune unused Docker objects</a></li>
+</ul>

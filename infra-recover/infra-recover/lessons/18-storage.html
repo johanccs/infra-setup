@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storage and Stateful Apps · infra-sim</title>
+<meta name="description" content="A pod&#x27;s file system dies with the pod, just as a container&#x27;s did in Lesson 5. Kubernetes solves this with three objects that are easy to mix up. This lesson sorts them out and follows the chain that leads from a Pending database pod to a misspelt storage class.">
+<meta property="og:title" content="Storage and Stateful Apps">
+<meta property="og:description" content="A pod&#x27;s file system dies with the pod, just as a container&#x27;s did in Lesson 5. Kubernetes solves this with three objects that are easy to mix up. This lesson sorts them out and follows the chain that leads from a Pending database pod to a misspelt storage class.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="18" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Storage and Stateful Apps</h1>
+<p class="lead">A pod's file system dies with the pod, just as a container's did in Lesson 5. Kubernetes solves this with three objects that are easy to mix up. This lesson sorts them out and follows the chain that leads from a Pending database pod to a misspelt storage class.</p>
+<div class="meta"><span class="badge">⏱ 45 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Understand <b>PersistentVolumeClaims</b>, <b>PersistentVolumes</b> and <b>StorageClasses</b>, run a database with persistent storage, and know when to use a <b>StatefulSet</b>.</p>
+  <p><b>Why it matters:</b> storage problems stop pods before they start, and the error sits two objects away from the pod. Data is also the one thing in a cluster you cannot recreate from a manifest, so the deletion rules matter.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Explain how claim, volume and storage class relate.</li>
+    <li>Give a pod persistent storage through a claim.</li>
+    <li>Explain why a claim can be Pending, including <i>WaitForFirstConsumer</i>.</li>
+    <li>Describe what a StatefulSet adds over a Deployment.</li>
+    <li>Trace a Pending pod to its unbound claim and fix it.</li>
+  </ul>
+</div>
+
+<h2 id="the-situation">The situation</h2>
+<p>The database moves into the cluster. Its pod will be rescheduled during node maintenance and replaced on upgrades, and the orders must be there every time it comes back.</p>
+
+<h2 id="three-objects">Three objects</h2>
+
+<pre><code class="language-plaintext"> Pod ──mounts──► PersistentVolumeClaim ──bound to──► PersistentVolume ──► real storage
+                 &quot;I need 1Gi, read-write&quot;            &quot;here is a 1Gi disk&quot;   (cloud disk, NFS,
+                 (yours, namespaced)                 (cluster-wide)          local directory …)
+                          ▲                                   ▲
+                          └─── StorageClass: creates a matching volume on demand ───┘</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Object</th><th scope="col">Who creates it</th><th scope="col">What it is</th></tr></thead>
+  <tbody>
+  <tr><td><b>PersistentVolumeClaim</b> (PVC)</td><td>You, next to your app</td><td>A <em>request</em> for storage: size, access mode, optionally a class.</td></tr>
+  <tr><td><b>PersistentVolume</b> (PV)</td><td>Usually the cluster, automatically</td><td>An actual piece of storage that a claim can be bound to.</td></tr>
+  <tr><td><b>StorageClass</b></td><td>The cluster administrator</td><td>A recipe for creating volumes on demand ("dynamic provisioning").</td></tr>
+  </tbody>
+</table>
+
+<pre data-label="pvc.yaml"><code class="language-yaml">apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: db-data
+spec:
+  accessModes: [ReadWriteOnce]      # mountable read-write by one node at a time
+  resources:
+    requests:
+      storage: 1Gi
+  # storageClassName: standard      # omit to use the cluster&#x27;s default class</code></pre>
+
+<pre data-label="In the pod template"><code class="language-yaml">spec:
+  containers:
+    - name: db
+      image: postgres:17
+      volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: db-data</code></pre>
+
+<pre><code class="language-bash">kubectl get storageclass
+kubectl get pvc
+kubectl get pv
+kubectl describe pvc db-data        # events explain a Pending claim</code></pre>
+
+<pre><code class="language-plaintext">NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+standard (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   false                  4d
+
+NAME      STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+db-data   Bound    pvc-8fa99877-4d56-6478-22ef-e98627da06f1   1Gi        RWO            standard       &lt;unset&gt;                 2m</code></pre>
+
+<h2 id="why-a-claim-is-pending">Why a claim is Pending</h2>
+<table>
+  <thead><tr><th scope="col">Event on the claim</th><th scope="col">Meaning</th><th scope="col">Action</th></tr></thead>
+  <tbody>
+  <tr><td><code>waiting for first consumer to be created before binding</code></td><td><b>Normal.</b> The class uses <i>WaitForFirstConsumer</i>: the volume is created once a pod that uses the claim is scheduled, so that it lands on the right node.</td><td>None. Create the pod.</td></tr>
+  <tr><td><code>storageclass.storage.k8s.io "X" not found</code></td><td>The claim names a class this cluster doesn't have.</td><td>Use an existing class (see below: this needs a new claim).</td></tr>
+  <tr><td><code>no persistent volumes available for this claim and no storage class is set</code></td><td>No default class, and no pre-created volume fits.</td><td>Set a class, or create a matching volume.</td></tr>
+  </tbody>
+</table>
+
+<p>And the pod waits for the claim. That gives the chain you follow when a pod with storage is Pending:</p>
+
+<pre><code class="language-plaintext"> kubectl describe pod db-0          →  &quot;pod has unbound immediate PersistentVolumeClaims&quot;
+ kubectl get pvc                    →  data-db-0   Pending   …   fast-ssd
+ kubectl describe pvc data-db-0     →  storageclass.storage.k8s.io &quot;fast-ssd&quot; not found
+ kubectl get storageclass           →  only &quot;standard&quot; exists</code></pre>
+
+<div class="callout warn"><span class="title">A claim's class and size request are (mostly) fixed</span>
+You can't change the storage class of an existing claim; the API server answers <i>Forbidden: spec is immutable after creation</i>. To correct a wrong class on a claim that never bound, delete the claim and create it again. For a claim that holds data, that means a migration, so get it right the first time.</div>
+
+<h2 id="what-happens-to-the-data-when-you-delete-things">What happens to the data when you delete things</h2>
+<table>
+  <thead><tr><th scope="col">You delete</th><th scope="col">The data</th></tr></thead>
+  <tbody>
+  <tr><td>The pod</td><td>Safe. The replacement pod mounts the same claim.</td></tr>
+  <tr><td>The Deployment or StatefulSet</td><td>Safe. Claims are separate objects.</td></tr>
+  <tr><td>The claim, with reclaim policy <code>Delete</code> (the usual default for dynamic volumes)</td><td><b>Deleted for good</b>, together with the volume.</td></tr>
+  <tr><td>The claim, with reclaim policy <code>Retain</code></td><td>The volume is kept as <i>Released</i> and must be cleaned up or re-bound by hand.</td></tr>
+  <tr><td>The namespace</td><td>Deletes every claim in it. See above.</td></tr>
+  </tbody>
+</table>
+<p>A claim that a pod is still using is not removed immediately: it shows <code>Terminating</code> until the pod is gone.</p>
+
+<h2 id="statefulsets">StatefulSets</h2>
+<p>A Deployment's pods are interchangeable: random names, any order, and (if you mount a claim) all sharing the <em>same</em> claim. That is wrong for most databases. A <b>StatefulSet</b> gives each pod an identity:</p>
+<table>
+  <thead><tr><td></td><th scope="col">Deployment</th><th scope="col">StatefulSet</th></tr></thead>
+  <tbody>
+  <tr><td>Pod names</td><td><code>db-7d9c5b8f6d-x2x9z</code> (random)</td><td><code>db-0</code>, <code>db-1</code> (stable, ordered)</td></tr>
+  <tr><td>Storage</td><td>All replicas share the claims you reference</td><td><code>volumeClaimTemplates</code>: one claim per pod (<code>data-db-0</code>, <code>data-db-1</code>)</td></tr>
+  <tr><td>Start and update order</td><td>All at once / surge</td><td>One at a time, in order</td></tr>
+  <tr><td>Network identity</td><td>Only through a Service</td><td>Stable DNS name per pod via a headless Service (<code>db-0.db</code>)</td></tr>
+  </tbody>
+</table>
+
+<pre data-label="statefulset.yaml (shortened)"><code class="language-yaml">apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+spec:
+  serviceName: db                 # a headless Service (clusterIP: None) with this name
+  replicas: 1
+  selector:
+    matchLabels: {app: db}
+  template:
+    metadata:
+      labels: {app: db}
+    spec:
+      containers:
+        - name: db
+          image: postgres:17
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 1Gi</code></pre>
+
+<div class="callout info"><span class="title">Two StatefulSet rules that matter in incidents</span>
+<ul>
+<li><code>volumeClaimTemplates</code> can't be edited on an existing StatefulSet. A change requires deleting and recreating the StatefulSet (its claims and data stay).</li>
+<li>Deleting or scaling down a StatefulSet <b>keeps</b> its claims. That protects data, and it means a claim created with a wrong class survives and must be deleted by hand before a corrected template can create a new one.</li>
+</ul></div>
+
+<h2 id="scenario-1-a-database-that-survives-its-pod">Scenario 1: a database that survives its pod</h2>
+
+<section class="lab" data-lab="k-pvc"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-2-the-statefulset-that-never-gets-its-disk">Scenario 2: the StatefulSet that never gets its disk</h2>
+<p>Follow the chain: pod → claim → class.</p>
+
+<section class="lab" data-lab="k-fix-pvc"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li>A claim requests storage; a StorageClass provisions a volume for it; the pod mounts the claim.</li>
+    <li>A Pending pod with storage: describe the pod, then the claim, then check the classes.</li>
+    <li><i>Waiting for first consumer</i> is normal. <i>Storageclass not found</i> is a typo or a manifest from another cluster.</li>
+    <li>Deleting a pod or workload keeps the data; deleting the claim (or the namespace) usually destroys it.</li>
+    <li>StatefulSets give pods stable names and one claim each; their claim templates are immutable and their claims outlive them.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="b">
+<p class="q">A new claim is <code>Pending</code> with the event "waiting for first consumer to be created before binding". What should you do?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Delete and recreate the claim</button>
+<button class="opt" type="button" data-opt="b">B. Nothing special: create the pod that uses it, and the volume will be provisioned</button>
+<button class="opt" type="button" data-opt="c">C. Create a PersistentVolume by hand</button>
+<button class="opt" type="button" data-opt="d">D. Change the access mode</button>
+</div>
+<p class="explain">With <code>WaitForFirstConsumer</code>, provisioning is delayed until a pod using the claim is scheduled. It is the expected state before the pod exists.</p>
+</div>
+
+<div class="quiz" data-answer="d">
+<p class="q">You delete a Deployment whose pod mounted the claim <code>db-data</code>. What happened to the data?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. It was deleted with the pod</button>
+<button class="opt" type="button" data-opt="b">B. It was deleted with the Deployment</button>
+<button class="opt" type="button" data-opt="c">C. It was moved to another node</button>
+<button class="opt" type="button" data-opt="d">D. Nothing: the claim and its volume still exist</button>
+</div>
+<p class="explain">Claims are independent objects. Only deleting the claim itself (or its namespace) removes the data under the usual <code>Delete</code> reclaim policy.</p>
+</div>
+
+<div class="quiz" data-answer="a">
+<p class="q"><code>db-0</code> of a StatefulSet is Pending because its claim names a StorageClass that doesn't exist. You correct the class in the manifest. Why is <code>kubectl apply</code> not enough?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Claim templates are immutable and the old Pending claim still exists; both the StatefulSet and that claim must be deleted first</button>
+<button class="opt" type="button" data-opt="b">B. StatefulSets can't use StorageClasses</button>
+<button class="opt" type="button" data-opt="c">C. The pod must be deleted by hand first</button>
+<button class="opt" type="button" data-opt="d">D. <code>kubectl apply</code> doesn't work on StatefulSets</button>
+</div>
+<p class="explain">The API server forbids changing <code>volumeClaimTemplates</code>, and an existing claim is never re-created from the template.</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/" target="_blank" rel="noopener">Persistent Volumes</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/storage/storage-classes/" target="_blank" rel="noopener">Storage Classes</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/" target="_blank" rel="noopener">StatefulSets</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/storage/dynamic-provisioning/" target="_blank" rel="noopener">Dynamic volume provisioning</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

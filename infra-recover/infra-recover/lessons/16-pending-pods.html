@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pending Pods: Scheduling, Taints and Nodes · infra-sim</title>
+<meta name="description" content="A Pending pod is a pod the scheduler could not place. There is no container, no log and no crash, only one event with a sentence that looks cryptic and is in fact a complete explanation. This lesson teaches you to read that sentence.">
+<meta property="og:title" content="Pending Pods: Scheduling, Taints and Nodes">
+<meta property="og:description" content="A Pending pod is a pod the scheduler could not place. There is no container, no log and no crash, only one event with a sentence that looks cryptic and is in fact a complete explanation. This lesson teaches you to read that sentence.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="16" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Pending Pods: Scheduling, Taints and Nodes</h1>
+<p class="lead">A Pending pod is a pod the scheduler could not place. There is no container, no log and no crash, only one event with a sentence that looks cryptic and is in fact a complete explanation. This lesson teaches you to read that sentence.</p>
+<div class="meta"><span class="badge">⏱ 40 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Understand how the <b>scheduler</b> chooses a node, decode <b>FailedScheduling</b> messages, and manage nodes with <b>cordon</b>, <b>drain</b>, <b>labels</b> and <b>taints</b>.</p>
+  <p><b>Why it matters:</b> Pending pods appear exactly when you scale up for load or lose a node, the moments when you most need capacity. The fix differs completely depending on the reason, and the reason is written in the event.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Describe the scheduler's filter-then-score process.</li>
+    <li>Read a <code>0/3 nodes are available: …</code> message reason by reason.</li>
+    <li>Explain why an idle cluster can still report <i>Insufficient cpu</i>.</li>
+    <li>Use node selectors, taints and tolerations.</li>
+    <li>Take a node out of service and return it safely.</li>
+  </ul>
+</div>
+
+<h2 id="the-situation">The situation</h2>
+<p>Two workloads have been Pending for ten minutes, a node is still marked for a maintenance that ended yesterday, and somebody needs to patch <code>worker-1</code> tonight without an outage.</p>
+
+<h2 id="how-the-scheduler-decides">How the scheduler decides</h2>
+<p>For every pod without a node, the scheduler works in two phases:</p>
+<ol>
+  <li><b>Filter</b>: discard every node that cannot run the pod. Not enough unreserved CPU or memory, a node selector that doesn't match, a taint the pod doesn't tolerate, the node is cordoned, a required volume isn't available there.</li>
+  <li><b>Score</b>: rank the remaining nodes (spread pods out, prefer nodes that already have the image, and so on) and pick the best.</li>
+</ol>
+<p>If the filter phase leaves <em>no</em> node, the pod stays <b>Pending</b> and the scheduler records why, counting nodes per reason:</p>
+
+<pre data-label="kubectl describe pod reports-q8drj8zkcb-gn29t (events)"><code class="language-plaintext">  Warning  FailedScheduling  2m  default-scheduler  0/3 nodes are available: 1 Insufficient cpu, 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 1 node(s) were unschedulable. preemption: 0/3 nodes are available: 1 No preemption victims found for incoming pod, 2 Preemption is not helpful for scheduling.</code></pre>
+
+<p>Read it as a list. The numbers add up to the number of nodes, and each node is excluded for one reason:</p>
+<table>
+  <thead><tr><th scope="col">Fragment</th><th scope="col">Meaning</th><th scope="col">Fix</th></tr></thead>
+  <tbody>
+  <tr><td><code>Insufficient cpu</code> / <code>Insufficient memory</code></td><td>The pod's <em>requests</em> don't fit into what is still unreserved on that node.</td><td>Lower the request, free capacity, or add nodes</td></tr>
+  <tr><td><code>node(s) didn't match Pod's node affinity/selector</code></td><td>The pod demands a node label that node lacks.</td><td>Label a node, or correct the selector</td></tr>
+  <tr><td><code>node(s) had untolerated taint {key: value}</code></td><td>The node repels pods that don't tolerate this taint.</td><td>Add a toleration, or remove the taint</td></tr>
+  <tr><td><code>node(s) were unschedulable</code></td><td>The node is cordoned.</td><td><code>kubectl uncordon</code></td></tr>
+  <tr><td><code>pod has unbound immediate PersistentVolumeClaims</code></td><td>The pod's volume claim isn't bound.</td><td>Fix the claim (Lesson 18)</td></tr>
+  <tr><td><code>Too many pods</code></td><td>The node has reached its pod limit.</td><td>Add nodes</td></tr>
+  </tbody>
+</table>
+<p>The part after <code>preemption:</code> says whether evicting lower-priority pods would have helped. You can usually ignore it.</p>
+
+<div class="callout info"><span class="title">The control-plane taint is normal</span>
+Almost every message includes <code>untolerated taint {node-role.kubernetes.io/control-plane: }</code>. Control-plane nodes are reserved for the cluster's own components. That fragment is background noise; the other reasons are the ones to act on.</div>
+
+<h2 id="requests-not-usage">Requests, not usage</h2>
+<p>The scheduler does not look at how busy a node <em>is</em>. It adds up the <b>requests</b> of the pods already assigned to the node and compares that sum with the node's allocatable capacity.</p>
+
+<pre><code class="language-bash">kubectl describe node worker-1</code></pre>
+
+<pre data-label="…the part that matters"><code class="language-plaintext">Allocatable:
+  cpu:     2
+  memory:  4Gi
+  pods:    110
+...
+Allocated resources:
+  Resource           Requests      Limits
+  --------           --------      ------
+  cpu                450m (22%)    0 (0%)
+  memory             448Mi (10%)   896Mi (21%)</code></pre>
+
+<div class="compare">
+  <div class="bad"><span class="tag">❌ The puzzling case</span>
+  <p>"<code>kubectl top nodes</code> shows 5% CPU usage, and my pod is Pending with <i>Insufficient cpu</i>."</p>
+  </div>
+  <div class="good"><span class="tag">✅ The explanation</span>
+  <p>Usage is irrelevant to scheduling. Either the existing pods have <em>reserved</em> the capacity through their requests, or this pod requests more than any single node has. A request of <code>cpu: 3</code> can never be placed on 2-CPU nodes.</p>
+  </div>
+</div>
+
+<h2 id="steering-pods-selectors-taints-tolerations">Steering pods: selectors, taints, tolerations</h2>
+<table>
+  <thead><tr><th scope="col">Mechanism</th><th scope="col">Set on</th><th scope="col">Effect</th></tr></thead>
+  <tbody>
+  <tr><td><code>nodeSelector</code></td><td>Pod</td><td>"Only run me on nodes with these labels." Pod is attracted to nodes.</td></tr>
+  <tr><td>Taint</td><td>Node</td><td>"Keep away unless you tolerate me." Node repels pods.</td></tr>
+  <tr><td>Toleration</td><td>Pod</td><td>"I can live with that taint." Permission, not attraction.</td></tr>
+  </tbody>
+</table>
+
+<pre><code class="language-bash">kubectl get nodes --show-labels
+kubectl label node worker-1 disktype=ssd                 # add a label
+kubectl label node worker-1 disktype-                    # remove it
+
+kubectl taint nodes worker-2 dedicated=batch:NoSchedule  # add a taint
+kubectl taint nodes worker-2 dedicated:NoSchedule-       # remove it</code></pre>
+
+<pre data-label="In the pod template"><code class="language-yaml">spec:
+  nodeSelector:
+    disktype: ssd
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: batch
+      effect: NoSchedule</code></pre>
+
+<h2 id="node-maintenance-cordon-and-drain">Node maintenance: cordon and drain</h2>
+
+<pre><code class="language-bash">kubectl cordon worker-1                      # no new pods; existing ones keep running
+kubectl drain worker-1 --ignore-daemonsets   # cordon + evict the pods
+# ... do the maintenance ...
+kubectl uncordon worker-1                    # schedulable again</code></pre>
+
+<pre data-label="kubectl get nodes"><code class="language-plaintext">NAME       STATUS                     ROLES           AGE   VERSION
+cp-1       Ready                      control-plane   4d    v1.37.0
+worker-1   Ready,SchedulingDisabled   &lt;none&gt;          4d    v1.37.0
+worker-2   Ready                      &lt;none&gt;          4d    v1.37.0</code></pre>
+
+<table>
+  <thead><tr><th scope="col">drain refuses because of…</th><th scope="col">Why</th><th scope="col">Flag</th></tr></thead>
+  <tbody>
+  <tr><td>DaemonSet-managed pods</td><td>Their controller would recreate them on the same node at once.</td><td><code>--ignore-daemonsets</code></td></tr>
+  <tr><td>Pods with local storage (<code>emptyDir</code>)</td><td>Their data is deleted with the pod.</td><td><code>--delete-emptydir-data</code></td></tr>
+  <tr><td>Pods without a controller</td><td>Nobody will recreate them.</td><td><code>--force</code> (they are gone for good)</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn"><span class="title">Two things people forget</span>
+<ul>
+<li><b>Uncordon.</b> A node left in <code>SchedulingDisabled</code> silently removes a third of your capacity until the day you scale up and pods go Pending.</li>
+<li><b>Nothing moves back.</b> After <code>uncordon</code> the node is empty and stays empty; the scheduler only places new pods. The next rollout redistributes them.</li>
+</ul></div>
+
+<h2 id="scenario-1-take-a-node-out-of-service-without-an-outage">Scenario 1: take a node out of service without an outage</h2>
+
+<section class="lab" data-lab="k-sched"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-2-pending-forever">Scenario 2: Pending forever</h2>
+<p>Two Pending workloads with different reasons, and a leftover from last week. Decode each event fragment by fragment.</p>
+
+<section class="lab" data-lab="k-fix-pending"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li>Pending = the scheduler found no node. The <code>FailedScheduling</code> event lists one reason per excluded node.</li>
+    <li>The scheduler compares <em>requests</em> with unreserved capacity, never actual usage.</li>
+    <li>Node selectors attract, taints repel, tolerations permit.</li>
+    <li><code>cordon</code> stops new pods, <code>drain</code> also evicts, <code>uncordon</code> reverses it. Pods don't move back by themselves.</li>
+    <li>The control-plane taint in the message is expected; act on the other reasons.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="b">
+<p class="q"><code>kubectl top nodes</code> shows all nodes nearly idle, yet a pod is Pending with <code>Insufficient cpu</code>. What explains this?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. The metrics are wrong</button>
+<button class="opt" type="button" data-opt="b">B. Scheduling is based on the sum of CPU requests, not on current usage</button>
+<button class="opt" type="button" data-opt="c">C. The pod has no CPU limit</button>
+<button class="opt" type="button" data-opt="d">D. The scheduler is down</button>
+</div>
+<p class="explain">Capacity is reserved by requests. Idle but fully reserved nodes can't accept more, and a single request larger than a node can never fit.</p>
+</div>
+
+<div class="quiz" data-answer="a">
+<p class="q">A node has the taint <code>dedicated=batch:NoSchedule</code>. Which pods can be scheduled there?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Only pods with a matching toleration</button>
+<button class="opt" type="button" data-opt="b">B. Only pods with <code>nodeSelector: {dedicated: batch}</code></button>
+<button class="opt" type="button" data-opt="c">C. All pods, but with lower priority</button>
+<button class="opt" type="button" data-opt="d">D. No pods at all</button>
+</div>
+<p class="explain">A taint repels everything that doesn't tolerate it. A node selector is a separate mechanism; to force pods onto the node you would use both.</p>
+</div>
+
+<div class="quiz" data-answer="d">
+<p class="q">After <code>kubectl drain worker-1 --ignore-daemonsets</code> and the maintenance, what must you do?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Nothing; the node returns to service by itself</button>
+<button class="opt" type="button" data-opt="b">B. Delete and recreate the node</button>
+<button class="opt" type="button" data-opt="c">C. Restart all Deployments immediately</button>
+<button class="opt" type="button" data-opt="d">D. <code>kubectl uncordon worker-1</code>, otherwise the node stays unschedulable</button>
+</div>
+<p class="explain">Drain leaves the node cordoned. Until you uncordon it, the scheduler ignores it.</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://kubernetes.io/docs/concepts/scheduling-eviction/kube-scheduler/" target="_blank" rel="noopener">Kubernetes scheduler</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/" target="_blank" rel="noopener">Assigning pods to nodes</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/" target="_blank" rel="noopener">Taints and tolerations</a></li>
+  <li><a href="https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/" target="_blank" rel="noopener">Safely drain a node</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

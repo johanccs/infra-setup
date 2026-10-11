@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Volumes: Data That Survives the Container · infra-sim</title>
+<meta name="description" content="Containers are meant to be thrown away and replaced. Databases are not. This lesson explains where a container&#x27;s data really lives and how to keep the part that matters.">
+<meta property="og:title" content="Volumes: Data That Survives the Container">
+<meta property="og:description" content="Containers are meant to be thrown away and replaced. Databases are not. This lesson explains where a container&#x27;s data really lives and how to keep the part that matters.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="5" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Volumes: Data That Survives the Container</h1>
+<p class="lead">Containers are meant to be thrown away and replaced. Databases are not. This lesson explains where a container's data really lives and how to keep the part that matters.</p>
+<div class="meta"><span class="badge">⏱ 35 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Understand the container's <b>writable layer</b>, and use <b>named volumes</b> and <b>bind mounts</b> to store data outside it.</p>
+  <p><b>Why it matters:</b> "we redeployed and the data is gone" is one of the few container mistakes that cannot be undone. It is easy to avoid once you know which path must be on a volume.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Explain what happens to files written inside a container.</li>
+    <li>Create, mount, inspect and remove named volumes.</li>
+    <li>Choose between a named volume and a bind mount.</li>
+    <li>Recognise an anonymous volume and explain where it came from.</li>
+    <li>Find out why data disappeared when a container was replaced.</li>
+  </ul>
+</div>
+
+<h2 id="the-situation">The situation</h2>
+<p>The shop stores its orders in PostgreSQL, running in a container. Every deployment replaces that container with a new one. The orders have to still be there afterwards.</p>
+
+<h2 id="where-files-go-by-default">Where files go by default</h2>
+<p>An image is a stack of read-only layers. When a container is created, Docker adds one thin <b>writable layer</b> on top. Every file the container creates or changes ends up there.</p>
+
+<pre data-label="A container&#x27;s file system"><code class="language-plaintext">┌──────────────────────────────┐
+│ writable layer (this container only)   ← deleted by docker rm
+├──────────────────────────────┤
+│ image layer: application code          ┐
+│ image layer: dependencies              │ read-only, shared by all
+│ image layer: base operating system     ┘ containers of this image
+└──────────────────────────────┘</code></pre>
+
+<table>
+  <thead><tr><th scope="col">Action</th><th scope="col">Writable layer</th></tr></thead>
+  <tbody>
+  <tr><td><code>docker stop</code> / <code>docker start</code> / <code>docker restart</code></td><td>Kept. It is the same container.</td></tr>
+  <tr><td><code>docker rm</code>, then <code>docker run</code> again</td><td><b>Gone.</b> The new container starts from the image.</td></tr>
+  <tr><td>Deploying a new image version</td><td><b>Gone.</b> A new version always means a new container.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="named-volumes">Named volumes</h2>
+<p>A <b>volume</b> is storage that Docker manages separately from any container. You mount it at a path; whatever the container writes below that path goes to the volume. The volume has its own lifetime and survives the container.</p>
+
+<pre><code class="language-bash">docker volume create dbdata                 # optional: run creates it on first use
+docker run -d --name db \
+  -e POSTGRES_PASSWORD=secret \
+  -v dbdata:/var/lib/postgresql/data \
+  postgres:17
+#    │      └─ path inside the container
+#    └─ volume name
+
+docker volume ls
+docker volume inspect dbdata</code></pre>
+
+<p>Remove the container, run a new one with the same <code>-v</code>, and the database finds its files again. Its log even says so:</p>
+
+<pre><code class="language-plaintext">PostgreSQL Database directory appears to contain a database; Skipping initialization</code></pre>
+
+<div class="callout warn"><span class="title">The path must be the one the application writes to</span>
+A volume protects exactly the directory it is mounted on, and nothing else. Mounting <code>dbdata</code> at <code>/data</code> does nothing for a database that keeps its files in <code>/var/lib/postgresql/data</code>. The correct path is part of each image's documentation.</div>
+
+<div class="callout info"><span class="title">An initialised volume ignores new settings</span>
+The PostgreSQL image reads <code>POSTGRES_PASSWORD</code>, <code>POSTGRES_USER</code> and <code>POSTGRES_DB</code> only when it initialises an <em>empty</em> data directory. Start it later with a different password on the same volume and the old password still applies. This surprises people regularly: "I changed the password in the config and it has no effect."</div>
+
+<h2 id="bind-mounts">Bind mounts</h2>
+<p>A <b>bind mount</b> maps a directory or file of the host into the container. Docker recognises it by the path on the left-hand side:</p>
+
+<pre><code class="language-bash">docker run -d --name site -p 8080:80 \
+  -v ./public:/usr/share/nginx/html:ro \
+  nginx:1.29
+#    │                              └─ read-only inside the container
+#    └─ starts with ./ or / : a host path, not a volume name</code></pre>
+
+<table>
+  <thead><tr><td></td><th scope="col">Named volume</th><th scope="col">Bind mount</th></tr></thead>
+  <tbody>
+  <tr><td>Written as</td><td><code>-v name:/path</code></td><td><code>-v /host/path:/path</code> or <code>-v ./dir:/path</code></td></tr>
+  <tr><td>Stored</td><td>In Docker's own storage area</td><td>Wherever the host path points</td></tr>
+  <tr><td>Best for</td><td>Application data: databases, uploads</td><td>Injecting configuration files; live source code during development</td></tr>
+  <tr><td>Watch out for</td><td>Easy to forget it exists (<code>docker volume ls</code>)</td><td>Ties the container to one machine's directory layout and permissions</td></tr>
+  </tbody>
+</table>
+
+<h2 id="anonymous-volumes">Anonymous volumes</h2>
+<p>An image can declare a path as a volume in its Dockerfile (<code>VOLUME /var/lib/postgresql/data</code>). If you start a container <em>without</em> mounting anything there, Docker silently creates an <b>anonymous volume</b> for it, named with a long random ID:</p>
+
+<pre data-label="docker volume ls"><code class="language-plaintext">DRIVER    VOLUME NAME
+local     dbdata
+local     f116cb4717682c4bd02be4da511fb48186c2b233e00fe79b2819bd1950e4245c</code></pre>
+
+<p>The data in it survives <code>stop</code> and <code>start</code>, which makes everything look fine. But a new container gets a <em>new</em> anonymous volume, so the old data is orphaned the moment you replace the container. This is the mechanism behind most "we lost the data" stories.</p>
+
+<pre><code class="language-bash">docker inspect -f &#x27;{{json .Mounts}}&#x27; db     # what is mounted where, and from which volume
+docker volume prune                         # delete anonymous volumes no container uses</code></pre>
+
+<div class="callout danger"><span class="title">Commands that delete data</span>
+<code>docker volume rm NAME</code>, <code>docker volume prune</code>, <code>docker rm -v</code> and, in the next lessons, <code>docker compose down -v</code> delete volumes for good. There is no undo. Removing a container never deletes a <em>named</em> volume.</div>
+
+<h2 id="scenario-1-data-that-survives">Scenario 1: data that survives</h2>
+
+<section class="lab" data-lab="d-volumes"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-2-the-orders-vanish-after-every-deploy">Scenario 2: the orders vanish after every deploy</h2>
+<p>The team says they use a volume, and <code>docker volume ls</code> agrees. Look at where it is mounted.</p>
+
+<section class="lab" data-lab="d-fix-volume"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li>Files written in a container go to its writable layer, which is deleted with the container.</li>
+    <li>A named volume has its own lifetime. Mount it at the exact directory the application stores data in.</li>
+    <li>Bind mounts map host paths and are best for configuration and development.</li>
+    <li>Images that declare <code>VOLUME</code> get an anonymous volume if you mount nothing: data survives restarts but not replacement.</li>
+    <li><code>docker inspect -f '{{json .Mounts}}'</code> shows the truth about what is stored where.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="b">
+<p class="q">A container wrote a file to <code>/tmp/report.txt</code> (no volume there). Which action loses the file?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. <code>docker stop</code> followed by <code>docker start</code></button>
+<button class="opt" type="button" data-opt="b">B. <code>docker rm</code> followed by a new <code>docker run</code></button>
+<button class="opt" type="button" data-opt="c">C. <code>docker restart</code></button>
+<button class="opt" type="button" data-opt="d">D. Running <code>docker exec</code> in it</button>
+</div>
+<p class="explain">Stop, start and restart keep the same container and its writable layer. Removing the container deletes that layer.</p>
+</div>
+
+<div class="quiz" data-answer="d">
+<p class="q">What does <code>-v ./conf:/etc/app</code> create?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. A named volume called <code>./conf</code></button>
+<button class="opt" type="button" data-opt="b">B. An anonymous volume</button>
+<button class="opt" type="button" data-opt="c">C. A copy of the directory inside the image</button>
+<button class="opt" type="button" data-opt="d">D. A bind mount of the host directory <code>./conf</code></button>
+</div>
+<p class="explain">A left-hand side that starts with <code>/</code> or <code>./</code> is a host path. A plain name would be a named volume.</p>
+</div>
+
+<div class="quiz" data-answer="a">
+<p class="q">PostgreSQL runs with <code>-v dbdata:/data</code>. After replacing the container the tables are empty. Why?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. The database writes to <code>/var/lib/postgresql/data</code>, which was not on the named volume</button>
+<button class="opt" type="button" data-opt="b">B. Named volumes are emptied when a container is removed</button>
+<button class="opt" type="button" data-opt="c">C. The volume was mounted read-only</button>
+<button class="opt" type="button" data-opt="d">D. PostgreSQL does not support volumes</button>
+</div>
+<p class="explain">The named volume was mounted on a path the database never uses. The real data went to an anonymous volume that the new container does not share.</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://docs.docker.com/engine/storage/volumes/" target="_blank" rel="noopener">Volumes</a></li>
+  <li><a href="https://docs.docker.com/engine/storage/bind-mounts/" target="_blank" rel="noopener">Bind mounts</a></li>
+  <li><a href="https://docs.docker.com/engine/storage/" target="_blank" rel="noopener">Storage overview</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Container Networking and DNS · infra-sim</title>
+<meta name="description" content="Real applications are several containers that talk to each other. This lesson shows how containers find each other by name, why that sometimes fails, and how to tell a naming problem from a connection problem.">
+<meta property="og:title" content="Container Networking and DNS">
+<meta property="og:description" content="Real applications are several containers that talk to each other. This lesson shows how containers find each other by name, why that sometimes fails, and how to tell a naming problem from a connection problem.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="6" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Container Networking and DNS</h1>
+<p class="lead">Real applications are several containers that talk to each other. This lesson shows how containers find each other by name, why that sometimes fails, and how to tell a naming problem from a connection problem.</p>
+<div class="meta"><span class="badge">⏱ 40 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Connect containers with <b>user-defined networks</b>, understand Docker's built-in <b>DNS</b>, and classify network errors by their message.</p>
+  <p><b>Why it matters:</b> network errors look alike to beginners and are completely different to someone who can read them. "Not found", "refused" and "timed out" each point to a different layer, here and later in Kubernetes.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Explain the difference between the default <code>bridge</code> network and a user-defined network.</li>
+    <li>Make one container reach another by name.</li>
+    <li>Explain when <code>-p</code> is needed and when it is not.</li>
+    <li>Map an error message to "name resolution", "nothing listening" or "blocked".</li>
+    <li>Inspect networks and attach running containers to them.</li>
+  </ul>
+</div>
+
+<h2 id="the-situation">The situation</h2>
+<p>The shop has three parts: a web front end, an API, and a PostgreSQL database. The API has to reach the database; the front end has to reach the API; customers only ever reach the front end.</p>
+
+<h2 id="every-container-has-its-own-network-stack">Every container has its own network stack</h2>
+<p>Each container gets its own network interface and IP address. <code>localhost</code> inside a container is <b>that container</b>, not the host and not its neighbours.</p>
+
+<div class="callout danger"><span class="title">The localhost trap</span>
+An API configured with <code>DATABASE_URL=postgres://…@localhost:5432/…</code> works on a laptop where everything runs side by side, and fails in containers with <i>connection refused</i>: there is no database inside the API's own container. Between containers you connect to the <b>other container's name</b>.</div>
+
+<h2 id="the-default-bridge-versus-your-own-network">The default bridge versus your own network</h2>
+<p>Without <code>--network</code>, a container joins the built-in network called <code>bridge</code>. Containers there can reach each other by IP address, but there is <b>no name resolution</b>. On a network you create yourself, Docker runs a small DNS server, and every container is reachable by its name.</p>
+<table>
+  <thead><tr><td></td><th scope="col">Default <code>bridge</code></th><th scope="col">User-defined network</th></tr></thead>
+  <tbody>
+  <tr><td>Reach another container by IP</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>Reach another container by name</td><td><b>No</b></td><td><b>Yes</b></td></tr>
+  <tr><td>Isolation from other applications</td><td>Shared by everything started without <code>--network</code></td><td>Only the containers you attach</td></tr>
+  </tbody>
+</table>
+
+<pre><code class="language-bash">docker network create shopnet
+
+docker run -d --name db --network shopnet \
+  -e POSTGRES_USER=shop -e POSTGRES_PASSWORD=secret postgres:17
+
+docker run -d --name api --network shopnet -p 3000:3000 \
+  -e DATABASE_URL=postgres://shop:secret@db:5432/shop shop/api:1.0
+#                                         └─ the database container&#x27;s name
+
+curl localhost:3000/products</code></pre>
+
+<h2 id="when-do-you-need-p">When do you need -p?</h2>
+<p>Publishing is for traffic that comes from <em>outside</em> Docker: your browser, <code>curl</code> on the host, other machines. Containers on the same network reach each other's ports directly, on the port the application listens on.</p>
+
+<pre data-label="Who talks to whom"><code class="language-plaintext"> your shell ──► localhost:3000 ──(-p 3000:3000)──► api:3000 ──► db:5432
+               published on the host              container to container
+                                                  on shopnet, no -p needed</code></pre>
+
+<div class="callout tip"><span class="title">Publish as little as possible</span>
+The database above has no <code>-p</code> at all, so nothing outside the Docker network can connect to it. That is a deliberate security benefit, not an omission. Publishing 5432 "to make the API work" would not even help: the API does not go through the host.</div>
+
+<h2 id="reading-network-errors">Reading network errors</h2>
+<p>This table is worth memorising. It applies to Docker, to Kubernetes and to networking in general.</p>
+<table>
+  <thead><tr><th scope="col">Message contains</th><th scope="col">What happened</th><th scope="col">Check</th></tr></thead>
+  <tbody>
+  <tr><td><code>ENOTFOUND</code>, <code>bad address</code>, <code>Could not resolve host</code>, <code>NXDOMAIN</code></td><td><b>Name resolution failed.</b> No connection was even attempted.</td><td>Spelling of the name; are both containers on the same user-defined network?</td></tr>
+  <tr><td><code>ECONNREFUSED</code>, <code>Connection refused</code></td><td>The name resolved and the machine answered, but <b>nothing listens on that port</b>.</td><td>Is the target running? Is it listening on that port? Did it finish starting?</td></tr>
+  <tr><td><code>ETIMEDOUT</code>, <code>timed out</code></td><td>The packets went nowhere: <b>dropped by a firewall or policy</b>, or the address is unreachable.</td><td>Firewalls, network policies, wrong IP</td></tr>
+  <tr><td><code>authentication failed</code>, HTTP 401/403</td><td>The network is fine. The <b>credentials</b> are wrong.</td><td>User, password, token</td></tr>
+  </tbody>
+</table>
+
+<h2 id="looking-at-networks">Looking at networks</h2>
+
+<pre><code class="language-bash">docker network ls
+docker network inspect shopnet        # subnet, gateway and the containers attached
+docker inspect -f &#x27;{{json .NetworkSettings.Networks}}&#x27; api
+
+# test from a throw-away container on the same network
+docker run --rm --network shopnet alpine nslookup db
+docker run --rm --network shopnet alpine wget -qO- http://api:3000/healthz
+docker run --rm --network shopnet alpine nc -zv db 5432</code></pre>
+
+<p>A running container can be attached to an additional network without restarting it:</p>
+
+<pre><code class="language-bash">docker network connect shopnet api
+docker network disconnect bridge api</code></pre>
+
+<h2 id="scenario-1-connect-containers-by-name">Scenario 1: connect containers by name</h2>
+
+<section class="lab" data-lab="d-network"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<h2 id="scenario-2-getaddrinfo-enotfound-db">Scenario 2: getaddrinfo ENOTFOUND db</h2>
+<p>Both containers are up. Classify the error first, then look at the networks.</p>
+
+<section class="lab" data-lab="d-fix-network"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li><code>localhost</code> inside a container is the container itself.</li>
+    <li>Name resolution between containers exists only on user-defined networks. The default <code>bridge</code> has none.</li>
+    <li><code>-p</code> is for access from outside Docker. Containers on one network talk directly.</li>
+    <li>Not found = name. Refused = no listener. Timed out = blocked. Auth failed = credentials.</li>
+    <li><code>docker network inspect</code> shows who is attached; <code>docker network connect</code> fixes it without a restart.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="c">
+<p class="q">Two containers were started with plain <code>docker run</code> (no <code>--network</code>). Container A tries to reach <code>http://b:8080</code>. What happens?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. It works, because both are on the bridge network</button>
+<button class="opt" type="button" data-opt="b">B. Connection refused</button>
+<button class="opt" type="button" data-opt="c">C. The name <code>b</code> cannot be resolved</button>
+<button class="opt" type="button" data-opt="d">D. The request reaches the host instead</button>
+</div>
+<p class="explain">The default bridge network has no DNS between containers. The fix is a user-defined network.</p>
+</div>
+
+<div class="quiz" data-answer="a">
+<p class="q">The API logs <code>connect ECONNREFUSED 172.18.0.2:5432</code>. What does this tell you?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. The name resolved, but nothing is listening on that address and port (yet)</button>
+<button class="opt" type="button" data-opt="b">B. The database's name is misspelt</button>
+<button class="opt" type="button" data-opt="c">C. The password is wrong</button>
+<button class="opt" type="button" data-opt="d">D. A firewall dropped the packets</button>
+</div>
+<p class="explain">An IP address in the message proves that resolution worked. "Refused" means the port is closed: the database is not running, still starting, or listening elsewhere.</p>
+</div>
+
+<div class="quiz" data-answer="b">
+<p class="q">The database container has no <code>-p</code> option. Which statement is true?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. No container can connect to it</button>
+<button class="opt" type="button" data-opt="b">B. Containers on its network can connect to it; the host and other machines cannot</button>
+<button class="opt" type="button" data-opt="c">C. It listens on a random port</button>
+<button class="opt" type="button" data-opt="d">D. It must be restarted with <code>-p 5432:5432</code> before the API can use it</button>
+</div>
+<p class="explain">Publishing only concerns access from outside Docker. Keeping internal services unpublished is the safer default.</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://docs.docker.com/engine/network/" target="_blank" rel="noopener">Networking overview</a></li>
+  <li><a href="https://docs.docker.com/engine/network/drivers/bridge/" target="_blank" rel="noopener">Bridge network driver: user-defined versus default bridge</a></li>
+  <li><a href="https://docs.docker.com/reference/cli/docker/network/connect/" target="_blank" rel="noopener">docker network connect</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

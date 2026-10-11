@@ -1,0 +1,160 @@
+<h1>Ports, Environment Variables and Restart Policies</h1>
+<p class="lead">The same image runs in development, in testing and in production. What differs is how you start it: which ports you publish, which settings you pass in, and what should happen when the process dies.</p>
+<div class="meta"><span class="badge">⏱ 35 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Configure a container from the outside: <b>publish ports</b> correctly, pass <b>environment variables</b>, and choose a <b>restart policy</b>.</p>
+  <p><b>Why it matters:</b> "it's running but I can't reach it" is the single most common Docker complaint, and it is nearly always a port mapping. Knowing how to read the mapping turns a mystery into a ten-second check.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Read and write <code>-p HOST:CONTAINER</code> mappings and explain each side.</li>
+    <li>Tell "connection refused" from "connection reset" and say what each implies.</li>
+    <li>Configure an application through environment variables.</li>
+    <li>Pick a restart policy and recognise a restart loop.</li>
+    <li>Resolve a host port conflict.</li>
+  </ul>
+</div>
+
+<h2>The situation</h2>
+<p>The shop's front end is published as the image <code>shop/web</code>. Its documentation is two lines long: <i>"Listens on port 8080. Optional environment variables: <code>PORT</code>, <code>API_URL</code>, <code>BANNER</code>."</i> That is all you need, if you know how to use it.</p>
+
+<h2>Publishing ports</h2>
+
+```bash
+docker run -d --name web -p 8080:8080 shop/web:1.0
+#                           │    └─ container port: where the process listens
+#                           └─ host port: where you connect from outside
+```
+
+<p>The two numbers are independent. The <b>container port</b> is decided by the application (and its configuration); you cannot choose it with <code>-p</code>. The <b>host port</b> is yours to choose, as long as it is free.</p>
+
+<table>
+  <tr><th>Mapping</th><th>Meaning</th></tr>
+  <tr><td><code>-p 8080:8080</code></td><td>Host 8080 → container 8080</td></tr>
+  <tr><td><code>-p 80:8080</code></td><td>Host 80 → container 8080 (users type no port; the app is unchanged)</td></tr>
+  <tr><td><code>-p 127.0.0.1:8080:8080</code></td><td>Only reachable from this machine, not from the network</td></tr>
+  <tr><td><code>-p 8080</code></td><td>Container 8080 on a random free host port (see <code>docker port NAME</code>)</td></tr>
+</table>
+
+<div class="callout info"><span class="title">EXPOSE is documentation</span>
+An image can declare ports with <code>EXPOSE</code>. That shows up in <code>docker ps</code> as <code>8080/tcp</code> (no arrow), and it tells you where the app is expected to listen. It does <b>not</b> publish anything. Only <code>-p</code> does.</div>
+
+<h3>Reading the failure</h3>
+<p>When a published port does not answer, the error message already narrows down the cause:</p>
+<table>
+  <tr><th>What curl says</th><th>What it means</th><th>Where to look</th></tr>
+  <tr><td><code>(7) Failed to connect … Could not connect to server</code></td><td>Nothing is listening on that <em>host</em> port: no container publishes it, or the container is not running.</td><td><code>docker ps -a</code></td></tr>
+  <tr><td><code>(56) Recv failure: Connection reset by peer</code></td><td>The host port is published, but nothing listens on the <em>container</em> port it forwards to.</td><td>Right-hand side of <code>-p</code> versus the port in <code>docker logs</code></td></tr>
+  <tr><td>An HTTP error page (404, 500, 502)</td><td>You reached a process. The problem is in the application or behind it.</td><td><code>docker logs</code></td></tr>
+</table>
+
+<h2>Environment variables</h2>
+<p>Environment variables are the standard way to configure a containerised application, because they let one image serve every environment.</p>
+
+```bash
+docker run -d --name web-sale -p 8081:8080 \
+  -e BANNER="Sale today" \
+  -e API_URL=http://api:3000 \
+  shop/web:1.0
+
+docker exec web-sale env          # check what the process actually received
+```
+
+<div class="compare">
+  <div class="bad"><span class="tag">❌ Easy to get wrong</span>
+  <ul>
+    <li>A misspelt name (<code>-e BANER=…</code>) is not an error. The app just never sees its setting.</li>
+    <li><code>-e</code> placed <em>after</em> the image name is passed to the application as an argument, not to Docker.</li>
+    <li>Secrets passed with <code>-e</code> are visible to anyone who can run <code>docker inspect</code>.</li>
+  </ul>
+  </div>
+  <div class="good"><span class="tag">✅ Habits that help</span>
+  <ul>
+    <li>Verify with <code>docker exec NAME env</code> or <code>docker inspect -f '{{json .Config.Env}}' NAME</code>.</li>
+    <li>Options go between <code>docker run</code> and the image: <code>docker run [OPTIONS] IMAGE [COMMAND]</code>.</li>
+    <li>Use <code>--env-file</code> for many variables, and a secrets mechanism for real credentials.</li>
+  </ul>
+  </div>
+</div>
+
+<h2>Restart policies</h2>
+<p>By default a container that exits stays exited. A restart policy tells the Docker daemon to start it again.</p>
+<table>
+  <tr><th>Policy</th><th>Behaviour</th><th>Typical use</th></tr>
+  <tr><td><code>no</code> (default)</td><td>Never restart.</td><td>One-off commands, experiments</td></tr>
+  <tr><td><code>on-failure[:N]</code></td><td>Restart when the exit code is not 0, at most N times.</td><td>Jobs that may fail transiently</td></tr>
+  <tr><td><code>always</code></td><td>Always restart, also after the Docker daemon or the machine restarts.</td><td>Long-running services</td></tr>
+  <tr><td><code>unless-stopped</code></td><td>Like <code>always</code>, but a container you stopped by hand stays stopped after a daemon restart.</td><td>Long-running services</td></tr>
+</table>
+
+```bash
+docker run -d --name api --restart unless-stopped shop/api:1.0
+docker inspect -f '{{.RestartCount}}' api      # how often Docker has restarted it
+```
+
+<div class="callout warn"><span class="title">A restart policy hides crashes</span>
+With <code>--restart always</code>, a container that crashes at startup shows <code>Restarting (1) 3 seconds ago</code> in <code>docker ps</code>, then briefly <code>Up</code>, then <code>Restarting</code> again. Docker waits longer between attempts each time. The container is not "flaky": it is failing every single time, and <code>docker logs</code> shows the same error repeated once per attempt.</div>
+
+<h2>Scenario 1: one image, two configurations</h2>
+
+:::lab d-ports
+
+<h2>Scenario 2: "it's running, but the page won't load"</h2>
+<p>Use the table from <a href="#reading-the-failure">Reading the failure</a>: the kind of error tells you which side of the mapping to check.</p>
+
+:::lab d-fix-port
+
+<h2>Scenario 3: port is already allocated</h2>
+
+:::lab d-fix-port-conflict
+
+<div class="takeaways">
+  <h2 class="box-title">🔑 Key takeaways</h2>
+  <ul>
+    <li><code>-p HOST:CONTAINER</code>: you choose the host port; the application decides the container port.</li>
+    <li>Connection <em>refused</em>: nothing on the host port. Connection <em>reset</em>: published, but nothing listening inside on the mapped port.</li>
+    <li>Environment variables configure the app; a misspelt variable fails silently, so verify with <code>docker exec NAME env</code>.</li>
+    <li>Restart policies keep services up and also disguise crash loops. Check <code>RestartCount</code> and the logs.</li>
+    <li>A host port can be bound once. A <code>docker run</code> that fails on the port leaves a <i>Created</i> container behind.</li>
+  </ul>
+</div>
+
+<h2>Quiz</h2>
+
+:::quiz b
+An app listens on port 3000 inside its container. You want users to reach it on port 80 of the host. Which option?
+a) `-p 3000:80`
+b) `-p 80:3000`
+c) `-p 80:80`
+d) `-e PORT=80`
+> HOST:CONTAINER. Host 80 forwards to container 3000. `-p 3000:80` would forward host 3000 to a container port where nothing listens.
+:::
+
+:::quiz a
+`curl localhost:8080` answers `Recv failure: Connection reset by peer`, and `docker ps` shows `0.0.0.0:8080->80/tcp`. What is the most likely cause?
+a) The app does not listen on port 80 inside the container
+b) Port 8080 on the host is used by another program
+c) The container has exited
+d) The image is corrupt
+> The host side works (the connection was accepted), so the container side of the mapping is wrong. Check the app's log for the port it listens on.
+:::
+
+:::quiz d
+A container with `--restart always` crashes one second after every start. What will `docker ps` show most of the time?
+a) Nothing, the container is removed
+b) `Exited (1)`
+c) `Up 3 hours`
+d) `Restarting (1) …`, with growing pauses between attempts
+> Docker keeps retrying with an increasing delay. The fix is in the logs, not in the restart policy.
+:::
+
+<h2>Further reading</h2>
+<ul>
+  <li><a href="https://docs.docker.com/engine/network/port-publishing/" target="_blank" rel="noopener">Port publishing and mapping</a></li>
+  <li><a href="https://docs.docker.com/reference/cli/docker/container/run/#env" target="_blank" rel="noopener">docker run: setting environment variables</a></li>
+  <li><a href="https://docs.docker.com/engine/containers/start-containers-automatically/" target="_blank" rel="noopener">Start containers automatically (restart policies)</a></li>
+</ul>

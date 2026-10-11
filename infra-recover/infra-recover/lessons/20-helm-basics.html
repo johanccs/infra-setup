@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helm Basics: Charts, Releases, Values · infra-sim</title>
+<meta name="description" content="By now an application is half a dozen YAML files, and each environment needs slightly different numbers in them. Helm packages those files with their variables, installs them as one unit, and remembers every version it installed.">
+<meta property="og:title" content="Helm Basics: Charts, Releases, Values">
+<meta property="og:description" content="By now an application is half a dozen YAML files, and each environment needs slightly different numbers in them. Helm packages those files with their variables, installs them as one unit, and remembers every version it installed.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/course.css">
+<script src="../assets/js/theme-init.js"></script>
+</head>
+<body data-lesson="20" data-root="../">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+<noscript><p class="callout warn">Navigation, quizzes and progress tracking need JavaScript. The lesson text below still works without it.</p></noscript>
+<article>
+<h1>Helm Basics: Charts, Releases, Values</h1>
+<p class="lead">By now an application is half a dozen YAML files, and each environment needs slightly different numbers in them. Helm packages those files with their variables, installs them as one unit, and remembers every version it installed.</p>
+<div class="meta"><span class="badge">⏱ 40 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Understand <b>charts</b>, <b>releases</b> and <b>values</b>, and install, inspect and upgrade an application with Helm.</p>
+  <p><b>Why it matters:</b> most third-party software for Kubernetes is distributed as a Helm chart, and most teams deploy their own services with one. To debug a Helm-managed application you need to know what Helm did, what it stored, and what it does <em>not</em> check.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title" id="by-the-end-of-this-lesson-you-will-be-able-to">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Explain what a chart, a release and a revision are.</li>
+    <li>Add a chart repository and search it.</li>
+    <li>Install and upgrade a release, overriding values.</li>
+    <li>Inspect what Helm rendered and applied.</li>
+    <li>Explain what "STATUS: deployed" does and does not mean.</li>
+  </ul>
+</div>
+
+<h2 id="the-situation">The situation</h2>
+<p>The front end consists of a Deployment, a Service and an optional Ingress. Development wants one replica, production wants three and an Ingress. Copying the manifests per environment and editing them by hand is how the two drift apart.</p>
+
+<h2 id="three-words">Three words</h2>
+<table>
+  <thead><tr><th scope="col">Term</th><th scope="col">Meaning</th><th scope="col">Analogy</th></tr></thead>
+  <tbody>
+  <tr><td><b>Chart</b></td><td>A package: templated manifests, default values, metadata. Has a version.</td><td>An installer</td></tr>
+  <tr><td><b>Release</b></td><td>One installation of a chart, with a name, in a namespace.</td><td>An installed program</td></tr>
+  <tr><td><b>Revision</b></td><td>One version of a release. Each install, upgrade and rollback creates a new one.</td><td>An entry in the update history</td></tr>
+  </tbody>
+</table>
+
+<pre data-label="What happens on helm install"><code class="language-plaintext"> chart templates  +  values (defaults ◄ your overrides)
+              │
+              ▼ render
+       plain manifests ──► applied to the cluster ──► revision record stored as a Secret</code></pre>
+
+<p>Helm 4 has no server-side component. The <code>helm</code> command renders templates on your machine, talks to the Kubernetes API with your kubectl credentials, and keeps its bookkeeping in Secrets inside the release's namespace.</p>
+
+<h2 id="repositories">Repositories</h2>
+
+<pre><code class="language-bash">helm repo add shop https://charts.shop.example    # give a repository a local name
+helm repo update                                  # refresh the list of charts
+helm search repo shop                             # newest version of each chart
+helm search repo shop/web --versions              # all versions</code></pre>
+
+<pre><code class="language-plaintext">NAME    	CHART VERSION	APP VERSION	DESCRIPTION
+shop/api	1.1.0        	1.1        	The shop REST API
+shop/db 	1.0.0        	17         	A single-instance PostgreSQL for the shop (StatefulSet with a persistent volume)
+shop/web	2.0.0        	2.0        	The shop web front end</code></pre>
+
+<p>Two version numbers appear, and they are independent: the <b>chart version</b> is the version of the packaging, the <b>app version</b> is the version of the software inside (usually the default image tag).</p>
+
+<h2 id="values">Values</h2>
+<p>A chart exposes its settings as <b>values</b>, with defaults in its <code>values.yaml</code>. Always read them before installing:</p>
+
+<pre><code class="language-bash">helm show values shop/web</code></pre>
+
+<pre data-label="values.yaml of shop/web (excerpt)"><code class="language-yaml">replicaCount: 2
+
+image:
+  repository: shop/web
+  tag: &quot;&quot;              # defaults to the chart&#x27;s appVersion
+
+env:
+  API_URL: http://api:3000
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  host: shop.local</code></pre>
+
+<p>You override values on the command line or, better, in a file of your own:</p>
+
+<pre><code class="language-bash">helm install web shop/web --set replicaCount=1 --set env.BANNER=&quot;Hello&quot;
+helm install web shop/web -f prod-values.yaml            # preferred: a file you can review and commit</code></pre>
+
+<p>Precedence, lowest to highest: the chart's <code>values.yaml</code>, then each <code>-f</code> file in order, then <code>--set</code>.</p>
+
+<h2 id="install-and-inspect">Install and inspect</h2>
+
+<pre><code class="language-bash">helm install web shop/web --version 1.0.0 -n shop --set replicaCount=1</code></pre>
+
+<pre><code class="language-plaintext">NAME: web
+LAST DEPLOYED: Sun Oct 11 09:00:41 2026
+NAMESPACE: shop
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+TEST SUITE: None
+NOTES:
+web 1.0 was installed as release &quot;web&quot; in namespace &quot;shop&quot;.
+...</code></pre>
+
+<pre><code class="language-bash">helm list -n shop                 # releases in a namespace (-A for all namespaces)
+helm status web -n shop
+helm get values web -n shop       # the overrides you supplied (--all: merged with defaults)
+helm get manifest web -n shop     # the exact YAML Helm applied
+helm history web -n shop          # all revisions
+kubectl -n shop get all           # the objects are ordinary Kubernetes objects</code></pre>
+
+<div class="callout danger"><span class="title">"deployed" means "accepted", not "running"</span>
+By default Helm reports success as soon as the API server has <em>accepted</em> the manifests. It does not wait for pods. A chart whose image crashes on start, or whose pods are Pending, still shows <code>STATUS: deployed</code>. Either check with kubectl afterwards, or add <code>--wait</code>, which makes Helm wait until the workloads are ready and fail (after <code>--timeout</code>, five minutes by default) if they are not.</div>
+
+<div class="callout info"><span class="title">Releases are namespaced</span>
+A release lives in one namespace, and every Helm command needs the same <code>-n</code>. <code>helm list</code> without it shows only the current namespace, which leads to "my release has disappeared" when it is simply somewhere else. <code>helm list -A</code> shows them all.</div>
+
+<h2 id="upgrade">Upgrade</h2>
+
+<pre><code class="language-bash">helm upgrade web shop/web --version 1.1.0 -n shop --set replicaCount=3 --wait
+helm history web -n shop</code></pre>
+
+<pre><code class="language-plaintext">REVISION	UPDATED                 	STATUS    	CHART    	APP VERSION	DESCRIPTION
+1       	Sun Oct 11 09:00:41 2026	superseded	web-1.0.0	1.0        	Install complete
+2       	Sun Oct 11 09:03:10 2026	deployed  	web-1.1.0	1.1        	Upgrade complete</code></pre>
+
+<p><code>helm upgrade</code> renders the new chart version with the values you give, compares the result with the previous revision's manifest, and applies the differences. The Deployment's pod template changed, so Kubernetes performs an ordinary rolling update (Lesson 13). Helm did not replace Kubernetes' mechanics; it only produced the new manifests.</p>
+
+<div class="callout tip"><span class="title">One command for both cases</span>
+<code>helm upgrade --install web shop/web -f values.yaml -n shop</code> installs the release if it does not exist and upgrades it if it does. That makes it the natural command for pipelines.</div>
+
+<h2 id="what-helm-owns">What Helm owns</h2>
+<p>Helm labels the objects it creates (<code>app.kubernetes.io/managed-by: Helm</code>) and records their release in annotations. Two consequences:</p>
+<ul>
+  <li>If an object with the same name already exists and was <em>not</em> created by this release, the install fails with <i>… exists and cannot be imported into the current release: invalid ownership metadata</i>. Helm refuses to take over foreign objects.</li>
+  <li>A manual <code>kubectl edit</code> on a Helm-managed object works, and is overwritten by the next <code>helm upgrade</code>. Change the values instead.</li>
+</ul>
+
+<h2 id="scenario-install-inspect-and-upgrade-a-release">Scenario: install, inspect and upgrade a release</h2>
+
+<section class="lab" data-lab="h-basics"><noscript><p class="callout warn">This interactive scenario needs JavaScript.</p></noscript></section>
+
+<div class="takeaways">
+  <h2 class="box-title" id="key-takeaways">🔑 Key takeaways</h2>
+  <ul>
+    <li>Chart = package, release = an installation of it, revision = one version of that installation.</li>
+    <li>Values configure a chart: defaults ◄ <code>-f</code> files ◄ <code>--set</code>. Read <code>helm show values</code> first.</li>
+    <li><code>helm get manifest</code> and <code>helm get values</code> show exactly what was applied and with which settings.</li>
+    <li><code>STATUS: deployed</code> only means the manifests were accepted. Use <code>--wait</code> or check the pods.</li>
+    <li>Releases are per namespace; Helm stores its history in Secrets there.</li>
+  </ul>
+</div>
+
+<h2 id="quiz">Quiz</h2>
+
+<div class="quiz" data-answer="b">
+<p class="q"><code>helm install</code> printed <code>STATUS: deployed</code>, but the application doesn't respond. What is the first thing to check?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. Reinstall the chart</button>
+<button class="opt" type="button" data-opt="b">B. The pods: without <code>--wait</code>, Helm doesn't verify that they started</button>
+<button class="opt" type="button" data-opt="c">C. The chart repository's availability</button>
+<button class="opt" type="button" data-opt="d">D. The Helm version</button>
+</div>
+<p class="explain">Helm's default success criterion is that the API server accepted the manifests. From there on it is ordinary Kubernetes debugging.</p>
+</div>
+
+<div class="quiz" data-answer="c">
+<p class="q">You pass <code>-f prod.yaml --set replicaCount=5</code>, the chart's default is 2 and <code>prod.yaml</code> says 3. How many replicas result?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. 2</button>
+<button class="opt" type="button" data-opt="b">B. 3</button>
+<button class="opt" type="button" data-opt="c">C. 5</button>
+<button class="opt" type="button" data-opt="d">D. An error, because the values conflict</button>
+</div>
+<p class="explain"><code>--set</code> has the highest precedence, then <code>-f</code> files, then the chart's defaults.</p>
+</div>
+
+<div class="quiz" data-answer="a">
+<p class="q"><code>helm list</code> shows nothing, although a colleague installed the release yesterday. What is the most likely explanation?</p>
+<div class="opts">
+<button class="opt" type="button" data-opt="a">A. The release is in another namespace; try <code>helm list -A</code></button>
+<button class="opt" type="button" data-opt="b">B. Helm deleted it overnight</button>
+<button class="opt" type="button" data-opt="c">C. The cluster was reset</button>
+<button class="opt" type="button" data-opt="d">D. Releases are only visible to the user who installed them</button>
+</div>
+<p class="explain">Releases and their history are stored per namespace, and <code>helm list</code> looks only at the current one unless told otherwise.</p>
+</div>
+
+<h2 id="further-reading">Further reading</h2>
+<ul>
+  <li><a href="https://helm.sh/docs/intro/using_helm/" target="_blank" rel="noopener">Using Helm</a></li>
+  <li><a href="https://helm.sh/docs/topics/charts/" target="_blank" rel="noopener">Charts</a></li>
+  <li><a href="https://helm.sh/docs/chart_template_guide/values_files/" target="_blank" rel="noopener">Values files</a></li>
+  <li><a href="https://helm.sh/docs/helm/helm_upgrade/" target="_blank" rel="noopener">helm upgrade</a></li>
+</ul>
+<p class="reviewed">Last reviewed October 2026. The sandbox models Docker Engine 29, Kubernetes 1.37, Helm 4 and Argo CD 3. Spotted an error? Select it, right-click, and ask the AI tutor to double-check it, or open an issue in the repository.</p>
+</article>
+<nav id="pager" aria-label="Lesson navigation"></nav>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<script src="../assets/js/infra-sim.js"></script>
+<script src="../assets/js/course.js"></script>
+<script src="../assets/js/terminal.js"></script>
+<script src="../assets/js/ai-assistant.js"></script>
+</body>
+</html>

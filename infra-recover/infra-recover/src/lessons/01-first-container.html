@@ -1,0 +1,165 @@
+<h1>Containers and Images: Your First Container</h1>
+<p class="lead">Before you can fix a container, you need a clear picture of what one is. This lesson builds that picture and has you running, reaching and removing containers within ten minutes.</p>
+<div class="meta"><span class="badge">⏱ 30 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Understand what a <b>container</b> and an <b>image</b> are, and run your first containers in the sandbox.</p>
+  <p><b>Why it matters:</b> almost every Docker and Kubernetes problem you will ever debug comes down to "which process is running, from which image, with which settings?". If the mental model is right, the error messages start making sense.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Explain the difference between an image and a container.</li>
+    <li>Run a container in the foreground and in the background.</li>
+    <li>Publish a container port and reach it from the host.</li>
+    <li>List, stop and remove containers.</li>
+  </ul>
+</div>
+
+<h2>The situation</h2>
+<p>You joined a team whose application "runs in Docker". On your first day somebody says: "just run the web container and check it on port 8080". You have a terminal and no idea what happens when you press Enter. Let's fix that first.</p>
+
+<h2>What a container is (and is not)</h2>
+<p>A container is <b>an ordinary Linux process</b> that the kernel has been told to isolate. It gets its own view of the file system, its own network interfaces, its own process list and its own host name. It is not a small virtual machine: there is no second operating system kernel and nothing "boots".</p>
+<table>
+  <tr><th></th><th>Virtual machine</th><th>Container</th></tr>
+  <tr><td>Isolates</td><td>A whole machine, with its own kernel</td><td>One process (and its children), sharing the host's kernel</td></tr>
+  <tr><td>Starts in</td><td>Tens of seconds</td><td>Milliseconds</td></tr>
+  <tr><td>Lives as long as</td><td>You keep it switched on</td><td>Its main process keeps running</td></tr>
+  <tr><td>Contains</td><td>An operating system installation</td><td>Only the files the application needs</td></tr>
+</table>
+<div class="callout warn"><span class="title">The rule that explains most surprises</span>
+A container exists to run <b>one main process</b>. When that process exits, the container stops. If the process crashes at startup, the container "runs" for a fraction of a second. You will use this rule in almost every fix-it scenario of this course.</div>
+
+<h2>Images: the template a container starts from</h2>
+<p>An <b>image</b> is a read-only package: a file system (the application, its runtime, its libraries) plus metadata such as the command to start. A <b>container</b> is a running instance of an image. One image can back any number of containers, just as one program on disk can be started many times.</p>
+<p>Images are identified by a <b>repository name</b> and a <b>tag</b>, and they are stored in <b>registries</b>:</p>
+
+```plaintext label="Anatomy of an image reference"
+docker.io / library / nginx : 1.29
+└ registry  └ namespace └ repository └ tag
+
+nginx            means  docker.io/library/nginx:latest
+shop/web:1.0     means  docker.io/shop/web:1.0
+```
+
+<p>If you leave out the tag, Docker assumes <code>latest</code>. That is only a tag name like any other; it does not mean "newest". Naming an explicit version (<code>nginx:1.29</code>) makes it obvious what is running, which matters a great deal once you are debugging.</p>
+
+<h2>docker run, step by step</h2>
+
+```bash
+docker run hello-world
+```
+
+<p>This one command does three separate things, and each can fail in its own way:</p>
+<ol>
+  <li><b>Pull</b>: the image is not on this machine yet, so Docker downloads it from the registry (<i>Unable to find image … locally</i>, then <i>Pulling from …</i>).</li>
+  <li><b>Create</b>: Docker creates a container from the image: a writable layer on top of the image's files, a network interface, a name.</li>
+  <li><b>Start</b>: Docker starts the image's command as the container's main process and connects your terminal to its output.</li>
+</ol>
+<p><code>hello-world</code> prints a message and exits, so the container stops again immediately. That is the rule from above in action.</p>
+
+<h2>A container that keeps running</h2>
+
+```bash
+docker run -d --name web -p 8080:80 nginx:1.29
+```
+
+<table>
+  <tr><th>Part</th><th>Meaning</th></tr>
+  <tr><td><code>-d</code></td><td>Detached: run in the background and print the container ID instead of the output.</td></tr>
+  <tr><td><code>--name web</code></td><td>A name you choose. Without it Docker invents one, like <code>quirky_turing</code>.</td></tr>
+  <tr><td><code>-p 8080:80</code></td><td>Publish: connections to port 8080 <b>on the host</b> are forwarded to port 80 <b>in the container</b>.</td></tr>
+  <tr><td><code>nginx:1.29</code></td><td>The image. Everything after it would be a command to run instead of the image's default.</td></tr>
+</table>
+
+```bash
+docker ps                 # running containers
+curl localhost:8080       # talk to nginx through the published port
+```
+
+```plaintext label="docker ps"
+CONTAINER ID   IMAGE        COMMAND                  CREATED         STATUS         PORTS                                     NAMES
+8aefd9ff8d08   nginx:1.29   "/docker-entrypoint.…"   5 seconds ago   Up 4 seconds   0.0.0.0:8080->80/tcp, [::]:8080->80/tcp   web
+```
+
+<p>Read the <b>PORTS</b> column from left to right: host address and port, an arrow, container port. You will come back to this column often.</p>
+
+<div class="callout info"><span class="title">Why the port must be published</span>
+The container has its own network interface with its own address. Nginx is listening on port 80 <em>of that interface</em>, which the outside world cannot reach. <code>-p</code> asks Docker to open a port on the host and forward it. Forget <code>-p</code> and the server runs perfectly, and nobody can reach it.</div>
+
+<h2>Stopping and removing</h2>
+
+```bash
+docker stop web        # ask the main process to exit; the container still exists
+docker ps -a           # -a also lists stopped containers
+docker rm web          # delete the container (its writable layer is gone)
+docker images          # the image is still on disk, ready for the next run
+```
+
+<div class="compare">
+  <div class="bad"><span class="tag">❌ A common confusion</span>
+  <p>"I stopped the container, why can't I run a new one with the same name?"</p>
+  <p>Because a stopped container still exists. <code>docker ps</code> hides it; <code>docker ps -a</code> shows it.</p>
+  </div>
+  <div class="good"><span class="tag">✅ What to do</span>
+  <p>Remove it (<code>docker rm web</code>), or start the existing one again (<code>docker start web</code>). For throw-away containers add <code>--rm</code> to <code>docker run</code>, and Docker removes the container when it exits.</p>
+  </div>
+</div>
+
+<h2>Scenario: your first containers</h2>
+<p>Time to do it yourself. Press <b>Start the sandbox</b>, then work through the tasks. The sandbox watches what you do and ticks off each task. If a command is new to you, type it anyway: nothing here can break anything.</p>
+
+:::lab d-first
+
+<div class="callout tip"><span class="title">About the sandbox</span>
+The terminal is a simulation that runs in this page. It behaves like a Linux shell with Docker installed: <kbd>↑</kbd> recalls earlier commands, <kbd>Tab</kbd> completes names, <kbd>Ctrl</kbd>+<kbd>C</kbd> stops a command that is waiting. Type <code>help</code> to see everything it understands. <b>Reset</b> starts the scenario from scratch.</div>
+
+<div class="takeaways">
+  <h2 class="box-title">🔑 Key takeaways</h2>
+  <ul>
+    <li>A container is an isolated process, not a small virtual machine. It lives exactly as long as its main process.</li>
+    <li>An image is the read-only template; a container is a running instance with a thin writable layer on top.</li>
+    <li><code>docker run</code> = pull (if needed) + create + start.</li>
+    <li><code>-p HOST:CONTAINER</code> publishes a port. Without it the container is unreachable from the host.</li>
+    <li><code>docker ps</code> shows running containers; <code>docker ps -a</code> shows all of them. Stopped is not the same as removed.</li>
+  </ul>
+</div>
+
+<h2>Quiz</h2>
+
+:::quiz b
+You run `docker run -d --name job alpine echo done`. A second later `docker ps` shows nothing. Why?
+a) The image could not be downloaded
+b) The main process (`echo`) finished, so the container stopped
+c) `-d` deletes the container after it starts
+d) Alpine containers can't run in the background
+> A container lives as long as its main process. `echo` prints and exits, so the container is now in the Exited state, visible with `docker ps -a`.
+:::
+
+:::quiz c
+What does `-p 8080:80` do?
+a) Opens port 8080 inside the container and port 80 on the host
+b) Limits the container to ports 80 through 8080
+c) Forwards host port 8080 to port 80 inside the container
+d) Starts 80 copies of the container
+> The format is HOST:CONTAINER. The left side is where you connect from outside, the right side is where the process inside listens.
+:::
+
+:::quiz a
+After `docker stop web`, which statement is true?
+a) The container still exists and can be started again with `docker start web`
+b) The container and its image are deleted
+c) The container's name is free to be reused immediately
+d) The container keeps running without a network
+> Stopping ends the main process. The container, its settings and its writable layer remain until `docker rm`.
+:::
+
+<h2>Further reading</h2>
+<ul>
+  <li><a href="https://docs.docker.com/get-started/docker-overview/" target="_blank" rel="noopener">Docker overview</a></li>
+  <li><a href="https://docs.docker.com/reference/cli/docker/container/run/" target="_blank" rel="noopener">docker container run reference</a></li>
+  <li><a href="https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-an-image/" target="_blank" rel="noopener">What is an image?</a></li>
+</ul>

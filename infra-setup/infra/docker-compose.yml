@@ -1,0 +1,28 @@
+services:
+  todo-db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: todo
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: todo
+
+    volumes:
+      - todo-data:/var/lib/postgresql/data
+
+  todo-api:
+    build: ../src/api
+    environment:
+      APP_VERSION: local
+      ConnectionStrings__Todos: Host=todo-db;Database=todo;Username=todo;Password=dev
+    depends_on: 
+      - todo-db
+  
+  todo-ui:
+    build: ../src/ui
+    ports:
+      - "8080:8080"
+    depends_on:
+      - todo-api
+
+volumes:
+  todo-data:

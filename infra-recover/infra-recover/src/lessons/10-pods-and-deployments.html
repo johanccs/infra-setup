@@ -1,0 +1,198 @@
+<h1>Pods, Deployments and Self-Healing</h1>
+<p class="lead">You almost never create pods by hand. You write a Deployment that says how many copies of which pod you want, and Kubernetes keeps that true. This lesson covers the manifest, the three objects it creates, and the errors the API server reports when the manifest is wrong.</p>
+<div class="meta"><span class="badge">⏱ 40 min</span></div>
+
+<div class="goal">
+  <span class="title">🎯 Goal of this lesson</span>
+  <p>Write and apply a <b>Deployment</b> manifest, understand the chain <b>Deployment → ReplicaSet → Pod</b>, and read the API server's validation errors.</p>
+  <p><b>Why it matters:</b> the Deployment is the object you will edit most often, and a rejected manifest is the first failure every newcomer meets. The messages are precise once you know how to read them.</p>
+</div>
+
+<div class="objectives">
+  <h2 class="box-title">By the end of this lesson you will be able to</h2>
+  <ul>
+    <li>Explain every part of a Deployment manifest.</li>
+    <li>Use <code>kubectl apply</code> to create and change objects declaratively.</li>
+    <li>Explain how labels and selectors tie the objects together.</li>
+    <li>Describe what happens when a pod is deleted or a replica count changes.</li>
+    <li>Fix a manifest from the API server's error messages.</li>
+  </ul>
+</div>
+
+<h2>The situation</h2>
+<p>The front end has to run as two copies, come back by itself when a copy dies, and be easy to scale for a sale. That description is, almost word for word, a Deployment.</p>
+
+<h2>The manifest</h2>
+
+```yaml label="deployment.yaml"
+apiVersion: apps/v1          # API group and version this kind belongs to
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app: web
+spec:
+  replicas: 2                # how many pods you want
+  selector:
+    matchLabels:
+      app: web               # "my pods are the ones labelled app=web"
+  template:                  # the pod to stamp out
+    metadata:
+      labels:
+        app: web             # must match the selector above
+    spec:
+      containers:
+        - name: web
+          image: shop/web:1.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: API_URL
+              value: http://api:3000
+```
+
+<p>Every Kubernetes object has the same four top-level parts: <code>apiVersion</code>, <code>kind</code>, <code>metadata</code> (name, labels) and <code>spec</code> (what you want). Kubernetes adds a fifth, <code>status</code> (what is currently true).</p>
+
+<h2>apply: declare, don't command</h2>
+
+```bash
+kubectl apply -f deployment.yaml     # create it, or change it to match the file
+kubectl get deployments
+kubectl rollout status deployment/web
+kubectl get pods
+```
+
+```plaintext
+deployment.apps/web created
+
+NAME   READY   UP-TO-DATE   AVAILABLE   AGE
+web    2/2     2            2           8s
+```
+
+<p><code>kubectl apply</code> is idempotent: run it again with the same file and the answer is <code>unchanged</code>; edit the file and it says <code>configured</code>. The file is the source of truth. This is the habit to build from day one:</p>
+
+<div class="compare">
+  <div class="bad"><span class="tag">❌ Imperative: quick, and forgotten</span>
+
+```bash
+kubectl scale deployment web --replicas=4
+kubectl set image deployment/web web=shop/web:1.1
+```
+  <p>Works, but the file now lies about what is running. The next <code>apply</code> of the old file silently undoes it.</p>
+  </div>
+  <div class="good"><span class="tag">✅ Declarative: change the file</span>
+
+```bash
+# edit deployment.yaml: replicas: 4
+kubectl apply -f deployment.yaml
+```
+  <p>The file, your git history and the cluster agree. Imperative commands are fine for experiments and emergencies.</p>
+  </div>
+</div>
+
+<h2>Deployment → ReplicaSet → Pod</h2>
+
+```plaintext label="kubectl get deployments,replicasets,pods"
+NAME                  READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/web   2/2     2            2           40s
+
+NAME                             DESIRED   CURRENT   READY   AGE
+replicaset.apps/web-j8p7ln5l7t   2         2         2       40s
+
+NAME                       READY   STATUS    RESTARTS   AGE
+pod/web-j8p7ln5l7t-bbrt5   1/1     Running   0          40s
+pod/web-j8p7ln5l7t-l4d6g   1/1     Running   0          40s
+```
+
+<table>
+  <tr><th>Object</th><th>Responsibility</th></tr>
+  <tr><td><b>Deployment</b></td><td>Manages <em>versions</em>: creates a new ReplicaSet when the pod template changes and moves pods over (Lesson 13).</td></tr>
+  <tr><td><b>ReplicaSet</b></td><td>Keeps the <em>number</em> of pods for one template version at the desired count.</td></tr>
+  <tr><td><b>Pod</b></td><td>Runs the containers on a node.</td></tr>
+</table>
+<p>The names show the ownership: <code>web</code> → <code>web-j8p7ln5l7t</code> (the hash identifies the template version) → <code>web-j8p7ln5l7t-bbrt5</code>.</p>
+
+<h3>Labels and selectors</h3>
+<p>Objects are not linked by name but by <b>labels</b>. The ReplicaSet does not keep a list of "its" pods; it counts pods whose labels match its <b>selector</b>. Services (next lesson) and network policies find pods the same way.</p>
+
+```bash
+kubectl get pods --show-labels
+kubectl get pods -l app=web           # filter by label
+```
+
+<h3>Self-healing</h3>
+<p>Delete a pod and the ReplicaSet's count drops below the desired number, so it creates a replacement within a second. The new pod has a new name and a new IP. You did not restart anything; the control loop closed the gap.</p>
+
+<div class="callout warn"><span class="title">To stop an application, change the Deployment</span>
+Deleting pods of a Deployment is futile: they come back. Scale it to zero (<code>replicas: 0</code>) or delete the Deployment, which removes its ReplicaSets and pods with it.</div>
+
+<h2>When the API server says no</h2>
+<p>A manifest is checked in stages, and each stage has its own style of message. Read the message and you know the stage.</p>
+<table>
+  <tr><th>Message</th><th>Stage</th><th>Usual fix</th></tr>
+  <tr><td><code>error parsing … yaml: line 12: did not find expected key</code></td><td>The file is not valid YAML.</td><td>Indentation near that line (spaces, never tabs).</td></tr>
+  <tr><td><code>no matches for kind "Deployment" in version "v1"</code></td><td>kind and apiVersion don't go together.</td><td><code>kubectl api-resources</code> shows the right apiVersion (<code>apps/v1</code>).</td></tr>
+  <tr><td><code>strict decoding error: unknown field "spec.template.spec.containers[0].imagee"</code></td><td>A field name the API does not know.</td><td>A typo, or a field at the wrong indentation level. The path is exact.</td></tr>
+  <tr><td><code>cannot unmarshal string into Go struct field … of type int32</code></td><td>Wrong data type.</td><td><code>replicas: "2"</code> must be <code>replicas: 2</code>. The reverse bites with env values: <code>value: "8080"</code> must be a string.</td></tr>
+  <tr><td><code>The Deployment "web" is invalid: spec.template.metadata.labels: … `selector` does not match template `labels`</code></td><td>The object is well-formed but makes no sense.</td><td>Make the template's labels match <code>spec.selector.matchLabels</code>.</td></tr>
+</table>
+
+<div class="callout tip"><span class="title">Check without changing anything</span>
+<code>kubectl apply --dry-run=server -f deployment.yaml</code> sends the manifest through all validation stages and stores nothing. <code>kubectl diff -f deployment.yaml</code> shows what an apply would change. <code>kubectl explain deployment.spec.strategy</code> prints the documentation of any field.</div>
+
+<h2>Scenario 1: declare it, and let Kubernetes keep it running</h2>
+
+:::lab k-deploy
+
+<h2>Scenario 2: the manifest the API server keeps rejecting</h2>
+<p>Three mistakes, reported one at a time. Use the table above to place each message.</p>
+
+:::lab k-fix-yaml
+
+<div class="takeaways">
+  <h2 class="box-title">🔑 Key takeaways</h2>
+  <ul>
+    <li>A Deployment declares a pod template and a replica count; a ReplicaSet keeps the count; pods run the containers.</li>
+    <li>Objects find each other through labels and selectors, not names.</li>
+    <li><code>kubectl apply -f</code> makes the cluster match the file. Keep the file as the source of truth.</li>
+    <li>Deleting a pod triggers a replacement. Change the Deployment to change what runs.</li>
+    <li>Validation errors name their stage: YAML syntax, unknown kind, unknown field, wrong type, invalid object.</li>
+  </ul>
+</div>
+
+<h2>Quiz</h2>
+
+:::quiz b
+You delete one of the three pods of a Deployment. What happens?
+a) The Deployment now has two pods until you scale it
+b) The ReplicaSet notices the count is below 3 and creates a new pod
+c) The Deployment is deleted too
+d) The pod is restarted with the same name and IP
+> The ReplicaSet controller reconciles the number of matching pods with the desired count. The replacement is a brand-new pod.
+:::
+
+:::quiz d
+`kubectl apply` answers: `unknown field "spec.template.spec.containers[0].port"`. What is the most likely mistake?
+a) The cluster is too old
+b) The image has no ports
+c) `containers` must not be a list
+d) The field is called `ports` (a list), so the name or its place is wrong
+> Strict decoding reports the exact path of a field the API does not define. Check the spelling and the indentation level against `kubectl explain`.
+:::
+
+:::quiz a
+Why must `spec.selector.matchLabels` match the labels in `spec.template.metadata.labels`?
+a) The Deployment finds the pods it owns by that selector; a template it could not select would be created endlessly
+b) It is only a naming convention
+c) Kubernetes uses the labels as the pod's host name
+d) Because Services require it
+> Ownership is established through labels. The API server rejects a Deployment whose selector does not match its own template.
+:::
+
+<h2>Further reading</h2>
+<ul>
+  <li><a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/" target="_blank" rel="noopener">Deployments</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/" target="_blank" rel="noopener">Labels and selectors</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/object-management/" target="_blank" rel="noopener">Object management: imperative and declarative</a></li>
+  <li><a href="https://kubernetes.io/docs/reference/kubectl/generated/kubectl_apply/" target="_blank" rel="noopener">kubectl apply</a></li>
+</ul>

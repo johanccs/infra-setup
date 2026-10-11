@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>infra-sim · Learn Docker, Kubernetes, Helm and Argo CD by fixing them</title>
+<meta name="description" content="A free, scenario-based course on Docker, Kubernetes, Helm and Argo CD with a simulator that runs in your browser. Break it, read the evidence, fix it.">
+<meta property="og:title" content="infra-sim · Docker, Kubernetes, Helm and Argo CD simulator">
+<meta property="og:description" content="25 scenario-based lessons and 51 hands-on scenarios, from your first container to a GitOps incident. Everything runs in the browser.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/css/course.css">
+<script src="assets/js/theme-init.js"></script>
+</head>
+<body data-root="" data-page="home">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="layout">
+<nav id="sidebar" aria-label="Lessons"></nav>
+<main class="content" id="main">
+  <section class="hero">
+    <span class="badge">Docker 29 · Kubernetes 1.37 · Helm 4 · Argo CD 3 · runs in your browser</span>
+    <h1>Learn Docker and Kubernetes by breaking and fixing them</h1>
+    <p class="lead">A 25-lesson, scenario-based course that takes you from your first container to debugging a GitOps deployment. Every lesson drops you into a simulated terminal with a real situation: something to build, or something broken to diagnose and repair. Nothing to install, nothing you can damage.</p>
+    <div class="cta">
+      <a class="btn" id="resume-btn" href="lessons/01-first-container.html">Start Lesson 1 →</a>
+      <a class="btn secondary" href="sandbox.html">Open the scenario library</a>
+    </div>
+  </section>
+
+  <div class="home">
+    <div class="goal">
+      <span class="title">🎯 The goal of this course</span>
+      <p>To make you the person who can <b>fix it</b>. By the end you should be able to <b>explain</b> how containers, Kubernetes, Helm and Argo CD work, <b>read the evidence</b> a broken system gives you (statuses, events, logs, exit codes), <b>find the cause</b> with a repeatable method, and <b>apply the right fix</b> in the right place.</p>
+      <p>Every lesson starts with its own goal and why it matters, and ends with scenarios, key takeaways and a quiz.</p>
+    </div>
+
+    <div class="features">
+      <div><b>🧪 Scenario based</b>Each lesson is built around situations you will meet at work, not around command lists.</div>
+      <div><b>🔧 51 scenarios, 29 of them broken</b>Fix-it scenarios for every tool, from easy to expert, each with hints, a solution and an explanation of why the fix works.</div>
+      <div><b>💻 Sandbox in the browser</b>A simulated shell with docker, kubectl, helm, argocd and git. It checks your progress as you type.</div>
+      <div><b>✨ Ask the AI tutor</b>Select any text and right-click it. The tutor sees the lesson and your recent terminal output.</div>
+      <div><b>✅ Track progress</b>Lessons and solved scenarios are remembered in your browser.</div>
+    </div>
+
+    <div class="callout info">
+      <span class="title">Prerequisites</span>
+      You should be comfortable in a terminal (<code>cd</code>, <code>ls</code>, <code>cat</code>) and able to read YAML. You need no Docker or Kubernetes experience and no local installation: the sandbox is a <b>simulation</b> that runs entirely in this page. It reproduces the commands, output and failure modes of the real tools closely, but it is not the real thing; the <a href="sandbox.html#about-the-simulator">notes on the simulator</a> list what is and is not modelled.
+    </div>
+
+    <div id="curriculum"></div>
+
+    <div class="callout tip">
+      <span class="title">How to get the most out of this course</span>
+      <ol style="margin:0;padding-left:20px">
+        <li>Type the commands yourself. The sandbox has history (<kbd>↑</kbd>) and completion (<kbd>Tab</kbd>), so it is quick.</li>
+        <li>In a fix-it scenario, resist the solution. Read the status, then the events, then the logs, and form a guess before you change anything.</li>
+        <li>Use the hints one at a time. When you do open a solution, read the "why this works" box: that is the part that transfers to real systems.</li>
+        <li>Stuck on a message? Select it in the terminal, right-click, and ask the AI tutor what it means.</li>
+        <li>Once a scenario is solved, press <b>Reset</b> and break it differently. The sandbox is free: use it to try things you would not dare on a real cluster.</li>
+      </ol>
+    </div>
+
+    <p style="color:var(--muted);font-size:14px;margin-top:30px">
+      Content is based on the official documentation of <a href="https://docs.docker.com/" target="_blank" rel="noopener">Docker</a>, <a href="https://kubernetes.io/docs/home/" target="_blank" rel="noopener">Kubernetes</a>, <a href="https://helm.sh/docs/" target="_blank" rel="noopener">Helm</a> and <a href="https://argo-cd.readthedocs.io/" target="_blank" rel="noopener">Argo CD</a>. Tools evolve, so check each project's release notes for the version you run.
+      <button type="button" class="icon-btn" id="reset-btn" style="margin-left:8px">Reset progress</button>
+    </p>
+  </div>
+</main>
+</div>
+<script src="assets/js/course.js"></script>
+<script src="assets/js/ai-assistant.js"></script>
+</body>
+</html>
