@@ -7,3 +7,4 @@ test-results/
 *.log
 *.db-journal
 .DS_Store
+*.swp

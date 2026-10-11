@@ -1,0 +1,6 @@
+apiVersion: v2
+name: todo
+description: Todo app (.net api + Angular UI + postgresql)
+type: application
+version: 0.1.0
+
