@@ -1362,7 +1362,7 @@ kubectl get gatewayclass              # nginx, ACCEPTED True</code></pre></figur
     <!-- ============ 6 ============ -->
     <section class="step" id="helm" data-step>
       <div class="step-head"><span class="num">06</span><h2>Write the Helm chart</h2></div>
-      <p class="goal"><b>Goal:</b> <code>helm lint charts/todo</code> reports <code>0 chart(s) failed</code>. A line saying an icon is recommended is only a hint.</p>
+      <p class="goal"><b>Goal:</b> <code>helm lint charts/todo</code> ends with <code>1 chart(s) linted, 0 chart(s) failed</code>, which means the chart has no errors. You may also see <code>[INFO] Chart.yaml: icon is recommended</code> above it. That is a suggestion to add a logo to the chart, not a problem, so ignore it.</p>
       <div class="why"><h4>Why this step</h4>
         <p>You tell Kubernetes what you want with YAML files called <b>manifests</b>. You could write them by hand, but dev, test and production need almost the same YAML with a few values changed, and copies drift apart.</p>
         <p><b>Helm</b> fixes that. A <b>chart</b> is a folder of YAML templates with <code>{{ placeholders }}</code>, plus a <code>values.yaml</code> file that fills them in. Think of it as a NuGet package for a deployment.</p>

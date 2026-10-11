@@ -1172,7 +1172,7 @@ kubectl -n kube-system get pods | grep ebs-csi   # the disk driver, Running</cod
     <!-- ============ 8 ============ -->
     <section class="step" id="helm" data-step>
       <div class="step-head"><span class="num">08</span><h2>Write the Helm chart</h2></div>
-      <p class="goal"><b>Goal:</b> <code>helm lint charts/todo</code> reports <code>0 chart(s) failed</code>. A line saying an icon is recommended is only a hint.</p>
+      <p class="goal"><b>Goal:</b> <code>helm lint charts/todo</code> ends with <code>1 chart(s) linted, 0 chart(s) failed</code>, which means the chart has no errors. You may also see <code>[INFO] Chart.yaml: icon is recommended</code> above it. That is a suggestion to add a logo to the chart, not a problem, so ignore it.</p>
       <div class="why"><h4>Why this step</h4>
         <p>Kubernetes is configured with YAML files called <b>manifests</b>. Each one describes an object you want to exist: "a Deployment named todo-api running image X". You could write them by hand and run <code>kubectl apply -f</code>. Teams stop doing that quickly, for three reasons:</p>
         <ul>
