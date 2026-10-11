@@ -342,6 +342,101 @@ try {
   var f = parseFloat(localStorage.getItem('tutorial-font')); if (f >= 0.8 && f <= 1.6) document.documentElement.style.setProperty('--fs', f);
 } catch (e) {}
 </script>
+<!-- backup:start -->
+<style>
+.bk-state { font: 500 12px/1 var(--font-mono); color: var(--muted); padding: 0 6px; white-space: nowrap; cursor: default; }
+.bk-state::before { content: "●"; color: var(--ok); margin-right: 5px; }
+.bk-state.saving::before { color: var(--accent); }
+.bk-state.off::before { color: var(--warn); }
+@media (max-width: 700px) { .bk-state .t { display: none; } }
+</style>
+<script>
+// Backup. The page keeps notes, bookmarks, your place and ticked steps in this browser (localStorage), and also sends each
+// change to server.js, which keeps them in a SQLite file (data/tutorial.db). When a page opens, the newer copy wins, so a
+// new browser, or a browser whose site data was cleared, gets everything back. A browser that never synced before keeps
+// its own notes and ticks and adds the server's (nothing is dropped). Without the server the page works as before.
+(function () {
+  if (!/^https?:$/.test(location.protocol) || !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return;
+  var PAGE = location.pathname.split('/').pop() || 'code-to-cluster-tutorial.html';
+  var KEYS = { notes: 'tutorial-notes:' + PAGE, bookmarks: 'tutorial-bookmarks:' + PAGE, pos: 'tutorial-pos:' + PAGE, done: PAGE.replace(/\.html$/, '') + '-done' };
+  var TSKEY = 'tutorial-sync-ts:' + PAGE;                       // when each item last changed in this browser
+  var ls, rawSet = Storage.prototype.setItem, rawRemove = Storage.prototype.removeItem;
+  try { ls = window.localStorage; ls.getItem('x'); } catch (e) { return; }
+  var ts = {}; try { ts = JSON.parse(ls.getItem(TSKEY) || '{}') || {}; } catch (e) { ts = {}; }
+  var dirty = {}, timer = null, state = 'off', lastOk = 0;
+  function shortOf(k) { for (var s in KEYS) if (KEYS[s] === k) return s; return null; }
+  function setTs(s, t) { ts[s] = t; try { rawSet.call(ls, TSKEY, JSON.stringify(ts)); } catch (e) {} }
+  function put(s, v) { if (v === null) rawRemove.call(ls, KEYS[s]); else rawSet.call(ls, KEYS[s], v); }
+
+  // Combine two copies of something that was never synced before, so neither side loses anything.
+  function union(s, a, b) {
+    try {
+      var A = JSON.parse(a), B = JSON.parse(b);
+      if (s === 'done') { for (var k in B) if (!(k in A)) A[k] = B[k]; return JSON.stringify(A); }
+      if (s === 'notes' || s === 'bookmarks') {
+        var seen = {}; A.forEach(function (x) { seen[x.id] = 1; });
+        B.forEach(function (x) { if (!seen[x.id]) A.push(x); });
+        return JSON.stringify(A.sort(function (x, y) { return (x.ts || 0) - (y.ts || 0); }));
+      }
+    } catch (e) {}
+    return b;                                                    // "where you stopped": the server's copy
+  }
+
+  // Restore before the page's own scripts read localStorage. A synchronous request is fine: the server is on this machine.
+  var srv = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/api/state?page=' + encodeURIComponent(PAGE), false);
+    x.setRequestHeader('x-tutorial', '1');
+    x.send();
+    if (x.status === 200) { srv = JSON.parse(x.responseText).state || {}; state = 'ok'; lastOk = Date.now(); }
+    else if (x.status === 503) state = 'none';
+  } catch (e) {}
+  if (srv) Object.keys(KEYS).forEach(function (s) {
+    var remote = srv[s], lv = ls.getItem(KEYS[s]), lt = ts[s] || 0;
+    if (!remote) { if (lv !== null) { dirty[s] = true; if (!lt) setTs(s, Date.now()); } return; }
+    if (!lt && lv !== null && lv !== remote.value) { put(s, union(s, lv, remote.value)); setTs(s, Date.now()); dirty[s] = true; return; }
+    if (remote.updated > lt || lv === null && remote.value !== null) { put(s, remote.value); setTs(s, remote.updated); }
+    else if (lt > remote.updated) dirty[s] = true;
+  });
+
+  // Send every later change.
+  function changed(k) { var s = shortOf(k); if (!s || state === 'none') return; setTs(s, Date.now()); dirty[s] = true; schedule(500); }
+  Storage.prototype.setItem = function (k, v) { rawSet.call(this, k, v); if (this === ls) changed(k); };
+  Storage.prototype.removeItem = function (k) { rawRemove.call(this, k); if (this === ls) changed(k); };
+  function schedule(ms) { clearTimeout(timer); timer = setTimeout(push, ms); if (state === 'ok') { state = 'saving'; show(); } }
+  function push() {
+    timer = null;
+    var keys = Object.keys(dirty); dirty = {};
+    if (!keys.length) { if (state === 'saving') { state = 'ok'; show(); } return; }
+    Promise.all(keys.map(function (s) {
+      return fetch('/api/state', { method: 'PUT', keepalive: true, headers: { 'content-type': 'application/json', 'x-tutorial': '1' },
+        body: JSON.stringify({ page: PAGE, key: s, value: ls.getItem(KEYS[s]), updated: ts[s] || Date.now() }) })
+        .then(function (r) { if (r.status === 503) { state = 'none'; return; } if (!r.ok) throw new Error(String(r.status)); });
+    })).then(function () { if (state !== 'none') { state = 'ok'; lastOk = Date.now(); } show(); }, function () {
+      keys.forEach(function (s) { dirty[s] = true; }); state = 'off'; show(); schedule(15000);
+    });
+  }
+  addEventListener('pagehide', function () { if (Object.keys(dirty).length) push(); });
+  if (Object.keys(dirty).length) schedule(300);
+
+  // The small status next to the "done" counter.
+  function show() {
+    var el = document.getElementById('backup-state'); if (!el) return;
+    el.hidden = false;
+    var txt = { ok: 'Backed up', saving: 'Saving…', off: 'Backup off', none: 'Backup off' }[state];
+    el.className = 'bk-state' + (state === 'ok' ? '' : state === 'saving' ? ' saving' : ' off');
+    el.innerHTML = '<span class="t"></span>'; el.firstChild.textContent = txt;
+    el.title = state === 'ok' ? 'Your notes, bookmarks, place and ticks are saved in data/tutorial.db (last saved ' + new Date(lastOk).toLocaleTimeString() + ').'
+      : state === 'saving' ? 'Sending your latest changes to data/tutorial.db.'
+      : state === 'none' ? 'The tutorial server has no SQLite support (it needs Node.js 22.13 or newer), so nothing is backed up. Your changes stay in this browser.'
+      : 'The tutorial server is not answering. Your changes stay in this browser and are sent when it is back.';
+  }
+  document.addEventListener('DOMContentLoaded', show);
+  window.__backup = { state: function () { return state; } };
+})();
+</script>
+<!-- backup:end -->
 </head>
 <body>
 <a class="skip" href="#overview">Skip to the tutorial</a>
@@ -356,7 +451,8 @@ try {
       <a role="menuitem" href="todo-on-eks-tutorial.html" aria-current="page"><b>Todo on EKS</b><span>On AWS with EKS. Costs money.</span></a>
     </div>
   </div>
-  <span class="tb-done" id="tb-done" title="Steps you have ticked off">0/0 done</span>
+  <!-- backup-badge:start --><span class="bk-state" id="backup-state" hidden></span><!-- backup-badge:end -->
+<span class="tb-done" id="tb-done" title="Steps you have ticked off">0/0 done</span>
   <button type="button" class="tb-btn" id="font-down" aria-label="Smaller text" title="Smaller text">A−</button>
   <button type="button" class="tb-btn" id="font-pct" aria-label="Reset text size" title="Reset text size">100%</button>
   <button type="button" class="tb-btn" id="font-up" aria-label="Larger text" title="Larger text">A+</button>
@@ -1172,7 +1268,7 @@ kubectl -n kube-system get pods | grep ebs-csi   # the disk driver, Running</cod
     <!-- ============ 8 ============ -->
     <section class="step" id="helm" data-step>
       <div class="step-head"><span class="num">08</span><h2>Write the Helm chart</h2></div>
-      <p class="goal"><b>Goal:</b> <code>helm lint charts/todo</code> ends with <code>1 chart(s) linted, 0 chart(s) failed</code>, which means the chart has no errors. You may also see <code>[INFO] Chart.yaml: icon is recommended</code> above it. That is a suggestion to add a logo to the chart, not a problem, so ignore it.</p>
+      <p class="goal"><b>Goal:</b> <code>helm lint charts/todo</code> ends with <code>1 chart(s) linted, 0 chart(s) failed</code>. That means the chart has no errors. (A line starting with <code>[INFO]</code> is only a hint. Ignore it.)</p>
       <div class="why"><h4>Why this step</h4>
         <p>Kubernetes is configured with YAML files called <b>manifests</b>. Each one describes an object you want to exist: "a Deployment named todo-api running image X". You could write them by hand and run <code>kubectl apply -f</code>. Teams stop doing that quickly, for three reasons:</p>
         <ul>

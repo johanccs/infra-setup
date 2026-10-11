@@ -4,7 +4,9 @@
 'use strict';
 const http = require('node:http');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const { spawn, spawnSync } = require('node:child_process');
 
 let chromium;
 try { ({ chromium } = require('playwright-core')); } catch (e) { console.log('SKIP pages: playwright-core is not installed (see tests/README.md)'); process.exit(0); }
@@ -12,6 +14,8 @@ try { ({ chromium } = require('playwright-core')); } catch (e) { console.log('SK
 const ROOT = path.join(__dirname, '..');
 const PORT = 8791, FAKE = 8792;
 const BASE = `http://localhost:${PORT}`;
+const TESTDB = path.join(os.tmpdir(), `tut-pages-${process.pid}.db`);   // never the real data/tutorial.db
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const REG = require('../tools/pages.json');
 const PAGES = [
   { file: 'code-to-cluster-tutorial.html', name: 'Code to Cluster', steps: 17, mid: 'docker', link: 'cluster' },
@@ -47,7 +51,7 @@ const fake = http.createServer((req, res) => {
 });
 
 function startServer(env) {
-  const p = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { ...process.env, PORT: String(PORT), ...env }, stdio: 'pipe' });
+  const p = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { ...process.env, PORT: String(PORT), TUTORIAL_DB: TESTDB, ...env }, stdio: 'pipe' });
   return new Promise((resolve, reject) => {
     p.stdout.on('data', (d) => { if (String(d).includes('Tutorials on')) resolve(p); });
     p.on('error', reject);
@@ -62,6 +66,47 @@ function raw(opts, body) {
     r.on('error', (e) => resolve({ status: 0, body: String(e) }));
     r.end(body);
   });
+}
+
+async function backupServerTests() {
+  const H = { host: `localhost:${PORT}`, 'x-tutorial': '1' };
+  const put = (b, h = H) => raw({ path: '/api/state', method: 'PUT', headers: { ...h, 'content-type': 'application/json' } }, typeof b === 'string' ? b : JSON.stringify(b));
+  const get = (page) => raw({ path: '/api/state?page=' + encodeURIComponent(page), headers: H });
+  let r = await raw({ path: '/api/status', headers: { host: H.host } });
+  check(JSON.parse(r.body).backup === true && fs.existsSync(TESTDB), 'status reports the backup on, and the SQLite file exists');
+  r = await put({ page: 'srv.html', key: 'notes', value: '[1]', updated: 5 }, { host: H.host });
+  check(r.status === 403, 'backup: a write without the x-tutorial header is refused');
+  r = await put({ page: 'srv.html', key: 'notes', value: '[1]', updated: 5 }, { ...H, origin: 'http://evil.example' });
+  check(r.status === 403, 'backup: a write from a foreign origin is refused');
+  r = await raw({ path: '/api/state?page=srv.html', headers: { host: H.host } });
+  check(r.status === 403, 'backup: a read without the x-tutorial header is refused');
+  for (const [name, body] of [['an unknown key', { page: 'srv.html', key: 'secrets', value: '[]', updated: 1 }], ['a path as the page name', { page: '../x', key: 'notes', value: '[]', updated: 1 }], ['a value that is not JSON', { page: 'srv.html', key: 'notes', value: 'not json', updated: 1 }], ['no timestamp', { page: 'srv.html', key: 'notes', value: '[]' }], ['a body that is not JSON', 'nope']]) {
+    r = await put(body);
+    check(r.status === 400, `backup: ${name} is a 400`);
+  }
+  r = await put({ page: 'srv.html', key: 'notes', value: JSON.stringify([{ id: 'x' }]), updated: 100 });
+  check(r.status === 200, 'backup: a valid write is accepted');
+  r = await get('srv.html');
+  check(JSON.parse(JSON.parse(r.body).state.notes.value)[0].id === 'x' && JSON.parse(r.body).state.notes.updated === 100, 'backup: it reads back as written');
+  await put({ page: 'srv.html', key: 'notes', value: '[]', updated: 50 });
+  check(JSON.parse(JSON.parse((await get('srv.html')).body).state.notes.value).length === 1, 'backup: an older write does not replace a newer one');
+  await put({ page: 'srv.html', key: 'notes', value: null, updated: 200 });
+  const st = JSON.parse((await get('srv.html')).body).state.notes;
+  check(st.value === null && st.updated === 200, 'backup: a removal is kept (so it can reach other browsers)');
+  r = await put(JSON.stringify({ page: 'srv.html', key: 'notes', value: 'x'.repeat(600 * 1024), updated: 300 }));
+  check(r.status === 400 || r.status === 413 || r.status === 0, 'backup: an oversized write is refused');
+  await put({ page: 'other.html', key: 'pos', value: '{"a":1}', updated: 1 });
+  check(Object.keys(JSON.parse((await get('other.html')).body).state).join() === 'pos', 'backup: pages are kept apart');
+  r = await raw({ path: '/api/state?page=srv.html', method: 'DELETE', headers: H });
+  check(r.status === 200 && Object.keys(JSON.parse((await get('srv.html')).body).state).length === 0 && Object.keys(JSON.parse((await get('other.html')).body).state).length === 1, 'backup: DELETE forgets one page only');
+  await raw({ path: '/api/state?page=other.html', method: 'DELETE', headers: H });
+  // the readable export
+  await put({ page: 'exp.html', key: 'notes', value: JSON.stringify([{ id: 'e1', quote: 'kubectl', text: 'remember to read the events', ts: Date.UTC(2026, 9, 11, 14, 32) }]), updated: 1 });
+  await put({ page: 'exp.html', key: 'bookmarks', value: JSON.stringify([{ id: 'b1', quote: 'ServiceMonitor', ts: Date.UTC(2026, 9, 11, 15, 0) }]), updated: 1 });
+  const ex = spawnSync(process.execPath, ['tools/export-notes.js'], { cwd: ROOT, env: { ...process.env, TUTORIAL_DB: TESTDB }, encoding: 'utf8' });
+  check(ex.status === 0 && /## exp\.html/.test(ex.stdout) && /\*\*kubectl\*\*/.test(ex.stdout) && /remember to read the events/.test(ex.stdout) && /### Bookmarks/.test(ex.stdout) && /ServiceMonitor/.test(ex.stdout), 'tools/export-notes.js prints the saved notes and bookmarks as Markdown', ex.stdout + ex.stderr);
+  await raw({ path: '/api/state?page=exp.html', method: 'DELETE', headers: H });
+  await put({ page: 'persist.html', key: 'done', value: '{"overview":true}', updated: 7 });
 }
 
 async function serverTests() {
@@ -88,6 +133,7 @@ async function serverTests() {
   check(r.status === 400, 'ask with no messages is a 400');
   r = await raw({ path: '/api/ask', method: 'POST', headers: { host: `localhost:${PORT}`, 'x-tutorial': '1' } }, '{"messages":[{"role":"system","content":"x"}]}');
   check(r.status === 400, 'a client cannot inject a system message');
+  await backupServerTests();
   seen.length = 0;
   r = await raw({ path: '/api/ask', method: 'POST', headers: { host: `localhost:${PORT}`, 'x-tutorial': '1', 'content-type': 'application/json' } }, JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }));
   check(r.status === 200 && r.body.includes('smallest unit'), 'ask streams the answer back as plain text');
@@ -96,6 +142,7 @@ async function serverTests() {
 
 async function pageTests(browser, spec) {
   console.log(`\n== ${spec.name}`);
+  await raw({ path: '/api/state?page=' + spec.file, method: 'DELETE', headers: { host: `localhost:${PORT}`, 'x-tutorial': '1' } });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
   const pg = await ctx.newPage();
   const errs = [];
@@ -310,12 +357,64 @@ async function pageTests(browser, spec) {
     await pg.keyboard.press('Escape');
     check(await pg.locator('#panel').evaluate((p) => p.hidden), 'Escape closes the panel');
   }
+  // backup (SQLite behind server.js)
+  {
+    const NK = 'tutorial-notes:' + spec.file;
+    const hdr = { host: `localhost:${PORT}`, 'x-tutorial': '1' };
+    const server = async () => JSON.parse((await raw({ path: '/api/state?page=' + spec.file, headers: hdr })).body).state;
+    const waitServer = async (fn) => { for (let i = 0; i < 40; i++) { const s = await server(); if (fn(s)) return s; await sleep(100); } return server(); };
+    const local = (page) => page.evaluate((k) => localStorage.getItem(k), NK);
+    const ids = (v) => (v ? JSON.parse(v).map((n) => n.id).sort().join() : '');
+    await pg.goto(`${BASE}/${spec.file}`); await pg.waitForSelector('#rail-list li');
+    await pg.waitForFunction(() => /Backed up/.test(document.getElementById('backup-state').textContent), null, { timeout: 4000 }).catch(() => {});
+    check(/Backed up/.test(await pg.textContent('#backup-state')), `${spec.name}: the toolbar says the backup is on`);
+    const A = { id: 'nA', sec: 'overview', offset: 0, quote: 'zz', text: 'note from browser one', ts: 1000 };
+    await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [NK, JSON.stringify([A])]);
+    let s = await waitServer((st) => st.notes);
+    check(s.notes && ids(s.notes.value) === 'nA', `${spec.name}: a saved note reaches the database`);
+    await pg.evaluate(() => localStorage.clear());
+    await pg.reload(); await pg.waitForSelector('#rail-list li');
+    check(ids(await local(pg)) === 'nA', `${spec.name}: with the browser's data wiped, the note comes back from the database`);
+    // a second browser that already has its own note (and never synced) keeps it and receives the first one
+    const ctx2 = await browser.newContext();
+    const B = { id: 'nB', sec: 'overview', offset: 0, quote: 'zz', text: 'note from browser two', ts: 2000 };
+    await ctx2.addInitScript(([k, v]) => { if (!localStorage.getItem(k)) localStorage.setItem(k, v); }, [NK, JSON.stringify([B])]);
+    const pg2 = await ctx2.newPage();
+    await pg2.goto(`${BASE}/${spec.file}`); await pg2.waitForSelector('#rail-list li');
+    check(ids(await local(pg2)) === 'nA,nB', `${spec.name}: a browser that never synced keeps its own note and adds the saved one`);
+    s = await waitServer((st) => st.notes && ids(st.notes.value) === 'nA,nB');
+    check(ids(s.notes.value) === 'nA,nB', `${spec.name}: the database now holds both`);
+    await ctx2.close();
+    // the newer copy wins, including a removal
+    const C = { id: 'nC', sec: 'overview', offset: 0, quote: 'zz', text: 'newest', ts: 3000 };
+    await raw({ path: '/api/state', method: 'PUT', headers: { ...hdr, 'content-type': 'application/json' } }, JSON.stringify({ page: spec.file, key: 'notes', value: JSON.stringify([A, C]), updated: Date.now() + 60000 }));
+    await pg.reload(); await pg.waitForSelector('#rail-list li');
+    check(ids(await local(pg)) === 'nA,nC', `${spec.name}: a newer copy in the database replaces the browser's older one`);
+    await raw({ path: '/api/state', method: 'PUT', headers: { ...hdr, 'content-type': 'application/json' } }, JSON.stringify({ page: spec.file, key: 'notes', value: null, updated: Date.now() + 120000 }));
+    await pg.reload(); await pg.waitForSelector('#rail-list li');
+    check((await local(pg)) === null, `${spec.name}: a newer removal in the database removes it here too`);
+    await raw({ path: '/api/state?page=' + spec.file, method: 'DELETE', headers: hdr });   // forget the future-dated test removal
+    // server not answering: the badge says so, changes stay local, and they are sent once it is back
+    await pg.route('**/api/state', (r) => (r.request().method() === 'PUT' ? r.abort() : r.continue()));
+    await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [NK, JSON.stringify([C])]);
+    await pg.waitForFunction(() => /Backup off/.test(document.getElementById('backup-state').textContent), null, { timeout: 4000 });
+    check(ids(await local(pg)) === 'nC', `${spec.name}: with the server unreachable the badge says "Backup off" and the note stays in the browser`);
+    await pg.unroute('**/api/state');
+    errs.splice(0, errs.length, ...errs.filter((e) => !/ERR_FAILED/.test(e)));   // the aborted request above is the test's doing
+    await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [NK, JSON.stringify([C])]);
+    s = await waitServer((st) => st.notes && st.notes.value && ids(st.notes.value) === 'nC');
+    check(s.notes && ids(s.notes.value) === 'nC', `${spec.name}: once the server is back the change is sent`);
+    await raw({ path: '/api/state?page=' + spec.file, method: 'DELETE', headers: hdr });
+  }
   check(errs.length === 0, 'no console or page errors ' + errs.join(' | '));
   await ctx.close();
 }
 
 async function noKeyTest(browser) {
   console.log('\n== without OPENAI_API_KEY');
+  for (const spec of PAGES) await raw({ path: '/api/state?page=' + spec.file, method: 'DELETE', headers: { host: `localhost:${PORT}`, 'x-tutorial': '1' } });
+  const kept = await raw({ path: '/api/state?page=persist.html', headers: { host: `localhost:${PORT}`, 'x-tutorial': '1' } });
+  check(JSON.parse(kept.body).state.done && JSON.parse(kept.body).state.done.updated === 7, 'the backup survived a server restart');
   const ctx = await browser.newContext();
   for (const spec of PAGES) {
     const pg = await ctx.newPage();
@@ -399,6 +498,7 @@ async function noKeyTest(browser) {
     fails++; console.log('FAIL unexpected error: ' + (e && e.stack || e));
   } finally {
     await browser.close(); srv.kill(); fake.close();
+    for (const f of [TESTDB, TESTDB + '-journal']) fs.rmSync(f, { force: true });
   }
   console.log(`\n${passes} passed, ${fails} failed`);
   process.exit(fails ? 1 : 0);

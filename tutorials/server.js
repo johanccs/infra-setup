@@ -5,7 +5,8 @@
 //   node server.js          then open http://localhost:8788
 //
 // Settings (environment variables): OPENAI_API_KEY (required for answers), OPENAI_MODEL (default gpt-4o-mini), PORT (default 8788),
-// OPENAI_BASE_URL (default https://api.openai.com/v1; for testing or an OpenAI-compatible service).
+// OPENAI_BASE_URL (default https://api.openai.com/v1; for testing or an OpenAI-compatible service),
+// TUTORIAL_DB (default data/tutorial.db: the SQLite file that backs up your notes, bookmarks, place and ticks).
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -20,6 +21,9 @@ const HOME = 'code-to-cluster-tutorial.html';
 const ORIGINS = [`http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`];
 const MAX_BODY = 64 * 1024;
 const ICON = path.join(__dirname, 'code-to-cluster.ico');
+const DB_FILE = process.env.TUTORIAL_DB || path.join(__dirname, 'data', 'tutorial.db');
+const STATE_KEYS = new Set(['notes', 'bookmarks', 'pos', 'done']);   // what the pages back up
+const MAX_STATE = 512 * 1024;
 const HOSTS = new RegExp(`^(localhost|127\\.0\\.0\\.1):${PORT}$`);   // refuse other Host names (DNS rebinding)
 
 const SYSTEM = [
@@ -33,18 +37,32 @@ const SYSTEM = [
   'Keep it short: usually under 150 words. Use Markdown: short paragraphs, bullet lists, `inline code`, fenced code blocks for commands.',
 ].join(' ');
 
+// The backup: one SQLite file (Node's built-in node:sqlite, so nothing to install). The browser keeps its own working copy
+// and sends every change here; a page restores from here when its browser has nothing newer.
+let db = null;
+try {
+  const { DatabaseSync } = require('node:sqlite');
+  fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
+  db = new DatabaseSync(DB_FILE);
+  db.exec('CREATE TABLE IF NOT EXISTS state (page TEXT NOT NULL, key TEXT NOT NULL, value TEXT, updated INTEGER NOT NULL, PRIMARY KEY (page, key))');
+} catch (e) {
+  db = null;
+  console.error('Backup is off: ' + (e.code === 'ERR_UNKNOWN_BUILTIN_MODULE' ? 'this Node.js has no node:sqlite (use Node 22.13 or newer).' : e.message));
+}
+const validPage = (p) => typeof p === 'string' && /^[\w.-]{1,80}$/.test(p);
+
 function json(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
   res.end(JSON.stringify(body));
 }
 
-function readBody(req) {
+function readBody(req, max = MAX_BODY) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > MAX_BODY) { reject(new Error('too_large')); req.destroy(); return; }
+      if (size > max) { reject(new Error('too_large')); req.destroy(); return; }
       chunks.push(c);
     });
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
@@ -61,6 +79,37 @@ function cleanMessages(input) {
     out.push({ role: m.role, content: m.content.slice(0, 12000) });
   }
   return out[out.length - 1].role === 'user' ? out : null;
+}
+
+// Same rule as the Ask box: only pages this server served may read or change the backup.
+function sameSite(req) {
+  const origin = req.headers.origin;
+  return !(origin && !ORIGINS.includes(origin)) && req.headers['x-tutorial'] === '1';
+}
+
+// GET /api/state?page=x  -> { state: { notes: { value, updated }, ... } }
+// PUT /api/state          <- { page, key, value (a JSON string, or null for "removed"), updated (ms) }
+// DELETE /api/state?page=x   forgets everything saved for that page
+async function stateApi(req, res, url) {
+  if (!sameSite(req)) return json(res, 403, { code: 'forbidden', message: 'Not allowed.' });
+  if (!db) return json(res, 503, { code: 'no_backup', message: 'The backup database is not available.' });
+  if (req.method === 'PUT') {
+    let b;
+    try { b = JSON.parse(await readBody(req, MAX_STATE)); } catch (e) { b = null; }
+    const okValue = b && (b.value === null || (typeof b.value === 'string' && b.value.length <= MAX_STATE && (() => { try { JSON.parse(b.value); return true; } catch (e) { return false; } })()));
+    if (!b || !validPage(b.page) || !STATE_KEYS.has(b.key) || !okValue || !Number.isFinite(b.updated)) {
+      return json(res, 400, { code: 'bad_request', message: 'Expected { page, key, value, updated }.' });
+    }
+    db.prepare('INSERT INTO state (page, key, value, updated) VALUES (?, ?, ?, ?) ON CONFLICT (page, key) DO UPDATE SET value = excluded.value, updated = excluded.updated WHERE excluded.updated >= state.updated')
+      .run(b.page, b.key, b.value, Math.round(b.updated));
+    return json(res, 200, { ok: true });
+  }
+  const page = url.searchParams.get('page');
+  if (!validPage(page)) return json(res, 400, { code: 'bad_request', message: 'Expected ?page=<file name>.' });
+  if (req.method === 'DELETE') { db.prepare('DELETE FROM state WHERE page = ?').run(page); return json(res, 200, { ok: true }); }
+  const state = {};
+  for (const r of db.prepare('SELECT key, value, updated FROM state WHERE page = ?').all(page)) state[r.key] = { value: r.value, updated: r.updated };
+  return json(res, 200, { state });
 }
 
 async function ask(req, res) {
@@ -142,7 +191,8 @@ const server = http.createServer((req, res) => {
   if (!HOSTS.test(req.headers.host || '')) return json(res, 403, { code: 'forbidden', message: 'Not allowed.' });
   const url = new URL(req.url, `http://localhost:${PORT}`);
   if (req.method === 'GET' && url.pathname === '/favicon.ico') return icon(res);
-  if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, { ai: !!KEY, model: MODEL });
+  if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, { ai: !!KEY, model: MODEL, backup: !!db });
+  if (url.pathname === '/api/state' && ['GET', 'PUT', 'DELETE'].includes(req.method)) return stateApi(req, res, url).catch(() => { if (!res.headersSent) json(res, 500, { code: 'server_error', message: 'Something went wrong.' }); else res.end(); });
   if (req.method === 'POST' && url.pathname === '/api/ask') return ask(req, res).catch(() => { if (!res.headersSent) json(res, 500, { code: 'server_error', message: 'Something went wrong.' }); else res.end(); });
   if (req.method === 'GET') return page(res, url.pathname === '/' ? HOME : url.pathname.slice(1));
   json(res, 404, { code: 'not_found', message: 'Not found.' });
@@ -154,5 +204,5 @@ server.on('error', (e) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`Tutorials on http://localhost:${PORT}  (AI ${KEY ? 'on' : 'off: set OPENAI_API_KEY'}, model ${MODEL})`);
+  console.log(`Tutorials on http://localhost:${PORT}  (AI ${KEY ? 'on' : 'off: set OPENAI_API_KEY'}, model ${MODEL}; backup ${db ? DB_FILE : 'off'})`);
 });
