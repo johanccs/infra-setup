@@ -12,9 +12,11 @@ try { ({ chromium } = require('playwright-core')); } catch (e) { console.log('SK
 const ROOT = path.join(__dirname, '..');
 const PORT = 8791, FAKE = 8792;
 const BASE = `http://localhost:${PORT}`;
+const REG = require('../tools/pages.json');
 const PAGES = [
-  { file: 'code-to-cluster-tutorial.html', name: 'Code to Cluster', steps: 17 },
-  { file: 'todo-on-eks-tutorial.html', name: 'Todo on EKS', steps: 16 },
+  { file: 'code-to-cluster-tutorial.html', name: 'Code to Cluster', steps: 17, mid: 'docker', link: 'cluster' },
+  { file: 'eyes-on-the-cluster-tutorial.html', name: 'Eyes on the Cluster', steps: 20, mid: 'instrument', link: 'servicemonitor' },
+  { file: 'todo-on-eks-tutorial.html', name: 'Todo on EKS', steps: 16, mid: 'docker', link: 'cluster' },
 ];
 
 let fails = 0, passes = 0;
@@ -116,7 +118,8 @@ async function pageTests(browser, spec) {
   check(badAnchors.length === 0, 'every in-page link has a target ' + badAnchors.join(','));
   const ids = await pg.$$eval('[id]', (e) => e.map((x) => x.id));
   check(new Set(ids).size === ids.length, 'no duplicate ids in the page');
-  const badLinks = await pg.$$eval('main a[href]', (as) => as.filter((a) => !/^(https:\/\/|http:\/\/localhost:\d+(\/\S*)?$|#|todo-on-eks-tutorial\.html$|code-to-cluster-tutorial\.html$)/.test(a.getAttribute('href'))).map((a) => a.getAttribute('href')));
+  const okLink = '^(https://|http://localhost:\\d+(/\\S*)?$|#|' + REG.map((p) => p.file.replace(/\./g, '\\.')).join('|') + '$)';
+  const badLinks = await pg.$$eval('main a[href]', (as, re) => as.filter((a) => !new RegExp(re).test(a.getAttribute('href'))).map((a) => a.getAttribute('href')), okLink);
   check(badLinks.length === 0, 'links are https or in-page ' + badLinks.join(','));
   const unsafe = await pg.$$eval('main a[href^="http"]', (as) => as.filter((a) => a.target === '_blank' && !/noopener/.test(a.rel)).length);
   check(unsafe === 0, 'target=_blank links use rel=noopener');
@@ -135,18 +138,18 @@ async function pageTests(browser, spec) {
   await pg.locator('section[data-step] input[data-done]').first().uncheck();
 
   // rail highlight
-  await pg.evaluate(() => document.getElementById('docker').scrollIntoView());
-  await pg.waitForFunction(() => document.querySelector('#rail-list a[aria-current=step][href="#docker"]'), null, { timeout: 6000 }).catch(() => {});   // smooth scrolling takes a moment
-  check(await pg.evaluate(() => { const a = document.querySelector('#rail-list a[aria-current=step]'); return !!a && a.getAttribute('href') === '#docker'; }), 'rail highlights the step being read');
-  const auto = await pg.evaluate(() => { const secs = [...document.querySelectorAll('section[data-step]')]; const at = secs.findIndex((s) => s.id === 'docker'); const ticked = secs.map((s) => { const b = s.querySelector('input[data-done]'); return b ? b.checked : null; }); return { before: at > 0 && ticked.slice(0, at).every((v) => v !== false), after: ticked.slice(at).some(Boolean) }; });
+  await pg.evaluate((mid) => document.getElementById(mid).scrollIntoView(), spec.mid);
+  await pg.waitForFunction((mid) => document.querySelector('#rail-list a[aria-current=step][href="#' + mid + '"]'), spec.mid, { timeout: 6000 }).catch(() => {});   // smooth scrolling takes a moment
+  check(await pg.evaluate((mid) => { const a = document.querySelector('#rail-list a[aria-current=step]'); return !!a && a.getAttribute('href') === '#' + mid; }, spec.mid), 'rail highlights the step being read');
+  const auto = await pg.evaluate((mid) => { const secs = [...document.querySelectorAll('section[data-step]')]; const at = secs.findIndex((s) => s.id === mid); const ticked = secs.map((s) => { const b = s.querySelector('input[data-done]'); return b ? b.checked : null; }); return { before: at > 0 && ticked.slice(0, at).every((v) => v !== false), after: ticked.slice(at).some(Boolean) }; }, spec.mid);
   check(auto.before && !auto.after, 'steps you scroll past get a tick automatically; later ones do not');
   await pg.evaluate(() => document.querySelectorAll('input[data-done]').forEach((b) => { if (b.checked) { b.checked = false; b.dispatchEvent(new Event('change')); } }));
 
   // tutorial menu
-  const other = spec.file.startsWith('code') ? 'todo-on-eks-tutorial.html' : 'code-to-cluster-tutorial.html';
+  const other = REG.find((p) => p.file !== spec.file).file;
   check(await pg.locator('#tmenu-list').isHidden() && (await pg.getAttribute('#tmenu-btn', 'aria-expanded')) === 'false', 'the Tutorials menu starts closed');
   await pg.click('#tmenu-btn');
-  check(await pg.locator('#tmenu-list a').count() === 2 && await pg.locator('#tmenu-list').isVisible() && (await pg.getAttribute('#tmenu-btn', 'aria-expanded')) === 'true', 'the Tutorials menu opens with both tutorials');
+  check(await pg.locator('#tmenu-list a').count() === REG.length && await pg.locator('#tmenu-list').isVisible() && (await pg.getAttribute('#tmenu-btn', 'aria-expanded')) === 'true', 'the Tutorials menu opens and lists every tutorial');
   check((await pg.getAttribute('#tmenu-list a[aria-current=page]', 'href')) === spec.file, 'the current tutorial is marked');
   await pg.keyboard.press('Escape');
   check(await pg.locator('#tmenu-list').isHidden(), 'Escape closes the Tutorials menu');
@@ -270,7 +273,7 @@ async function pageTests(browser, spec) {
   await pg.waitForSelector('#note-menu:not([hidden])', { timeout: 3000 });
   check(/Add a note/.test(await pg.textContent('#note-menu-note')) && await pg.locator('#note-menu-ask').isVisible(), 'right-click offers Add a note and Ask the tutor');
   await pg.click('#note-menu-ask');
-  const isC2C = spec.file.startsWith('code');
+  const isC2C = !spec.file.includes('eks');
   if (isC2C) {
     await pg.waitForSelector('dialog#ask[open]', { timeout: 3000 });
     check(true, 'right-click opens the ask box');
@@ -319,7 +322,7 @@ async function noKeyTest(browser) {
     await pg.waitForSelector('#rail-list li');
     await pg.waitForTimeout(400);
     const hint = await pg.evaluate(() => { const h = document.getElementById('ask-hint'); return h && !h.hidden ? h.textContent : ''; });
-    check(spec.file.startsWith('code') ? /switched off/.test(hint) : hint === '', `${spec.name}: asking is off and says so (or stays hidden)`);
+    check(!spec.file.includes('eks') ? /switched off/.test(hint) : hint === '', `${spec.name}: asking is off and says so (or stays hidden)`);
     await pg.locator('#overview .glossary dd').first().click({ button: 'right' });
     check(await pg.evaluate(() => !document.querySelector('dialog#ask[open]') && (!document.getElementById('ctx') || document.getElementById('ctx').hidden)), `${spec.name}: with asking off, right-click opens no Ask box`);
     // notes
@@ -368,13 +371,13 @@ async function noKeyTest(browser) {
     await pg.click('#bm-btn'); await pg.locator('#bm-list .bm-x').first().click();
     check(await pg.locator('mark.bm-hl').count() === 0 && await pg.evaluate(() => document.querySelector('main').textContent.length) === len0, `${spec.name}: removing a bookmark leaves the text as it was`);
     // resume where you stopped
-    await pg.evaluate(() => { const s = document.getElementById('docker'); window.scrollTo({ top: scrollY + s.getBoundingClientRect().top + 300, behavior: 'instant' }); });
+    await pg.evaluate((mid) => { const s = document.getElementById(mid); window.scrollTo({ top: scrollY + s.getBoundingClientRect().top + 300, behavior: 'instant' }); }, spec.mid);
     await pg.waitForTimeout(700);
     await pg.reload(); await pg.waitForSelector('#rail-list li'); await pg.waitForTimeout(1500);
-    const top = await pg.evaluate(() => document.getElementById('docker').getBoundingClientRect().top);
+    const top = await pg.evaluate((mid) => document.getElementById(mid).getBoundingClientRect().top, spec.mid);
     check(Math.abs(top + 300) < 60 && await pg.locator('.bm-toast').isVisible(), `${spec.name}: reopening the page returns to where you stopped (${Math.round(top)})`);
     const base = pg.url().split('#')[0];
-    await pg.goto('about:blank'); await pg.goto(base + '#cluster'); await pg.waitForTimeout(1500);
+    await pg.goto('about:blank'); await pg.goto(base + '#' + spec.link); await pg.waitForTimeout(1500);
     check(await pg.evaluate(() => { const t = document.querySelector('.bm-toast'); return !t || t.hidden; }), `${spec.name}: a link with #step wins over the remembered place`);
     await pg.close();
   }

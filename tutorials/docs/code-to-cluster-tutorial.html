@@ -133,7 +133,7 @@ code { font: 400 .9em/1.5 var(--font-mono); background: var(--code-bg); padding:
 .goal b { color: var(--ink); font-weight: 600; }
 
 figure.code { margin: 14px 0 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg); min-width: 0; }
-figure.code figcaption { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--line); font: 500 12.5px/1.3 var(--font-mono); color: var(--muted); }
+figure.code figcaption { display: flex; justify-content: space-between; align-items: center; gap: 12px; overflow-wrap: anywhere; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--line); font: 500 12.5px/1.3 var(--font-mono); color: var(--muted); }
 figure.code pre { margin: 0; padding: 12px 14px; overflow-x: auto; font: 400 13.5px/1.55 var(--font-mono); tab-size: 4; }
 figure.code pre code { background: none; padding: 0; font: inherit; overflow-wrap: normal; }
 /* Line numbers. They live in a pseudo-element, so they are never selected or copied. */
@@ -389,7 +389,8 @@ try {
   <div class="tmenu">
     <button type="button" class="tb-btn" id="tmenu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tmenu-list" title="Switch tutorial"><span class="long">Tutorials ▾</span><span class="short" aria-label="Tutorials">☰</span></button>
     <div class="tmenu-list" id="tmenu-list" role="menu" aria-label="Tutorials" hidden>
-      <a role="menuitem" href="code-to-cluster-tutorial.html" aria-current="page"><b>Code to Cluster</b><span>On your PC with kind. Free.</span></a>
+      <a role="menuitem" href="code-to-cluster-tutorial.html" aria-current="page"><b>Code to Cluster</b><span>Part 1. On your PC with kind. Free.</span></a>
+      <a role="menuitem" href="eyes-on-the-cluster-tutorial.html"><b>Eyes on the Cluster</b><span>Part 2. Metrics, logs and alerts. Free.</span></a>
       <a role="menuitem" href="todo-on-eks-tutorial.html"><b>Todo on EKS</b><span>On AWS with EKS. Costs money.</span></a>
     </div>
   </div>
@@ -2355,7 +2356,7 @@ docker compose -f infra/docker-compose.yml down -v     # the step 4 stack and it
       location.replace(served + location.pathname.split('/').pop() + location.hash);
     }, function () {
       hint.hidden = false;
-      hint.textContent = 'To ask questions about any word, close this tab and open the tutorial with "Open Tutorial.cmd" in the project folder.';
+      hint.textContent = 'To ask questions about any word, close this tab and start the tutorial with ./start.sh in the tutorials folder (in Ubuntu).';
     });
     return;
   }

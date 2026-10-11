@@ -15,9 +15,12 @@ function extract(htmlFile, outDir) {
     const caption = m[1].replace(/<[^>]+>/g, '').trim();
     if (/^(bash|git bash|powershell)/i.test(caption) || /\(round \d\)/.test(caption)) continue;
     const name = caption.replace(/\s*\(.*\)$/, '');
+    const append = /\(add at the end\)/.test(caption);   // a block that adds to the end of a file shown earlier
     if (!/^[.\w-]+(\/[.\w-]+)*$/.test(name) || !/[./]/.test(name)) continue;
     // The page puts the apps under src/ and the cluster files under infra/. Tests treat them as top-level folders.
-    files[name.replace(/^(src|infra)\//, '')] = unescapeHtml(m[2]).replace(/\n$/, '') + '\n';
+    const key = name.replace(/^(src|infra)\//, '');
+    const text = unescapeHtml(m[2]).replace(/\n$/, '') + '\n';
+    files[key] = append && files[key] ? files[key] + text : text;
   }
   for (const [name, text] of Object.entries(files)) {
     const dest = path.join(outDir, name);
@@ -37,9 +40,19 @@ function bashBlocks(htmlFile) {
   return out;
 }
 
+// The text of every code block whose caption matches `captionRe` (for example /^PromQL$/), in page order.
+function blocksCaptioned(htmlFile, captionRe) {
+  const html = fs.readFileSync(htmlFile, 'utf8');
+  const out = [];
+  const re = /<figcaption>(.*?)<\/figcaption><pre><code>([\s\S]*?)<\/code><\/pre>/g;
+  let m;
+  while ((m = re.exec(html))) if (captionRe.test(m[1].replace(/<[^>]+>/g, '').trim())) out.push(unescapeHtml(m[2]));
+  return out;
+}
+
 if (require.main === module) {
   const [, , htmlFile, outDir] = process.argv;
   if (!htmlFile || !outDir) { console.error('usage: node tests/extract.js <tutorial.html> <out-dir>'); process.exit(2); }
   console.log(extract(htmlFile, outDir).join('\n'));
 }
-module.exports = { extract, bashBlocks };
+module.exports = { extract, bashBlocks, blocksCaptioned };
