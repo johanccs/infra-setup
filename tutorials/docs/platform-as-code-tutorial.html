@@ -1,0 +1,2037 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Platform as Code</title>
+<meta name="description" content="A hands-on tutorial for .NET developers: describe the whole platform in Git with an Argo CD app of apps, pin every version, fence a team in with an AppProject, rebuild the cluster from one script, and check platform changes in pull requests.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M32 3l25 14.5v29L32 61 7 46.5v-29z' fill='%230b6a86'/%3E%3Cpath d='M19 23l11 9-11 9' fill='none' stroke='%23fff' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='36' y='21' width='10' height='10' rx='2' fill='%239fe0f0'/%3E%3Crect x='36' y='34' width='10' height='10' rx='2' fill='%239fe0f0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: sticky step rail on the left (desktop), single reading column on the right; stacks on phones. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #17212b;
+  --muted: #566372;
+  --line: #d9e0e7;
+  --accent: #0b6a86;
+  --accent-soft: #e2f0f4;
+  --code-bg: #eef2f5;
+  --warn: #8a5a00;
+  --warn-soft: #fbf1dc;
+  --ok: #1f7a4a;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e141a; --surface: #151d25; --ink: #dfe6ed; --muted: #95a3b1; --line: #26323e;
+    --accent: #5bbbd6; --accent-soft: #14303a; --code-bg: #111920; --warn: #e8b85a; --warn-soft: #2b2312; --ok: #5cc98e;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0e141a; --surface: #151d25; --ink: #dfe6ed; --muted: #95a3b1; --line: #26323e;
+  --accent: #5bbbd6; --accent-soft: #14303a; --code-bg: #111920; --warn: #e8b85a; --warn-soft: #2b2312; --ok: #5cc98e;
+  color-scheme: dark;
+}
+:root[data-theme="light"] { color-scheme: light; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.65 var(--font-body);
+  padding-inline: 16px; padding-block: 0 64px;
+}
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+.shell { max-width: 1680px; margin: 0 auto; display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 48px; }
+@media (max-width: 960px) { .shell { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+
+/* Rail */
+.rail { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; padding-block: 32px; }
+.rail h2 { font: 600 12px/1 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; }
+/* Resizable steps panel (wide screens only): drag the grip, use the arrow keys, or press « and ». */
+.rail-head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 12px; }
+.rail-head h2 { margin: 0; }
+.rail-btn, .rail-open { font: 600 15px/1 var(--font-body); color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+.rail-btn:hover, .rail-open:hover { color: var(--ink); border-color: var(--accent); }
+.rail-open { position: fixed; left: 12px; top: 12px; z-index: 15; }
+.rail-grip { display: none; }
+@media (min-width: 961px) {
+  .shell { grid-template-columns: var(--rail-w, 250px) minmax(0, 1fr); }
+  .rail { grid-column: 1; grid-row: 1; }
+  main { grid-column: 2; grid-row: 1; }
+  .rail-grip { display: block; grid-column: 1; grid-row: 1; justify-self: end; align-self: start; position: sticky; top: 0; height: 100vh; width: 12px; margin-right: -30px; cursor: col-resize; touch-action: none; z-index: 5; }
+  .rail-grip::after { content: ""; position: absolute; left: 5px; top: 0; bottom: 0; width: 2px; border-radius: 1px; background: transparent; transition: background .15s; }
+  .rail-grip:hover::after, .rail-grip:focus-visible::after, .rail-grip.drag::after { background: var(--accent); }
+  .shell.rail-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .shell.rail-collapsed .rail, .shell.rail-collapsed .rail-grip { display: none; }
+  .shell.rail-collapsed main { grid-column: 1; margin-inline: auto; width: 100%; }
+}
+@media (max-width: 960px) { .rail-btn, .rail-open, .rail-head { display: none !important; } }
+body.resizing { user-select: none; cursor: col-resize; }
+
+.rail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.rail li { margin: 0; }
+.rail a { display: grid; grid-template-columns: 26px 16px 1fr; align-items: baseline; gap: 6px; padding: 5px 8px; border-radius: 6px; color: var(--ink); text-decoration: none; font-size: 14px; line-height: 1.35; }
+.rail a:hover { background: var(--accent-soft); }
+.rail .n { font: 500 12px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.rail .tick { color: var(--ok); font-size: 13px; visibility: hidden; }
+.rail a.done .tick { visibility: visible; }
+.rail a.done .t { color: var(--muted); }
+.rail a.current { background: var(--accent-soft); font-weight: 600; }
+.skip { position: absolute; left: -999px; top: 8px; z-index: 20; background: var(--surface); color: var(--ink); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--line); }
+.skip:focus { left: 16px; }
+.rail .progress { margin-top: 16px; font-size: 13px; color: var(--muted); }
+.bar { height: 4px; background: var(--line); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.bar span { display: block; height: 100%; width: 0; background: var(--ok); transition: width .2s; }
+.rail summary { cursor: pointer; font: 600 13px/1 var(--font-body); color: var(--muted); list-style: none; display: none; }
+@media (max-width: 960px) {
+  .rail { position: static; max-height: none; padding-block: 16px 0; }
+  .rail details > ol { margin-top: 8px; }
+  .rail summary { display: block; padding: 10px 0; }
+  .rail h2 { display: none; }
+}
+
+/* Main column */
+main { min-width: 0; padding-block: 32px 0; }
+/* Code, tables and diagrams use the whole column; prose and notes stay a comfortable reading width. */
+.callout, .why, .learn, details.lbl, .goal { max-width: 90ch; }
+header.hero { padding-bottom: 24px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.eyebrow { font: 500 13px/1 var(--font-mono); color: var(--accent); letter-spacing: .02em; margin: 0 0 14px; }
+h1 { font: 700 clamp(34px, 6vw, 52px)/1.04 var(--font-display); letter-spacing: -.01em; margin: 0 0 14px; text-wrap: balance; }
+.lede { font-size: 18px; color: var(--muted); margin: 0; max-width: 62ch; }
+.stack { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding: 0; list-style: none; }
+.stack li { font: 500 12.5px/1 var(--font-mono); padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); margin: 0; }
+
+section.step { padding-block: 36px 8px; border-bottom: 1px solid var(--line); }
+section.step:last-of-type { border-bottom: 0; }
+.step-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.step-head .num { font: 600 15px/1 var(--font-mono); color: var(--accent); font-variant-numeric: tabular-nums; min-width: 2ch; }
+h2 { font: 700 28px/1.15 var(--font-display); margin: 0; text-wrap: balance; flex: 1 1 260px; }
+.done-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+.done-toggle input { accent-color: var(--ok); width: 16px; height: 16px; }
+.step-foot { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--line); }
+.step-foot .done-toggle { font-size: 14px; }
+h3 { font: 600 17px/1.3 var(--font-body); margin: 28px 0 8px; }
+p, li { max-width: 70ch; }
+ul, ol { padding-left: 22px; }
+li + li { margin-top: 4px; }
+code { font: 400 .9em/1.5 var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.goal { font-size: 15px; color: var(--muted); margin: 8px 0 0; }
+.goal b { color: var(--ink); font-weight: 600; }
+
+figure.code { margin: 14px 0 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg); min-width: 0; }
+figure.code figcaption { display: flex; justify-content: space-between; align-items: center; gap: 12px; overflow-wrap: anywhere; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--line); font: 500 12.5px/1.3 var(--font-mono); color: var(--muted); }
+figure.code pre { margin: 0; padding: 12px 14px; overflow-x: auto; font: 400 13.5px/1.55 var(--font-mono); tab-size: 4; }
+figure.code pre code { background: none; padding: 0; font: inherit; overflow-wrap: normal; }
+/* Line numbers. They live in a pseudo-element, so they are never selected or copied. */
+figure.code pre[data-ln] { display: flex; padding-left: 0; }
+figure.code pre[data-ln]::before { content: attr(data-ln); flex: none; position: sticky; left: 0; padding: 0 10px 0 14px; margin-right: 12px; border-right: 1px solid var(--line); background: var(--code-bg); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; user-select: none; -webkit-user-select: none; }
+figure.code pre[data-ln] code { flex: none; padding-right: 14px; }
+.copy { font: 500 12px/1 var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 5px 9px; cursor: pointer; flex-shrink: 0; }
+.copy:hover { border-color: var(--accent); }
+.copy.copied { color: var(--ok); border-color: var(--ok); }
+
+.callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 18px 0; font-size: 15px; }
+.callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.callout p { margin: 0; }
+.callout p + p { margin-top: 6px; }
+.callout strong { font-weight: 600; }
+.learn { border: 1px dashed var(--line); background: var(--surface); padding: 12px 16px; border-radius: 8px; margin: 20px 0 8px; font-size: 15px; }
+.learn h4 { font: 600 12px/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--ok); margin: 0 0 6px; }
+.learn ul { margin: 0; }
+.why { background: var(--accent-soft); border-radius: 8px; padding: 14px 18px; margin: 16px 0 6px; font-size: 15.5px; }
+.why h4 { font: 600 12px/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0 0 6px; }
+.why p { margin: 0; }
+.why p + p, .why ul { margin-top: 8px; }
+.why ul { margin-bottom: 0; }
+details.lbl { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); margin: -8px 0 18px; font-size: 15px; }
+details.lbl > summary { cursor: pointer; padding: 9px 14px; font-weight: 600; color: var(--accent); list-style: none; }
+details.lbl > summary::before { content: "▸ "; }
+details.lbl[open] > summary::before { content: "▾ "; }
+details.lbl > div { padding: 0 16px 12px; }
+details.lbl dl { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 6px 16px; margin: 0; }
+details.lbl dd { margin: 0; }
+@media (max-width: 520px) { details.lbl dl { grid-template-columns: minmax(0, 1fr); gap: 2px; } details.lbl dd { margin-bottom: 8px; } }
+dl.glossary { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr); gap: 8px 18px; margin: 14px 0; font-size: 15px; }
+dl.glossary dt { font-weight: 600; }
+dl.glossary dd { margin: 0; }
+@media (max-width: 520px) { dl.glossary { grid-template-columns: minmax(0, 1fr); gap: 2px; } dl.glossary dd { margin-bottom: 10px; } }
+
+.table-wrap { overflow-x: auto; margin: 14px 0 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 12px/1.3 var(--font-body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+.problem-table td:first-child { color: var(--muted); }
+
+/* Diagrams: inline SVG and a plain HTML flow, both drawn with the page's own colours. */
+.diagram { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 16px; overflow-x: auto; margin: 16px 0; }
+.diagram svg { display: block; width: 100%; min-width: 680px; height: auto; font-family: var(--font-body); }
+.diagram .box { fill: var(--bg); stroke: var(--line); }
+.diagram .zone { fill: none; stroke: var(--accent); stroke-dasharray: 5 4; }
+.diagram .edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+.diagram marker path { fill: var(--muted); }
+.diagram text { fill: var(--ink); font-size: 13.5px; font-weight: 600; text-anchor: middle; }
+.diagram text.sub, .diagram text.lbl { fill: var(--muted); font-weight: 400; }
+.diagram text.sub { font-size: 11.5px; }
+.diagram text.lbl { font-size: 12px; }
+.diagram text.zone-lbl { fill: var(--accent); font-size: 12px; text-anchor: end; }
+.diagram text.start { text-anchor: start; }
+.flow, .flow ol { list-style: none; margin: 0; padding: 0; }
+.flow { display: grid; justify-items: center; }
+.flow li { max-width: none; margin: 0; }
+.flow > li { text-align: center; }
+.flow > li + li::before { content: "↓"; display: block; color: var(--muted); line-height: 1.7; }
+.flow-node { display: inline-block; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 6px 10px; font-size: 14px; line-height: 1.3; }
+.flow-group { border: 1px dashed var(--accent); border-radius: 8px; padding: 10px 12px 12px; }
+.flow-cap { display: block; font: 600 12px/1.2 var(--font-body); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+.flow-group ol { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 0; }
+.flow-group ol li { display: flex; align-items: center; }
+.flow-group ol li + li::before { content: "→"; color: var(--muted); margin: 0 8px; }
+footer { margin-top: 40px; font-size: 13.5px; color: var(--muted); }
+
+/* Ask box: right-click a word to ask a question about it (needs server.js running). */
+.ask-hint { margin: 16px 0 0; font-size: 14px; color: var(--muted); }
+.ask-hint kbd { font: 500 12px/1 var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 3px 6px; background: var(--surface); color: var(--ink); }
+.flash { background: var(--accent-soft); outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+dialog.ask { width: min(560px, calc(100% - 32px)); max-height: min(640px, calc(100% - 32px)); padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: 0 16px 48px rgba(0, 0, 0, .25); }
+dialog.ask[open] { display: flex; flex-direction: column; }
+dialog.ask::backdrop { background: rgba(10, 16, 22, .45); }
+.ask-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.ask-head h2 { font: 700 20px/1.2 var(--font-display); flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.ask-head h2 code { font-size: .85em; }
+.ask-step { font-size: 12.5px; color: var(--muted); margin: 4px 0 0; }
+.ask-btn { font: 500 13px/1 var(--font-body); background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 6px; padding: 7px 10px; cursor: pointer; flex-shrink: 0; }
+.ask-thread { flex: 1 1 auto; min-height: 60px; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.ask-empty { color: var(--muted); font-size: 14.5px; margin: 0; }
+.ask-q { align-self: flex-end; max-width: 90%; background: var(--accent); color: var(--surface); padding: 8px 12px; border-radius: 10px 10px 2px 10px; font-size: 14.5px; overflow-wrap: anywhere; }
+.ask-a { font-size: 15px; line-height: 1.6; min-width: 0; }
+.ask-a p { margin: 0 0 8px; }
+.ask-a ul, .ask-a ol { margin: 0 0 8px; padding-left: 20px; }
+.ask-a pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; overflow-x: auto; font: 13px/1.5 var(--font-mono); margin: 0 0 8px; }
+.ask-a pre code { background: none; padding: 0; overflow-wrap: normal; }
+.ask-a h4 { font: 600 15px/1.3 var(--font-body); margin: 10px 0 6px; }
+.ask-a.thinking { color: var(--muted); font-style: italic; }
+.ask-err { font-size: 14px; color: var(--warn); }
+.ask-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 12px; }
+.ask-chip { font: 500 13px/1 var(--font-body); color: var(--accent); background: var(--accent-soft); border: 0; border-radius: 999px; padding: 7px 11px; cursor: pointer; }
+.ask-chip:disabled { opacity: .5; cursor: default; }
+.ask-form { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 8px; align-items: flex-end; }
+.ask-form textarea { flex: 1; min-width: 0; resize: none; font: 15px/1.4 var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-height: 42px; max-height: 140px; }
+.ask-form button { font: 600 14px/1 var(--font-body); color: var(--surface); background: var(--accent); border: 0; border-radius: 8px; padding: 12px 14px; cursor: pointer; }
+.ask-form button.stop { background: var(--warn); }
+
+/* Page settings: reading progress, text size, theme. */
+.readbar { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 30; background: transparent; pointer-events: none; }
+.readbar span { display: block; height: 100%; width: 0; background: var(--accent); }
+.tools { position: fixed; top: 8px; right: 12px; z-index: 14; display: flex; align-items: center; gap: 4px; padding: 3px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, .08); }
+.tools .tb-done { font: 500 12px/1 var(--font-mono); color: var(--muted); padding: 0 6px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tmenu { position: relative; }
+.tmenu .short { display: none; }
+.tmenu-list { position: absolute; right: 0; top: calc(100% + 8px); width: 270px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); z-index: 16; }
+.tmenu-list a { display: block; padding: 8px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; font-size: 14.5px; }
+.tmenu-list a b { font-weight: 600; }
+.tmenu-list a span { display: block; font-size: 12.5px; color: var(--muted); }
+.tmenu-list a:hover, .tmenu-list a:focus-visible { background: var(--accent-soft); }
+.tmenu-list a[aria-current="page"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+@media (max-width: 600px) { .tmenu .long { display: none; } .tmenu .short { display: inline; } }
+.tb-btn { font: 600 13px/1 var(--font-body); color: var(--ink); background: none; border: 1px solid transparent; border-radius: 5px; padding: 6px 8px; cursor: pointer; white-space: nowrap; min-width: 30px; }
+.tb-btn:hover:not(:disabled) { border-color: var(--line); background: var(--accent-soft); }
+.tb-btn:disabled { opacity: .35; cursor: default; }
+.tb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#font-down { font-size: 12px; }
+#font-up { font-size: 16px; }
+#font-pct { font-weight: 500; font-size: 12px; color: var(--muted); min-width: 44px; font-variant-numeric: tabular-nums; }
+main { zoom: var(--fs, 1); }
+@media (max-width: 600px) { .tools .tw { display: none; } .tools .tb-done { padding: 0 4px; } #font-pct { min-width: 0; } }
+/* Animated step-through diagrams. A packet moves along a route while the caption explains each hop. */
+figure.anim { margin: 14px 0 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); min-width: 0; max-width: 820px; }
+.anim-stage { overflow-x: auto; padding: 12px 12px 4px; }
+.anim svg { display: block; width: 100%; min-width: 600px; height: auto; font-family: var(--font-body); }
+.anim .a-zone { fill: var(--bg); stroke: var(--line); stroke-width: 1.5; }
+.anim .a-zone.inner { fill: var(--surface); stroke: var(--muted); stroke-dasharray: 6 4; }
+.anim .a-cap { font-size: 11px; font-weight: 600; letter-spacing: .08em; fill: var(--muted); }
+.anim .a-node rect { fill: var(--code-bg); stroke: var(--line); stroke-width: 1.5; transition: stroke .35s ease, fill .35s ease; }
+.anim .a-node.on rect { stroke: var(--accent); fill: var(--accent-soft); }
+.anim .a-t { font-size: 13.5px; font-weight: 600; fill: var(--ink); text-anchor: middle; }
+.anim .a-s { font: 400 11.5px var(--font-mono); fill: var(--muted); text-anchor: middle; }
+.anim .a-route { fill: none; stroke: var(--line); stroke-width: 2; stroke-linecap: round; transition: stroke .35s ease; }
+.anim .a-route.on { stroke: var(--accent); }
+.anim .a-door rect { fill: var(--surface); stroke: var(--muted); stroke-width: 1.5; transition: stroke .35s ease, fill .35s ease; }
+.anim .a-door.on rect { stroke: var(--accent); fill: var(--accent-soft); }
+.anim .a-port { font: 600 12px var(--font-mono); fill: var(--ink); text-anchor: middle; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.anim .a-lbl { font-size: 11.5px; fill: var(--muted); text-anchor: middle; transition: fill .35s ease; }
+.anim .a-lbl b { font-weight: 600; }
+.anim .a-lbl .h { font-weight: 600; fill: var(--ink); transition: fill .35s ease; }
+.anim .on > .a-lbl, .anim .a-lbl.on, .anim .on > .a-lbl .h, .anim .a-lbl.on .h { fill: var(--accent); }
+.anim .a-pkt { transition: opacity .3s ease; }
+.anim .a-pkt .core { fill: var(--accent); transition: fill .3s ease; }
+.anim .a-pkt .halo { fill: var(--accent); opacity: .22; transform-origin: center; transform-box: fill-box; animation: anim-pulse 1.8s ease-in-out infinite; transition: fill .3s ease; }
+.anim.back .a-pkt .core, .anim.back .a-pkt .halo { fill: var(--ok); }
+@keyframes anim-pulse { 0%, 100% { transform: scale(1); opacity: .22; } 50% { transform: scale(1.35); opacity: .1; } }
+.anim-bar { display: flex; align-items: flex-start; gap: 14px; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
+.anim-text { flex: 1; margin: 0; max-width: none; font-size: 14.5px; line-height: 1.45; min-height: 4.4em; }
+.anim-text b { color: var(--accent); }
+.anim-ctl { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.anim-count { font: 500 12px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 4px; white-space: nowrap; }
+.anim [data-k], .anim .a-pkt { transition: opacity .45s ease, fill .35s ease, stroke .35s ease; }
+.anim .off { opacity: 0; }
+.anim .a-node.bad rect { stroke: var(--warn); fill: var(--warn-soft); stroke-dasharray: 5 4; }
+.anim .a-node.good rect { stroke: var(--ok); }
+.anim .a-m { font: 500 12px var(--font-mono); fill: var(--ink); text-anchor: middle; }
+.anim .a-badge { font-size: 12.5px; font-weight: 600; fill: var(--muted); text-anchor: middle; }
+.anim .a-badge.start { text-anchor: start; }
+.anim .a-badge.good { fill: var(--ok); }
+.anim .a-badge.bad { fill: var(--warn); }
+details.lbl.solo { margin-top: 0; }
+@media (max-width: 600px) { .anim-bar { flex-direction: column; gap: 8px; } .anim-text { min-height: 5.8em; } }
+@media (prefers-reduced-motion: reduce) { .anim .a-pkt .halo { animation: none; } .anim * { transition: none !important; } }
+
+/* Notes: right-click a word, add a comment, see it in the margin joined to the word by a line (like Word). */
+:root { --note-hl: #fdecb3; --note-line: #b9770e; --note-card: #fffaf0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --note-hl: #4a3b12; --note-line: #e8b85a; --note-card: #221c0f; } }
+:root[data-theme="dark"] { --note-hl: #4a3b12; --note-line: #e8b85a; --note-card: #221c0f; }
+mark.note-hl { background: var(--note-hl); color: inherit; border-bottom: 2px solid var(--note-line); border-radius: 2px; cursor: pointer; }
+mark.note-hl.note-end::after { content: "✎"; display: inline-block; margin-left: 3px; font: 700 1em/1 var(--font-body); color: var(--note-line); vertical-align: baseline; margin-left: 4px; text-decoration: none; }
+mark.note-hl.active { outline: 2px solid var(--note-line); outline-offset: 1px; }
+.note-menu { position: fixed; z-index: 50; min-width: 200px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 28px rgba(0, 0, 0, .18); padding: 4px; }
+.note-menu[hidden], .notes-pane[hidden] { display: none; }
+.note-menu button { display: block; width: 100%; text-align: left; font: 500 14px/1.3 var(--font-body); color: var(--ink); background: none; border: 0; border-radius: 5px; padding: 8px 10px; cursor: pointer; }
+.note-menu button:hover, .note-menu button:focus-visible { background: var(--accent-soft); outline: none; }
+.note-menu .sub { display: block; font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 2px; overflow-wrap: anywhere; }
+dialog.note-dlg { width: min(460px, calc(100% - 32px)); padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: 0 16px 48px rgba(0, 0, 0, .25); }
+dialog.note-dlg::backdrop { background: rgba(10, 16, 22, .45); }
+.note-dlg form { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.note-dlg h2 { margin: 0; font: 700 18px/1.2 var(--font-display); }
+.note-quote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--note-line); background: var(--note-card); font-size: 14px; color: var(--muted); overflow-wrap: anywhere; max-height: 5.5em; overflow-y: auto; }
+.note-dlg textarea { width: 100%; min-height: 110px; resize: vertical; font: 15px/1.45 var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.note-dlg textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.note-actions { display: flex; align-items: center; gap: 8px; }
+.note-actions .sp { flex: 1; }
+.note-actions button, .notes-head button { font: 600 14px/1 var(--font-body); border-radius: 8px; padding: 10px 14px; cursor: pointer; border: 1px solid var(--line); background: none; color: var(--ink); }
+.note-actions button.primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.note-actions button.primary:disabled { opacity: .45; cursor: default; }
+.note-actions button.danger { color: var(--warn); border-color: var(--warn); }
+.notes-count { margin-left: 6px; font: 600 11px/1 var(--font-mono); background: var(--note-line); color: var(--surface); border-radius: 9px; padding: 2px 6px; }
+.notes-pane { position: fixed; z-index: 13; top: 54px; right: 0; bottom: 0; width: 300px; display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--line); }
+.notes-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.notes-head h2 { flex: 1; margin: 0; font: 700 15px/1.2 var(--font-body); }
+.notes-head button { font-size: 12.5px; padding: 6px 9px; border-radius: 6px; }
+.notes-margin { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.notes-pane.list .notes-margin { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.notes-empty { margin: 0; padding: 14px; font-size: 14px; color: var(--muted); }
+.note-card { background: var(--note-card); border: 1px solid var(--line); border-left: 3px solid var(--note-line); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; line-height: 1.45; cursor: pointer; min-width: 0; }
+.note-card[hidden] { display: none; }
+.notes-pane.margin .note-card { position: absolute; left: 16px; right: 10px; transition: top .15s ease; }
+.note-card.active { box-shadow: 0 0 0 2px var(--note-line); }
+.note-top { display: flex; align-items: baseline; gap: 6px; }
+.note-step { flex: 1; font-size: 11.5px; color: var(--muted); display: none; }
+.notes-pane.list .note-step { display: block; }
+.note-quote-s { flex: 1; margin: 0; font-size: 12px; color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.note-edit { font: 500 12px/1 var(--font-body); color: var(--accent); background: none; border: 0; padding: 2px 4px; cursor: pointer; }
+.note-text { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-date { margin: 6px 0 0; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.note-old { margin: 4px 0 0; font-size: 12px; color: var(--warn); }
+.notes-lines { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 12; }
+.notes-lines path { fill: none; stroke: var(--note-line); stroke-width: 1.5; opacity: .75; }
+.notes-lines circle { fill: var(--note-line); }
+body.notes-open { padding-right: 300px; }
+@media (max-width: 960px) {
+  .notes-pane { top: auto; left: 0; right: 0; width: auto; height: 45vh; border-left: 0; border-top: 1px solid var(--line); box-shadow: 0 -8px 24px rgba(0, 0, 0, .15); }
+  #notes-mode { display: none; }
+  body.notes-open { padding-right: 0; }
+}
+
+/* Bookmarks: save a spot with right-click, and the page remembers where you stopped reading. */
+#note-hint { display: block; max-width: 90ch; }
+mark.bm-hl { background: none; color: inherit; }
+mark.bm-hl.bm-start::before { content: "⚑"; color: var(--accent); font-size: .95em; margin-right: 3px; }
+.bm-wrap { position: relative; }
+.bm-list { position: absolute; right: 0; top: calc(100% + 8px); width: 330px; max-height: 60vh; overflow-y: auto; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); z-index: 16; }
+.bm-list[hidden] { display: none; }
+.bm-head { margin: 0; padding: 8px 10px 2px; font: 600 11.5px/1.2 var(--font-body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.bm-item { display: flex; align-items: flex-start; gap: 6px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; line-height: 1.35; }
+.bm-item:hover, .bm-item:focus-visible { background: var(--accent-soft); outline: none; }
+.bm-item .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.bm-item .s { display: block; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bm-x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 17px; line-height: 1; padding: 0 4px; }
+.bm-x:hover { color: var(--warn); }
+.bm-empty { margin: 0; padding: 10px; font-size: 13.5px; color: var(--muted); }
+.bm-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 40; max-width: calc(100% - 32px); display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; box-shadow: 0 8px 28px rgba(0, 0, 0, .2); font-size: 14px; }
+.bm-toast[hidden] { display: none; }
+.bm-toast button { font: 600 13px/1 var(--font-body); color: var(--accent); background: none; border: 0; cursor: pointer; padding: 4px; }
+/* break/fix drills */
+.drill { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 6px 18px 14px; margin: 18px 0 8px; min-width: 0; }
+.drill-label { font: 600 12px/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--warn); margin: 18px 0 4px; }
+details.answer { border-top: 1px dashed var(--line); margin-top: 14px; padding-top: 10px; font-size: 15px; }
+details.answer > summary { cursor: pointer; font-weight: 600; color: var(--ok); }
+details.answer > div { padding-top: 6px; }
+ol.method li { margin-top: 6px; }
+</style>
+<script>
+// Apply the saved theme and text size before the page paints, so there is no flash.
+try {
+  var t = localStorage.getItem('tutorial-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  var f = parseFloat(localStorage.getItem('tutorial-font')); if (f >= 0.8 && f <= 1.6) document.documentElement.style.setProperty('--fs', f);
+} catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#overview">Skip to the tutorial</a>
+<div class="readbar" id="readbar" aria-hidden="true"><span></span></div>
+<div class="tools" role="group" aria-label="Page settings">
+  <div class="tmenu">
+    <button type="button" class="tb-btn" id="tmenu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tmenu-list" title="Switch tutorial"><span class="long">Tutorials ▾</span><span class="short" aria-label="Tutorials">☰</span></button>
+    <div class="tmenu-list" id="tmenu-list" role="menu" aria-label="Tutorials" hidden>
+      <a role="menuitem" href="code-to-cluster-tutorial.html"><b>Code to Cluster</b><span>Part 1. On your PC with kind. Free.</span></a>
+      <a role="menuitem" href="eyes-on-the-cluster-tutorial.html"><b>Eyes on the Cluster</b><span>Part 2. Metrics, logs and alerts. Free.</span></a>
+      <a role="menuitem" href="platform-as-code-tutorial.html" aria-current="page"><b>Platform as Code</b><span>Part 3. The whole platform in Git. Free.</span></a>
+      <a role="menuitem" href="todo-on-eks-tutorial.html"><b>Todo on EKS</b><span>On AWS with EKS. Costs money.</span></a>
+    </div>
+  </div>
+  <span class="tb-done" id="tb-done" title="Steps you have ticked off">0/0 done</span>
+  <button type="button" class="tb-btn" id="font-down" aria-label="Smaller text" title="Smaller text">A−</button>
+  <button type="button" class="tb-btn" id="font-pct" aria-label="Reset text size" title="Reset text size">100%</button>
+  <button type="button" class="tb-btn" id="font-up" aria-label="Larger text" title="Larger text">A+</button>
+  <span class="bm-wrap"><button type="button" class="tb-btn" id="bm-btn" aria-haspopup="true" aria-expanded="false" aria-controls="bm-list" title="Bookmarks: go back to where you were">⚑<span class="tw"> Bookmarks</span></button><div class="bm-list" id="bm-list" role="menu" aria-label="Bookmarks" hidden></div></span>
+  <button type="button" class="tb-btn" id="notes-btn" aria-pressed="false" aria-controls="notes-pane" title="Show your notes">Notes<span class="notes-count" id="notes-count" hidden></span></button>
+  <button type="button" class="tb-btn" id="theme-btn"><span id="theme-glyph" aria-hidden="true">◐</span><span class="tw" id="theme-word"> Auto</span></button>
+</div>
+<button type="button" class="rail-open" id="rail-open" aria-label="Show the steps panel" title="Show the steps panel" hidden>»</button>
+
+<div class="shell">
+  <div class="rail-grip" id="rail-grip" role="separator" aria-orientation="vertical" aria-label="Resize the steps panel" aria-valuemin="180" aria-valuemax="480" aria-valuenow="250" tabindex="0" title="Drag to resize. Double-click to reset."></div>
+  <nav class="rail" aria-label="Steps">
+    <details id="rail-details" open>
+      <summary>Steps ▾</summary>
+      <div class="rail-head"><h2>Steps</h2><button type="button" class="rail-btn" id="rail-hide" aria-label="Hide the steps panel" title="Hide the steps panel">«</button></div>
+      <ol id="rail-list"></ol>
+      <div class="progress"><span id="progress-text">0 of 0 steps done</span><div class="bar"><span id="progress-bar"></span></div></div>
+    </details>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <p class="eyebrow">Hands-on tutorial · part 3 · about 3 hours · free, no cloud account</p>
+      <h1>Platform as Code</h1>
+      <p class="lede">Your cluster still depends on commands you typed. Describe the whole platform in Git instead: every component, every version and the fence around the todo team. Then delete the cluster and bring it all back with one script and a few minutes of waiting.</p>
+      <ul class="stack">
+        <li>Argo CD</li><li>App of apps</li><li>AppProjects</li><li>Helm</li><li>kind</li><li>GitHub Actions</li><li>Prometheus</li><li>Loki</li>
+      </ul>
+      <p class="ask-hint" id="ask-hint" hidden></p>
+      <p class="ask-hint" id="note-hint"><kbd>Right-click</kbd> a word and choose <b>Add a note</b> to save a comment. It stays highlighted, and your notes appear in the margin (button <b>Notes</b> at the top). Choose <b>Bookmark this spot</b> to mark a place you want to come back to. The page also remembers where you stopped reading. Everything is kept in this browser.</p>
+    </header>
+
+    <!-- ============ 0 ============ -->
+    <section class="step" id="overview" data-step>
+      <div class="step-head"><span class="num">00</span><h2>What you'll build</h2></div>
+      <p>Right now your cluster depends on commands you typed: three <code>helm upgrade --install</code> lines and a <code>kubectl apply</code>. Nobody can review them, and if the cluster disappears you have to remember them in the right order. By the end of this part, Git describes everything and Argo CD builds it:</p>
+      <p>The diagram plays by itself. Use the buttons to pause it or step through:</p>
+      <figure class="anim" aria-label="Animated diagram: how one script and one root Application build the whole platform from Git">
+          <div class="anim-stage"><svg viewBox="0 0 820 410" role="img" aria-label="You run a bootstrap script. It creates a kind cluster and installs the NGINX Gateway Fabric controller and Argo CD. It applies one root Application. The root Application reads the platform apps folder in your GitHub repo and creates five child Applications: monitoring, loki, alloy, loadgen and todo. Each child pulls its chart and your values from Git.">
+            <rect class="a-zone inner" x="180" y="12" width="628" height="316" rx="12"/>
+            <text class="a-cap" x="198" y="34">KUBERNETES CLUSTER (KIND)</text>
+            <path class="a-route" data-k="r1" d="M156 166 H210"/>
+            <path class="a-route" data-k="r2" d="M330 166 H380"/>
+            <path class="a-route" data-k="r4" d="M440 350 V194"/>
+            <path class="a-route" data-k="r3" d="M480 166 C560 166 560 50 640 50"/>
+            <path class="a-route" data-k="r3" d="M480 166 C560 166 560 110 640 110"/>
+            <path class="a-route" data-k="r3" d="M480 166 H640"/>
+            <path class="a-route" data-k="r3" d="M480 166 C560 166 560 230 640 230"/>
+            <path class="a-route" data-k="r3" d="M480 166 C560 166 560 290 640 290"/>
+            <path class="a-route" data-k="r5" d="M510 370 H710 V312"/>
+            <text class="a-lbl" data-k="r2" x="355" y="156">applies</text>
+            <text class="a-lbl" data-k="r4" x="478" y="262">reads the folder</text>
+            <text class="a-lbl" data-k="r5" x="610" y="362">chart + your values</text>
+            <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+            <g class="a-node" data-k="script"><rect x="16" y="138" width="140" height="56" rx="8"/><text class="a-t" x="86" y="162">bootstrap.sh</text><text class="a-s" x="86" y="180">run once</text></g>
+            <g class="a-node" data-k="argo"><rect x="210" y="138" width="120" height="56" rx="8"/><text class="a-t" x="270" y="162">Argo CD</text><text class="a-s" x="270" y="180">+ NGINX gateway</text></g>
+            <g class="a-node" data-k="root"><rect x="380" y="138" width="100" height="56" rx="8"/><text class="a-t" x="430" y="162">root</text><text class="a-s" x="430" y="180">app of apps</text></g>
+            <g class="a-node" data-k="ch1"><rect x="640" y="30" width="140" height="40" rx="8"/><text class="a-t" x="710" y="55">monitoring</text></g>
+            <g class="a-node" data-k="ch2"><rect x="640" y="90" width="140" height="40" rx="8"/><text class="a-t" x="710" y="115">loki</text></g>
+            <g class="a-node" data-k="ch3"><rect x="640" y="150" width="140" height="40" rx="8"/><text class="a-t" x="710" y="175">alloy</text></g>
+            <g class="a-node" data-k="ch4"><rect x="640" y="210" width="140" height="40" rx="8"/><text class="a-t" x="710" y="235">loadgen</text></g>
+            <g class="a-node" data-k="ch5"><rect x="640" y="270" width="140" height="40" rx="8"/><text class="a-t" x="710" y="295">todo</text></g>
+            <g class="a-node" data-k="git"><rect x="370" y="350" width="140" height="40" rx="8"/><text class="a-t" x="440" y="375">GitHub repo</text></g>
+          </svg></div>
+          <div class="anim-bar">
+            <p class="anim-text"></p>
+            <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+          </div>
+          <script type="application/json">[
+            {"on": "script argo r1", "path": [[156, 166], [210, 166]], "text": "<b>You run one script, once per cluster.</b> It creates the kind cluster, installs the NGINX gateway controller and installs Argo CD. Those three are the only things a script does."},
+            {"on": "argo root r2", "path": [[330, 166], [380, 166]], "text": "<b>It applies one file:</b> the <b>root</b> Application. After this, you never run a deploy command again."},
+            {"on": "root git r4", "path": [[440, 350], [440, 194]], "text": "<b>Root reads a folder in Git.</b> Argo CD reads your GitHub repo, not your PC, so only pushed files count."},
+            {"on": "root ch1 ch2 ch3 ch4 ch5 r3", "path": [[480, 166], [560, 166], [640, 170]], "text": "<b>Every file in that folder is an Application,</b> so root creates five children: monitoring, loki, alloy, loadgen and todo."},
+            {"on": "git ch1 ch2 ch3 ch4 ch5 r5", "path": [[510, 370], [710, 370], [710, 312]], "text": "<b>Each child pulls what it needs from Git:</b> a Helm chart at a pinned version, plus your values file, or plain manifests."},
+            {"bad": "ch5", "on": "ch1", "text": "<b>Order is not guaranteed.</b> todo may try first, before monitoring has created the ServiceMonitor object type. It fails, waits and retries, and the retry succeeds."},
+            {"good": "root ch1 ch2 ch3 ch4 ch5", "on": "git", "text": "<b>Converged.</b> A few minutes later everything is Synced and Healthy. Adding a component is now adding one file to the folder and merging."}
+          ]</script>
+      </figure>
+
+      <p>That pattern is called <b>app of apps</b>: an Application whose job is to create other Applications. Adding a new platform component becomes "add one file to <code>infra/platform/apps/</code> and merge".</p>
+      <h3>What problem each piece solves</h3>
+      <div class="table-wrap"><table class="problem-table">
+        <thead><tr><th>The problem</th><th>The piece</th><th>What it does about it</th></tr></thead>
+        <tbody>
+          <tr><td>The platform was installed by hand, so nobody can review or repeat it.</td><td><b>App of apps</b> (steps 4–6)</td><td>Each component is a file in Git. Argo CD installs and keeps them all.</td></tr>
+          <tr><td>"Latest" today is a different version tomorrow, so two rebuilds aren't the same.</td><td><b>Pinned chart versions</b> (step 2)</td><td>Every chart version is written down. Upgrades are commits.</td></tr>
+          <tr><td>Things install in the wrong order: the todo chart needs object types the monitoring chart creates.</td><td><b>Retries and sync options</b> (step 5)</td><td>Argo CD waits and tries again until the order sorts itself out.</td></tr>
+          <tr><td>Any app can deploy anything anywhere, including cluster-wide permissions.</td><td><b>AppProjects</b> (step 5)</td><td>A team's apps may only deploy from its repo, into its namespace.</td></tr>
+          <tr><td>A typo in a values file only shows up after it's merged.</td><td><b>A check in CI</b> (step 10)</td><td>Every pull request renders every chart before anyone merges.</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Words you'll meet</h3>
+      <dl class="glossary">
+        <dt>Application</dt><dd>An Argo CD object (<code>kind: Application</code>) that says "keep this folder or chart deployed to that namespace".</dd>
+        <dt>App of apps</dt><dd>An Application whose folder holds other Applications. One root app then builds everything.</dd>
+        <dt>AppProject</dt><dd>A fence around a team's Applications: which repos, which namespaces, which kinds of resource.</dd>
+        <dt>Sync</dt><dd>Argo CD making the cluster match Git. <b>Synced</b> means they match; <b>OutOfSync</b> means they don't.</dd>
+        <dt>Self-heal and prune</dt><dd>Self-heal undoes changes made by hand in the cluster. Prune deletes things that were removed from Git.</dd>
+        <dt>Finalizer</dt><dd>A marker that makes Kubernetes run cleanup before deleting an object. Here it deletes everything an Application created.</dd>
+        <dt>Pinned version</dt><dd>An exact version number written down, instead of "the newest".</dd>
+      </dl>
+    </section>
+
+    <!-- ============ 1 ============ -->
+    <section class="step" id="start" data-step>
+      <div class="step-head"><span class="num">01</span><h2>Check where you're starting from</h2></div>
+      <p class="goal"><b>Goal:</b> your repo has the <code>infra/platform/</code> folder from part 2 and your local copy is up to date.</p>
+      <p>You need parts 1 and 2 done. Your repo should look like this:</p>
+      <figure class="code"><figcaption>infra-setup/ (the parts that matter here)</figcaption><pre><code>src/api/  src/ui/  charts/todo/  .github/workflows/ci.yml
+deploy/argocd-app.yaml
+infra/kind-config.yaml
+infra/platform/monitoring-values.yaml
+infra/platform/loki-values.yaml
+infra/platform/alloy-values.yaml
+infra/platform/loadgen.yaml</code></pre></figure>
+      <figure class="code"><figcaption>bash: in infra-setup/</figcaption><pre><code>git switch main
+git pull</code></pre></figure>
+      <p>Leave your cluster running for now if you still have it. You'll delete it and rebuild from Git in step 6.</p>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 2 ============ -->
+    <section class="step" id="pin" data-step>
+      <div class="step-head"><span class="num">02</span><h2>Write down exact versions</h2></div>
+      <p class="goal"><b>Goal:</b> you know the exact version of every component the rebuild will install.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>A rebuild that isn't identical isn't a rebuild. If a command says "the newest", running it next month gives a different platform. Pin everything, and make each upgrade a deliberate commit you can revert.</p>
+        <p>It's the same idea as a <code>package-lock.json</code> or exact NuGet versions, applied to infrastructure.</p>
+      </div>
+      <p>You already pinned most of these in parts 1 and 2. These are the numbers the files below use:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Component</th><th>Version</th><th>Where it was pinned</th></tr></thead>
+        <tbody>
+          <tr><td>kube-prometheus-stack (Helm chart)</td><td><code>92.3.0</code></td><td>part 2, step 2</td></tr>
+          <tr><td>loki (Helm chart)</td><td><code>7.3.0</code></td><td>part 2, step 8</td></tr>
+          <tr><td>alloy (Helm chart)</td><td><code>1.13.1</code></td><td>part 2, step 8</td></tr>
+          <tr><td>NGINX Gateway Fabric (Helm chart and Gateway API types)</td><td><code>2.7.2</code></td><td>part 1, step 5</td></tr>
+          <tr><td>Argo CD</td><td><code>v3.5.4</code></td><td>new: part 1 used the <code>stable</code> link</td></tr>
+        </tbody>
+      </table></div>
+      <p>If your cluster from part 2 is still running, check that it matches. The <b>CHART</b> column shows names like <code>kube-prometheus-stack-92.3.0</code>; the number after the last dash is the chart version:</p>
+      <figure class="code"><figcaption>bash</figcaption><pre><code>helm list -n monitoring</code></pre></figure>
+      <p>Newer releases will exist by the time you read this. Stay on these for the tutorial. Upgrading is step 11.</p>
+      <div class="callout"><p><strong>Chart version and app version are different numbers.</strong> <code>helm search repo</code> shows both. The chart version is the package's version; the app version is the software inside it. You always pin the <b>chart</b> version, which in turn fixes the app version.</p></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 3 ============ -->
+    <section class="step" id="layout" data-step>
+      <div class="step-head"><span class="num">03</span><h2>Lay out the repo</h2></div>
+      <p class="goal"><b>Goal:</b> the repo has <code>infra/platform/apps/</code>, <code>infra/platform/loadgen/</code> and <code>infra/bootstrap/</code>.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Argo CD watches folders. Give each kind of thing its own folder so one Application can own exactly one job: <code>infra/platform/apps/</code> holds Applications and nothing else, <code>infra/platform/loadgen/</code> holds plain manifests, and <code>infra/bootstrap/</code> holds the one file you apply by hand.</p>
+      </div>
+      <figure class="code"><figcaption>bash: in infra-setup/</figcaption><pre><code>mkdir -p infra/platform/apps infra/platform/loadgen infra/bootstrap
+git mv infra/platform/loadgen.yaml infra/platform/loadgen/loadgen.yaml
+git mv deploy/argocd-app.yaml infra/platform/apps/todo.yaml</code></pre></figure>
+      <p>The result:</p>
+      <figure class="code"><figcaption>infra-setup/infra/</figcaption><pre><code>bootstrap/
+  root.yaml              ← step 6: the only Application you apply by hand
+bootstrap.sh             ← step 6: builds a cluster from nothing
+kind-config.yaml
+platform/
+  apps/                  ← one file per component; the root app watches this
+    monitoring.yaml
+    loki.yaml
+    alloy.yaml
+    loadgen.yaml
+    todo.yaml
+    team-todo-project.yaml
+  loadgen/loadgen.yaml   ← plain manifests
+  monitoring-values.yaml
+  loki-values.yaml
+  alloy-values.yaml</code></pre></figure>
+      <p><code>git mv</code> moves a file and tells Git it's the same file, so its history follows it. The <code>deploy/</code> folder from part 1 is now empty, and Git doesn't keep empty folders.</p>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 4 ============ -->
+    <section class="step" id="platform-apps" data-step>
+      <div class="step-head"><span class="num">04</span><h2>Describe the platform as Applications</h2></div>
+      <p class="goal"><b>Goal:</b> four new files in <code>infra/platform/apps/</code>, one per platform component.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Each <code>helm upgrade --install</code> from part 2 becomes an Argo CD Application. There's a twist: the chart lives in someone else's Helm repository, but your values file lives in <b>your</b> Git repo. A <b>multi-source</b> Application reads from both. One source is the chart; the other is your repo, given a name (<code>ref: values</code>) so the chart can refer to files in it as <code>$values/…</code>.</p>
+      </div>
+      <p>In each file, put your GitHub user name in <code>repoURL</code>. The versions are the ones from step 2.</p>
+      <figure class="code"><figcaption>infra/platform/apps/monitoring.yaml</figcaption><pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 92.3.0
+      helm:
+        releaseName: mon
+        valueFiles:
+          - $values/infra/platform/monitoring-values.yaml
+    - repoURL: https://github.com/&lt;your-user&gt;/infra-setup.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  # The operator fills in these fields itself after install. Don't fight it.
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the monitoring Application</summary><div><dl>
+        <dt><code>finalizers</code></dt><dd>When this Application is deleted, first delete everything it created. Without it, deleting the Application leaves the monitoring stack running with nothing managing it. You'll use this in step 9.</dd>
+        <dt><code>sources</code> (plural)</dt><dd>Two places to read from. Part 1's app used <code>source</code> (singular) because chart and values were in the same repo.</dd>
+        <dt><code>chart</code> + <code>targetRevision</code></dt><dd>For a Helm repository, the chart's name and its exact version. For a Git repo, <code>targetRevision</code> is a branch, tag or commit.</dd>
+        <dt><code>releaseName: mon</code></dt><dd>The same release name as part 2, so resources keep the same names (<code>mon-grafana</code>) and your port-forward commands still work.</dd>
+        <dt><code>$values/…</code></dt><dd>"The file at this path in the source called <code>values</code>", which is the second source, your repo.</dd>
+        <dt><code>ref: values</code></dt><dd>Names that source. It's only used for values files; Argo CD doesn't deploy anything from it.</dd>
+        <dt><code>ignoreDifferences</code></dt><dd>Some controllers write into their own resources after install, here a certificate in the webhook settings. Argo CD would see that as drift and undo it, forever. This tells it to ignore those fields.</dd>
+        <dt><code>ServerSideApply=true</code></dt><dd>The stack's object type definitions are too large for the normal apply mode. The same reason part 1's Argo CD install needed <code>--server-side</code>.</dd>
+        <dt><code>RespectIgnoreDifferences=true</code></dt><dd>Also skip those fields when syncing, not only when comparing.</dd>
+      </dl></div></details>
+      <figure class="code"><figcaption>infra/platform/apps/loki.yaml</figcaption><pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: loki
+      targetRevision: 7.3.0
+      helm:
+        releaseName: loki
+        valueFiles:
+          - $values/infra/platform/loki-values.yaml
+    - repoURL: https://github.com/&lt;your-user&gt;/infra-setup.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true</code></pre></figure>
+      <figure class="code"><figcaption>infra/platform/apps/alloy.yaml</figcaption><pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: alloy
+      targetRevision: 1.13.1
+      helm:
+        releaseName: alloy
+        valueFiles:
+          - $values/infra/platform/alloy-values.yaml
+    - repoURL: https://github.com/&lt;your-user&gt;/infra-setup.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true</code></pre></figure>
+      <p>The load generator is plain YAML in your repo, so it needs only one source:</p>
+      <figure class="code"><figcaption>infra/platform/apps/loadgen.yaml</figcaption><pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loadgen
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/&lt;your-user&gt;/infra-setup.git
+    targetRevision: main
+    path: infra/platform/loadgen
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: loadgen
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }</code></pre></figure>
+      <div class="callout warn"><p><strong>Pausing the load generator now means a commit.</strong> <code>kubectl scale … --replicas=0</code> from part 2 gets undone within seconds, because <code>selfHeal</code> puts the cluster back the way Git says. To pause, set <code>replicas: 0</code> in <code>infra/platform/loadgen/loadgen.yaml</code> and push. You'll see this happen on purpose in step 8.</p></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>An Application can combine a chart from a Helm repository with values from Git.</li>
+        <li>Platform components are deployed exactly like apps. The platform team uses its own paved road.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 5 ============ -->
+    <section class="step" id="project" data-step>
+      <div class="step-head"><span class="num">05</span><h2>Fence in the todo team</h2></div>
+      <p class="goal"><b>Goal:</b> the todo app belongs to its own AppProject, and is set up to cope with being installed before the monitoring stack.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>So far every Application uses the <code>default</code> project, which allows any repo, any namespace and any resource, including cluster-wide permissions. On a shared cluster, that means one team's mistake can break everyone.</p>
+        <p>An <b>AppProject</b> is a fence around a team's Applications: which repos they may deploy from, which namespaces they may deploy into, and which kinds of resource they may create. Platform components stay in <code>default</code> for now; the todo app gets its own project.</p>
+      </div>
+      <figure class="code"><figcaption>infra/platform/apps/team-todo-project.yaml</figcaption><pre><code>apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: team-todo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"    # create the fence before the app
+spec:
+  description: The todo app team
+  sourceRepos:
+    - https://github.com/&lt;your-user&gt;/infra-setup.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: todo
+  # Cluster-wide resources this team may create: only its namespace.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  # Warn about things in the namespace that aren't in Git.
+  orphanedResources:
+    warn: true</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the AppProject</summary><div><dl>
+        <dt><code>sync-wave: "-1"</code></dt><dd>The root app applies its files in waves, lowest number first. The project goes in wave -1 so it exists before the todo Application (wave 0, the default) refers to it.</dd>
+        <dt><code>sourceRepos</code></dt><dd>Where this team's Applications may read from. Their own repo only.</dd>
+        <dt><code>destinations</code></dt><dd>Where they may deploy: this cluster, namespace <code>todo</code>, nothing else.</dd>
+        <dt><code>clusterResourceWhitelist</code></dt><dd>Cluster-wide resource types the team may create. Anything not on this list is refused, including ClusterRoles, which could grant power over the whole cluster. <code>Namespace</code> is allowed so <code>CreateNamespace=true</code> still works.</dd>
+        <dt><code>orphanedResources.warn</code></dt><dd>Flags resources in the <code>todo</code> namespace that don't come from Git. Someone ran <code>kubectl create</code> by hand. You'll see it in step 8.</dd>
+      </dl></div></details>
+      <p>Now update the todo Application you moved in step 3. Replace the whole file:</p>
+      <figure class="code"><figcaption>infra/platform/apps/todo.yaml</figcaption><pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: todo
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: team-todo
+  source:
+    repoURL: https://github.com/&lt;your-user&gt;/infra-setup.git
+    targetRevision: main
+    path: charts/todo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: todo
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 10
+      backoff: { duration: 15s, factor: 2, maxDuration: 3m }</code></pre></figure>
+      <details class="lbl"><summary>Line by line: what changed</summary><div><dl>
+        <dt><code>project: team-todo</code></dt><dd>Inside the fence.</dd>
+        <dt><code>SkipDryRunOnMissingResource=true</code></dt><dd>The todo chart contains a ServiceMonitor and a PrometheusRule. Those types only exist once the monitoring stack is installed. On a fresh cluster both install at once, and without this option Argo CD's dry run fails on the unknown types before it even tries.</dd>
+        <dt><code>retry</code></dt><dd>If a sync fails, try again: after 15 s, then 30 s, then 60 s, up to 3 minutes apart, 10 times. By then the monitoring stack has created the types and the sync succeeds. Ordering problems in GitOps are usually solved with retries, not with scripts.</dd>
+      </dl></div></details>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>An AppProject is where a platform team sets limits for app teams: sources, destinations, resource types.</li>
+        <li>On a fresh cluster things arrive in whatever order they arrive. Design for that with retries instead of fixed ordering.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 6 ============ -->
+    <section class="step" id="bootstrap" data-step>
+      <div class="step-head"><span class="num">06</span><h2>Write the root app and the bootstrap script</h2></div>
+      <p class="goal"><b>Goal:</b> deleting the cluster and running <code>./infra/bootstrap.sh</code> brings everything back.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Something has to start the chain. The <b>root</b> Application watches <code>infra/platform/apps/</code>, so every file there becomes a child Application. The bootstrap script does the three things Git can't: create the cluster, install Argo CD, and apply the root app.</p>
+      </div>
+      <figure class="code"><figcaption>infra/bootstrap/root.yaml</figcaption><pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/&lt;your-user&gt;/infra-setup.git
+    targetRevision: main
+    path: infra/platform/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }</code></pre></figure>
+            <p>The script does the three things Git can't do for itself: create the cluster, install the NGINX gateway controller and install Argo CD, then apply the root app. It's the same commands you ran in parts 1 and 2, gathered in one file with the versions pinned at the top:</p>
+      <figure class="code"><figcaption>infra/bootstrap.sh</figcaption><pre><code>#!/usr/bin/env bash
+# Builds the lab from nothing: cluster, gateway, Argo CD, then everything else from Git.
+set -euo pipefail
+cd "$(dirname "$0")/.."      # work from the repo root, wherever the script is run from
+
+ARGOCD_VERSION=v3.5.4
+NGF_VERSION=2.7.2
+
+kind create cluster --name todo --config infra/kind-config.yaml
+
+# NGINX Gateway Fabric: the Gateway API object types, then the controller.
+kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v${NGF_VERSION}" | kubectl apply -f -
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --version "${NGF_VERSION}" \
+  --create-namespace --namespace nginx-gateway \
+  --set nginx.service.type=NodePort \
+  --set-json 'nginx.service.nodePorts=[{"port":31437,"listenerPort":80}]'
+kubectl -n nginx-gateway wait --timeout=5m deployment/ngf-nginx-gateway-fabric --for=condition=Available
+
+# Argo CD.
+kubectl create namespace argocd
+kubectl apply -n argocd --server-side --force-conflicts \
+  -f "https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml"
+kubectl -n argocd rollout status deployment/argocd-server --timeout=5m
+
+# From here on, Git is in charge.
+kubectl apply -f infra/bootstrap/root.yaml
+
+echo
+echo "Argo CD admin password:"
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+echo</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the script</summary><div><dl>
+        <dt><code>set -euo pipefail</code></dt><dd>Stop at the first failing command, treat unset variables as errors, and notice failures inside pipes. Every bash script that changes infrastructure should start with this.</dd>
+        <dt><code>cd "$(dirname "$0")/.."</code></dt><dd>Moves to the folder above the script, which is the repo root. The paths below then work wherever you run the script from.</dd>
+        <dt><code>ARGOCD_VERSION</code>, <code>NGF_VERSION</code></dt><dd>Argo CD and the gateway are pinned too, instead of the <code>stable</code> link used in part 1.</dd>
+        <dt><code>--config infra/kind-config.yaml</code></dt><dd>The file from part 1 that opens port 8080 on your PC. Without it the cluster has no way in and <code>localhost:8080</code> shows nothing.</dd>
+        <dt><code>--timeout=5m</code></dt><dd>Don't wait forever.</dd>
+      </dl></div></details>
+      <div class="callout"><p><strong>Why is the gateway installed by the script and not by Argo CD?</strong> The todo app can't work without it, and it needs two kinds of source (a kustomize folder and an OCI chart), which would distract from the pattern in this part. At work it would be another Application. That's the first idea in "Where to go next".</p></div>
+      <figure class="code"><figcaption>bash: in infra-setup/</figcaption><pre><code>chmod +x infra/bootstrap.sh
+git add -A
+git commit -m "Manage the whole platform from Git"
+git push</code></pre></figure>
+
+      <p>Check the commit on GitHub contains <code>infra/platform/apps/</code> with six files (five Applications and the project). Argo CD reads from GitHub, not from your PC, so anything not pushed doesn't exist as far as the rebuild is concerned.</p>
+      <p>Now the real test. Delete the cluster and rebuild, timing yourself:</p>
+      <figure class="code"><figcaption>bash: in infra-setup/</figcaption><pre><code>kind delete cluster --name todo
+time ./infra/bootstrap.sh</code></pre></figure>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 7 ============ -->
+    <section class="step" id="converge" data-step>
+      <div class="step-head"><span class="num">07</span><h2>Watch it converge</h2></div>
+      <p class="goal"><b>Goal:</b> all six Applications (root and its five children) are <b>Synced</b> and <b>Healthy</b>, and the Todo API dashboard shows live data.</p>
+      <figure class="code"><figcaption>bash</figcaption><pre><code>kubectl -n argocd get applications -w</code></pre></figure>
+      <p>Over the next five or so minutes you'll see something like this. Expect some red on the way:</p>
+      <ol>
+        <li><code>root</code> syncs and creates the project and five child Applications.</li>
+        <li><code>monitoring</code>, <code>loki</code>, <code>alloy</code> and <code>loadgen</code> start syncing at once.</li>
+        <li><code>todo</code> may show <b>SyncFailed</b> or <b>Retrying</b> for a minute, because the ServiceMonitor type doesn't exist yet. Then it succeeds on a retry.</li>
+        <li>Everything ends <b>Synced</b> and <b>Healthy</b>. <code>root</code> is the last to say Healthy.</li>
+      </ol>
+      <p>Open the Argo CD page (<code>kubectl -n argocd port-forward svc/argocd-server 8443:443</code>, sign in with the password the script printed) and click <code>root</code>. You'll see the tree: root → Applications → each Application's resources.</p>
+      <p>Then open Grafana (<code>kubectl -n monitoring port-forward svc/mon-grafana 3000:80</code>). The <b>Todo API</b> dashboard is there and filling, with no command from you beyond the script.</p>
+      <p>And open <a href="http://localhost:8080">http://localhost:8080</a>: the todo app is back, served through the NGINX gateway. The database is new, so the list is empty.</p>
+      <div class="callout"><p><strong>How long did it take?</strong> Write the number down. Most of it is image downloads. You've turned "half a day and a good memory" into one script and a few minutes, and anyone with the repo can do the same.</p></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Losing the cluster is now cheap. That changes how you work: you can experiment freely, because the way back is one command.</li>
+        <li>GitOps systems converge. Errors along the way are normal; only the end state matters.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ Drills intro ============ -->
+    <section class="step" id="drills" data-step>
+      <div class="step-head"><span class="num">··</span><h2>Drills for a GitOps platform</h2></div>
+      <p>The next four steps are drills, run the same way as in part 2: predict, break, diagnose, fix through Git, write three lines in <code>drills.md</code>. These ones test the platform's behaviour rather than the app's.</p>
+    </section>
+
+    <!-- ============ 8 ============ -->
+    <section class="step" id="drift" data-step>
+      <div class="step-head"><span class="num">08</span><h2>Drill: change things behind Git's back</h2></div>
+      <p class="goal"><b>Goal:</b> you know which hand changes Argo CD undoes, and which it can only warn you about.</p>
+      <div class="drill">
+        <p class="drill-label">Predict, then try each one</p>
+        <p>For each command, predict what happens in the next 30 seconds, run it, and watch <code>kubectl get</code> and the Argo CD page.</p>
+        <figure class="code"><figcaption>bash</figcaption><pre><code># 1. Scale something Git says has 2 replicas
+kubectl -n todo scale deploy/todo-api --replicas=4
+
+# 2. Delete something Git says should exist
+kubectl -n monitoring delete svc mon-grafana
+
+# 3. Pause the load generator by hand
+kubectl -n loadgen scale deploy/loadgen --replicas=0
+
+# 4. Add something Git doesn't know about
+kubectl -n todo create configmap quick-fix --from-literal=debug=true</code></pre></figure>
+        <details class="answer"><summary>Check your answers</summary><div>
+          <p>1 to 3 are undone within seconds. <code>selfHeal</code> means Argo CD compares the cluster with Git all the time, not just after a commit. Hand-made emergency fixes don't survive, which is the point: the fix has to go through Git, or it gets lost.</p>
+          <p>4 stays. Argo CD only manages what's in Git; it has no reason to delete something it never created. Because of <code>orphanedResources.warn</code> in the team's project, the <code>todo</code> app shows a warning about one orphaned resource. Click it in Argo CD. Without that setting, nothing at all would tell you.</p>
+          <p>Delete it with <code>kubectl -n todo delete configmap quick-fix</code>. Then write your three lines.</p>
+        </div></details>
+      </div>
+      <div class="callout"><p><strong>When you really need a hand change during an incident</strong>, disable auto-sync on that one Application from the Argo CD page, make the change, then put the fix in Git and re-enable it. Write down that you did it. At work, that's what a change log is for.</p></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 9 ============ -->
+    <section class="step" id="fence" data-step>
+      <div class="step-head"><span class="num">09</span><h2>Drill: test the fence</h2></div>
+      <p class="goal"><b>Goal:</b> the AppProject refuses a cluster-wide permission, and removing a component from Git removes it from the cluster.</p>
+      <div class="drill">
+        <p class="drill-label">Break it: a team asks for too much</p>
+        <p>Add this file to the todo chart, as if a developer wanted their app to read every Secret in the cluster. Commit and push.</p>
+        <figure class="code"><figcaption>charts/todo/templates/too-much.yaml</figcaption><pre><code>apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: todo-read-everything
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]</code></pre></figure>
+        <p class="drill-label">Diagnose</p>
+        <ul>
+          <li>What does the <code>todo</code> app show in Argo CD? What's the exact message?</li>
+          <li>Did the rest of the app's resources still sync?</li>
+          <li>Who would normally decide whether a team gets this permission, and how would they grant it?</li>
+        </ul>
+        <details class="answer"><summary>Check your answers</summary><div>
+          <p>The sync fails with a message that ClusterRole isn't permitted in project <code>team-todo</code>. Nothing in the sync is applied, so the app stays on its last good state. The fence holds even though the developer controls their own chart.</p>
+          <p>A request like this goes to the platform team, who add it to the platform's own Applications after a review, not through the app's chart.</p>
+        </div></details>
+        <p class="drill-label">Fix it</p>
+        <figure class="code"><figcaption>bash</figcaption><pre><code>git rm charts/todo/templates/too-much.yaml
+git commit -m "Remove ClusterRole"
+git push</code></pre></figure>
+      </div>
+      <div class="drill">
+        <p class="drill-label">Remove a component</p>
+        <p>Predict what happens to the load generator's namespace and pod, then:</p>
+        <figure class="code"><figcaption>bash</figcaption><pre><code>git mv infra/platform/apps/loadgen.yaml infra/platform/loadgen-app.yaml.off
+git commit -m "Retire the load generator"
+git push</code></pre></figure>
+        <details class="answer"><summary>Check your answers</summary><div>
+          <p>The root app prunes the <code>loadgen</code> Application, because its file left the folder root watches. The finalizer on that Application then deletes everything it created: the Deployment, the pod and the <code>loadgen</code> namespace. One commit retires a whole component, and the history shows when and who.</p>
+          <p>Without the finalizer, the Application would disappear and the pod would keep running, unmanaged. That's an easy way to end up with forgotten things on a cluster.</p>
+        </div></details>
+        <p class="drill-label">Fix it</p>
+        <p>Move the file back with <code>git mv infra/platform/loadgen-app.yaml.off infra/platform/apps/loadgen.yaml</code>, commit and push. Write your three lines for both drills.</p>
+      </div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 10 ============ -->
+    <section class="step" id="ci-check" data-step>
+      <div class="step-head"><span class="num">10</span><h2>Drill: a typo in the platform</h2></div>
+      <p class="goal"><b>Goal:</b> you see what a broken values file does, then add a check that catches it before merge.</p>
+      <div class="drill">
+                <p class="drill-label">Break it, loudly</p>
+        <p>Make two mistakes in one commit. In <code>infra/platform/monitoring-values.yaml</code>, remove two spaces in front of <code>sidecar:</code> so it no longer sits under <code>grafana:</code>. In <code>infra/platform/apps/loki.yaml</code>, change <code>targetRevision</code> to <code>99.0.0</code>. Commit both and push.</p>
+        <p class="drill-label">Diagnose</p>
+        <ul>
+          <li>What does each Application show in Argo CD, and where is the message?</li>
+          <li>Is Grafana or Loki down? What would happen if one of their pods restarted now?</li>
+        </ul>
+        <details class="answer"><summary>Check your answers</summary><div>
+          <p><code>loki</code> shows a <b>ComparisonError</b>: Argo CD can't find chart version 99.0.0. <code>monitoring</code> shows the same kind of error, because the values file is no longer valid YAML (the dedented <code>sidecar:</code> leaves the lines under it with the wrong indentation). The message is on the Application's page under its conditions.</p>
+          <p>Nothing is down yet. Argo CD can't work out the new desired state, so it leaves the old one running. But the platform is stuck: no other change to those components can go out until this is fixed.</p>
+        </div></details>
+        <p class="drill-label">Fix it</p>
+        <p>Revert the commit and push.</p>
+        <p class="drill-label">Break it, quietly</p>
+        <p>This time make a typo that is still valid. In <code>infra/platform/monitoring-values.yaml</code>, delete the <b>s</b> from <code>serviceMonitorSelectorNilUsesHelmValues</code> so it reads <code>serviceMonitorSelectorNilUseHelmValues</code>. Commit and push. Predict what Argo CD shows first.</p>
+        <p class="drill-label">Diagnose</p>
+        <ul>
+          <li>What do the Applications show in Argo CD? Would a render check in CI have caught this?</li>
+          <li>What happens in Prometheus' <b>Target health</b> page, and which alert from part 2 fires? How long does it take?</li>
+          <li>Why did that setting matter? (Look at part 2, step 2.)</li>
+        </ul>
+        <details class="answer"><summary>Check your answers</summary><div>
+          <p>Everything stays <b>Synced</b> and <b>Healthy</b>. A misspelled key is still valid YAML, and Helm ignores values it doesn't know. A render check would pass too.</p>
+          <p>The setting you misspelled made Prometheus watch every ServiceMonitor. Back at its default, it only watches ones labelled <code>release: mon</code>, and the todo chart's ServiceMonitor doesn't carry that label. The <code>todo-api</code> target disappears from <b>Target health</b>, the dashboard's graphs go to <b>No data</b>, and <code>TodoApiDown</code> fires after a few minutes. It's the same signature as drill 4 in part 2, with a different cause.</p>
+          <p>A pipeline that is green proves your files parse and your versions exist. It doesn't prove a setting is spelled right. The alerts you wrote in part 2 are what caught this.</p>
+        </div></details>
+        <p class="drill-label">Fix it</p>
+        <p>Revert the commit and push. Prometheus picks the ServiceMonitor up again within a minute, and the alert resolves a little later. Write your three lines for both.</p>
+
+      </div>
+      <h3>Render everything on every pull request</h3>
+      <p>This workflow renders each chart with its values, at its pinned version, whenever a pull request touches <code>platform/</code> or <code>charts/</code>. If a version doesn't exist or a file doesn't parse, the check fails and the pull request shows a red cross.</p>
+      <figure class="code"><figcaption>.github/workflows/platform-check.yml</figcaption><pre><code>name: platform-check
+
+on:
+  pull_request:
+    paths:
+      - "infra/platform/**"
+      - "charts/**"
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v6
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+
+      - name: Add chart repositories
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana https://grafana.github.io/helm-charts
+          helm repo update
+
+      - name: Render the platform charts
+        run: |
+          version() { yq '.spec.sources[0].targetRevision' "infra/platform/apps/$1.yaml"; }
+          helm template mon prometheus-community/kube-prometheus-stack \
+            --version "$(version monitoring)" -f infra/platform/monitoring-values.yaml &gt; /dev/null
+          helm template loki grafana/loki \
+            --version "$(version loki)" -f infra/platform/loki-values.yaml &gt; /dev/null
+          helm template alloy grafana/alloy \
+            --version "$(version alloy)" -f infra/platform/alloy-values.yaml &gt; /dev/null
+
+      - name: Check the todo chart
+        run: helm lint --strict charts/todo</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the check</summary><div><dl>
+        <dt><code>on: pull_request</code></dt><dd>Runs on pull requests only. This is a gate before merge, not a build.</dd>
+        <dt><code>yq</code></dt><dd>A command-line YAML reader, preinstalled on GitHub's Ubuntu runners. It reads the pinned version out of each Application, so the version lives in one place.</dd>
+        <dt><code>helm template … &gt; /dev/null</code></dt><dd>Renders the chart and throws the output away. Only success or failure matters.</dd>
+        <dt><code>helm lint --strict</code></dt><dd>Treats warnings in your own chart as errors.</dd>
+      </dl></div></details>
+      <p>This catches versions that don't exist and files that don't parse. It doesn't catch the quiet typo from the drill above, which is valid YAML the chart just ignores. Some teams add <code>helm template</code> diffs as a pull request comment so reviewers can see what actually changes; that's in "Where to go next".</p>
+      <figure class="code"><figcaption>bash: in infra-setup/</figcaption><pre><code>git add .github
+git commit -m "Check platform changes on pull requests"
+git push</code></pre></figure>
+      <p>To make it a real gate, on GitHub open <b>Settings → Branches</b>, add a rule for <code>main</code>, require pull requests and require the <b>render</b> check to pass.</p>
+      <div class="callout warn"><p><strong>Requiring pull requests on <code>main</code> blocks the pipeline's tag commit</strong> from part 1, unless you allow GitHub Actions to bypass the rule. Use a ruleset with <b>GitHub Actions</b> in the bypass list, or skip the requirement for this lab and just use pull requests by habit.</p></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 11 ============ -->
+    <section class="step" id="upgrade" data-step>
+      <div class="step-head"><span class="num">11</span><h2>Upgrade a component the safe way</h2></div>
+      <p class="goal"><b>Goal:</b> Alloy runs a newer chart version, through a pull request, and you know how you'd roll it back.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Platform components need upgrades for security fixes and new features. With everything pinned, an upgrade is a one-line pull request: reviewable, checked by CI, and revertable.</p>
+      </div>
+      <ol>
+        <li>Alloy chart 1.13.1 was the newest when this was written, so there may be nothing newer. To practise anyway, first pin an older one: set <code>targetRevision: 1.12.1</code> in <code>infra/platform/apps/alloy.yaml</code>, push, and wait for it to sync. Then upgrade as below. See what exists with <code>helm repo update</code> and <code>helm search repo grafana/alloy --versions</code>.</li>
+        <li><b>Read the release notes</b> for every version you're skipping over. Look for "breaking" and for changed values. Grafana's charts link to them from <a href="https://github.com/grafana/alloy/releases">github.com/grafana/alloy/releases</a>.</li>
+        <li>Make a branch, change <code>targetRevision</code> in <code>infra/platform/apps/alloy.yaml</code>, push, and open a pull request. Wait for the <b>render</b> check.</li>
+        <li>Merge. Watch the <code>alloy</code> Application sync and its pod restart.</li>
+        <li>Check the effect, not just the sync: in Grafana's Explore, do new log lines from <code>{namespace="todo"}</code> still arrive?</li>
+      </ol>
+      <p>To roll back, revert the merge commit and push. That's safe here because Alloy keeps no state. For components that change stored data or object types during an upgrade (databases, operators with new CRD versions), going back might not work. The release notes say so, and it's why you read them first.</p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>"Synced" means Argo CD applied what Git says. It doesn't mean the component works. Always check the effect.</li>
+        <li>Pinned versions make upgrades boring, which is what you want from a platform.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 12 ============ -->
+    <section class="step" id="cleanup" data-step>
+      <div class="step-head"><span class="num">12</span><h2>Clean up</h2></div>
+      <figure class="code"><figcaption>bash</figcaption><pre><code>kind delete cluster --name todo</code></pre></figure>
+      <p>From now on, <code>./infra/bootstrap.sh</code> is how every session starts. Parts 4 and 5 add new platform components by adding files to <code>infra/platform/apps/</code>, and part 6 replaces the script with Terraform.</p>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ Troubleshooting ============ -->
+    <section class="step" id="troubleshooting" data-step>
+      <div class="step-head"><span class="num">!</span><h2>When something breaks</h2></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>What you see</th><th>Likely cause</th><th>What to do</th></tr></thead>
+        <tbody>
+          <tr><td><code>root</code> is Synced but shows no children</td><td>The files aren't pushed, or <code>path</code> is wrong</td><td>Check <code>infra/platform/apps/</code> on GitHub, not on your PC</td></tr>
+          <tr><td>An app says <code>$values/…</code> file not found</td><td>The <code>ref: values</code> source is missing, or the path doesn't match</td><td>Paths after <code>$values/</code> start at the repo root</td></tr>
+          <tr><td><code>monitoring</code> fails with "metadata.annotations: Too long"</td><td><code>ServerSideApply=true</code> is missing</td><td>Add it to <code>syncOptions</code></td></tr>
+          <tr><td><code>monitoring</code> stays OutOfSync on webhook configurations</td><td>The <code>ignoreDifferences</code> block is missing or mis-indented</td><td>Compare with step 4; it sits under <code>spec</code>, beside <code>destination</code></td></tr>
+          <tr><td><code>todo</code> keeps failing on ServiceMonitor after several minutes</td><td>The monitoring stack itself failed</td><td>Fix <code>monitoring</code> first; <code>todo</code> recovers on its next retry</td></tr>
+          <tr><td><code>todo</code> says the project <code>team-todo</code> doesn't exist</td><td>The project file wasn't pushed, or the sync-wave annotation is missing</td><td>Check <code>infra/platform/apps/team-todo-project.yaml</code> on GitHub</td></tr>
+          <tr><td><code>todo</code> says the destination or repo isn't permitted</td><td>The URL in the project differs from the app's, often by a trailing <code>.git</code> or capital letters</td><td>Make <code>sourceRepos</code> match <code>repoURL</code> exactly</td></tr>
+          <tr><td>An Application won't delete and stays "Deleting"</td><td>The finalizer is waiting for resources that can't be deleted</td><td>Look at which resource is stuck in the Argo CD page; as a last resort remove the finalizer with <code>kubectl -n argocd edit application &lt;name&gt;</code></td></tr>
+          <tr><td><code>localhost:8080</code> shows nothing after the rebuild</td><td>The cluster was created without <code>infra/kind-config.yaml</code>, or the gateway isn't ready yet</td><td><code>kubectl -n nginx-gateway get pods</code> and <code>kubectl -n todo get gateway,httproute</code>. If the cluster was made by hand, delete it and run the script.</td></tr>
+          <tr><td><code>infra/bootstrap.sh</code> says the cluster already exists</td><td>A <code>todo</code> kind cluster is still there</td><td><code>kind delete cluster --name todo</code> first</td></tr>
+          <tr><td><code>infra/bootstrap.sh</code>: Permission denied</td><td>The file isn't executable</td><td><code>chmod +x infra/bootstrap.sh</code>, or run <code>bash infra/bootstrap.sh</code></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- ============ Next ============ -->
+    <section class="step" id="next" data-step>
+      <div class="step-head"><span class="num">→</span><h2>Where to go next</h2></div>
+      <ul>
+        <li><strong>Part 4, Secure the Road,</strong> adds scanning, signing and admission policies, using the pattern from this part for each new component.</li>
+        <li><strong>Move the gateway under Argo CD.</strong> Add an Application for the Gateway API types (a kustomize source, <code>config/crd/gateway-api/standard</code> at tag <code>v2.7.2</code>) and one for the controller chart, so <code>infra/bootstrap.sh</code> shrinks to the cluster, Argo CD and the root app.</li>
+        <li><strong>Let Argo CD manage itself.</strong> Install Argo CD from its Helm chart through an Application in <code>infra/platform/apps/</code>, so upgrading Argo CD is a pull request too.</li>
+        <li><strong>Generate Applications.</strong> An <b>ApplicationSet</b> creates one Application per folder or per cluster from a template, instead of a file per component.</li>
+        <li><strong>Show the diff on pull requests.</strong> Render the chart before and after the change and post the difference as a comment, so reviewers see what will actually change in the cluster.</li>
+        <li><strong>A platform project.</strong> Move the platform components out of <code>default</code> into a <code>platform</code> AppProject, and restrict <code>default</code> so it allows nothing.</li>
+      </ul>
+      <footer>Written October 2026 against Argo CD 3.5, kube-prometheus-stack 92.3.0, Loki chart 7.3.0, Grafana Alloy chart 1.13.1, NGINX Gateway Fabric 2.7 and kind. Check each chart's release notes when you change a pinned version.</footer>
+    </section>
+    </main>
+</div>
+
+<script>
+// Page settings: reading progress bar, text size (A− / A+), and light / dark / auto theme. Saved in this browser.
+(function () {
+  var root = document.documentElement;
+  function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function save(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+  var LEVELS = [0.85, 1, 1.15, 1.3, 1.5];
+  var fs = parseFloat(load('tutorial-font')); if (!(fs >= 0.8 && fs <= 1.6)) fs = 1;
+  var down = document.getElementById('font-down'), up = document.getElementById('font-up'), pct = document.getElementById('font-pct');
+  function nearest() { var b = 0; LEVELS.forEach(function (l, i) { if (Math.abs(l - fs) < Math.abs(LEVELS[b] - fs)) b = i; }); return b; }
+  function applyFont() {
+    root.style.setProperty('--fs', fs);
+    pct.textContent = Math.round(fs * 100) + '%';
+    down.disabled = fs <= LEVELS[0]; up.disabled = fs >= LEVELS[LEVELS.length - 1];
+  }
+  function step(d) { fs = LEVELS[Math.min(LEVELS.length - 1, Math.max(0, nearest() + d))]; save('tutorial-font', fs); applyFont(); }
+  down.addEventListener('click', function () { step(-1); });
+  up.addEventListener('click', function () { step(1); });
+  pct.addEventListener('click', function () { fs = 1; save('tutorial-font', fs); applyFont(); });
+  applyFont();
+
+  var MODES = ['auto', 'light', 'dark'], GLYPH = { auto: '◐', light: '☀', dark: '☾' }, WORD = { auto: 'Auto', light: 'Light', dark: 'Dark' };
+  var mode = load('tutorial-theme'); if (MODES.indexOf(mode) < 0) mode = 'auto';
+  var btn = document.getElementById('theme-btn');
+  function applyTheme() {
+    if (mode === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', mode);
+    document.getElementById('theme-glyph').textContent = GLYPH[mode];
+    document.getElementById('theme-word').textContent = ' ' + WORD[mode];
+    btn.setAttribute('aria-label', 'Theme: ' + WORD[mode] + '. Click to change.');
+    btn.title = 'Theme: ' + WORD[mode] + ' (click to change)';
+  }
+  btn.addEventListener('click', function () { mode = MODES[(MODES.indexOf(mode) + 1) % MODES.length]; save('tutorial-theme', mode); applyTheme(); });
+  applyTheme();
+
+  var tbtn = document.getElementById('tmenu-btn'), tlist = document.getElementById('tmenu-list');
+  function tmenu(open) { tlist.hidden = !open; tbtn.setAttribute('aria-expanded', open); if (open) tlist.querySelector('a').focus(); }
+  tbtn.addEventListener('click', function () { tmenu(tlist.hidden); });
+  document.addEventListener('click', function (e) { if (!tlist.hidden && !e.target.closest('.tmenu')) tmenu(false); });
+  document.addEventListener('keydown', function (e) {
+    if (tlist.hidden) return;
+    if (e.key === 'Escape') { tmenu(false); tbtn.focus(); }
+    var items = Array.prototype.slice.call(tlist.querySelectorAll('a')), i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+  });
+
+  var bar = document.querySelector('#readbar span'), queued = false;
+  function paint() {
+    queued = false;
+    var max = root.scrollHeight - window.innerHeight;
+    bar.style.width = (max > 0 ? Math.min(100, Math.max(0, window.scrollY / max * 100)) : 0) + '%';
+  }
+  function schedule() { if (!queued) { queued = true; requestAnimationFrame(paint); } }
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule);
+  paint();
+})();
+</script>
+
+<script>
+(function () {
+  var KEY = 'platform-as-code-tutorial-done';
+  var done = {};
+  try { done = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { done = {}; }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(done)); } catch (e) {} }
+
+  // Build the step rail from the sections.
+  var list = document.getElementById('rail-list');
+  var sections = Array.prototype.slice.call(document.querySelectorAll('section[data-step]'));
+  var trackable = 0;
+  sections.forEach(function (s) {
+    var num = s.querySelector('.num').textContent;
+    var title = s.querySelector('h2').textContent;
+    var li = document.createElement('li');
+    var a = document.createElement('a');
+    a.href = '#' + s.id;
+    a.innerHTML = '<span class="n"></span><span class="tick" aria-hidden="true">✓</span><span class="t"></span>';
+    a.querySelector('.n').textContent = num;
+    a.querySelector('.t').textContent = title;
+    li.appendChild(a);
+    list.appendChild(li);
+    var box = s.querySelector('input[data-done]');
+    if (box) {
+      trackable++;
+      box.checked = !!done[s.id];
+      a.classList.toggle('done', box.checked);
+      box.addEventListener('change', function () {
+        done[s.id] = box.checked;
+        a.classList.toggle('done', box.checked);
+        save(); progress();
+      });
+    }
+  });
+  function progress() {
+    var n = sections.filter(function (s) { var b = s.querySelector('input[data-done]'); return b && b.checked; }).length;
+    document.getElementById('progress-text').textContent = n + ' of ' + trackable + ' steps done';
+    document.getElementById('progress-bar').style.width = (trackable ? (n / trackable * 100) : 0) + '%';
+    document.getElementById('tb-done').textContent = n + '/' + trackable + ' done';
+  }
+  progress();
+
+  // Mark the step being read in the rail.
+  if ('IntersectionObserver' in window) {
+    var links = {};
+    list.querySelectorAll('a').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting || !links[en.target.id]) return;
+        Object.keys(links).forEach(function (k) { links[k].classList.remove('current'); links[k].removeAttribute('aria-current'); });
+        links[en.target.id].classList.add('current');
+        links[en.target.id].setAttribute('aria-current', 'step');
+        // Moving past a step marks it done.
+        var at = sections.indexOf(en.target);
+        sections.slice(0, at).forEach(function (p) {
+          var b = p.querySelector('input[data-done]');
+          if (b && !b.checked) { b.checked = true; b.dispatchEvent(new Event('change')); }
+        });
+      });
+    }, { rootMargin: '-10% 0px -80% 0px' });
+    sections.forEach(function (s) { io.observe(s); });
+  }
+
+  // Resizable steps panel: drag the grip, use the arrow keys (Home resets), or collapse it with « and ».
+  (function () {
+    var shell = document.querySelector('.shell'), grip = document.getElementById('rail-grip');
+    var hide = document.getElementById('rail-hide'), show = document.getElementById('rail-open');
+    var W0 = 250, MIN = 180, MAX = 480, st = { w: W0, c: false };
+    try { st = Object.assign(st, JSON.parse(localStorage.getItem(KEY + '-rail') || '{}')); } catch (e) {}
+    function clamp(w) { return Math.min(MAX, Math.max(MIN, Math.round(+w || W0))); }
+    function apply() {
+      st.w = clamp(st.w);
+      shell.style.setProperty('--rail-w', st.w + 'px');
+      shell.classList.toggle('rail-collapsed', !!st.c);
+      show.hidden = !st.c;
+      grip.setAttribute('aria-valuenow', st.w);
+    }
+    function save() { try { localStorage.setItem(KEY + '-rail', JSON.stringify(st)); } catch (e) {} }
+    apply();
+    grip.addEventListener('pointerdown', function (e) {
+      grip.setPointerCapture(e.pointerId); grip.classList.add('drag'); document.body.classList.add('resizing'); e.preventDefault();
+    });
+    grip.addEventListener('pointermove', function (e) {
+      if (!grip.hasPointerCapture(e.pointerId)) return;
+      st.w = clamp(e.clientX - shell.getBoundingClientRect().left); apply();
+    });
+    function end(e) { if (grip.hasPointerCapture(e.pointerId)) grip.releasePointerCapture(e.pointerId); grip.classList.remove('drag'); document.body.classList.remove('resizing'); save(); }
+    grip.addEventListener('pointerup', end);
+    grip.addEventListener('pointercancel', end);
+    grip.addEventListener('dblclick', function () { st.w = W0; apply(); save(); });
+    grip.addEventListener('keydown', function (e) {
+      var d = e.key === 'ArrowLeft' ? -16 : e.key === 'ArrowRight' ? 16 : 0;
+      if (d) st.w += d; else if (e.key === 'Home') st.w = W0; else return;
+      e.preventDefault(); apply(); save();
+    });
+    hide.addEventListener('click', function () { st.c = true; apply(); save(); show.focus(); });
+    show.addEventListener('click', function () { st.c = false; apply(); save(); hide.focus(); });
+  })();
+
+  // Collapse the rail by default on phones.
+  if (window.matchMedia('(max-width: 960px)').matches) document.getElementById('rail-details').open = false;
+
+  // Copy buttons on every code block.
+  document.querySelectorAll('figure.code').forEach(function (fig) {
+    // Line numbers on multi-line snippets (not on one-line commands or folder trees).
+    var pre = fig.querySelector('pre'), src = pre.querySelector('code').textContent.replace(/\n$/, '');
+    var count = src.split('\n').length;
+    if (count > 1 && !/[├└]──/.test(src)) {
+      var nums = []; for (var i = 1; i <= count; i++) nums.push(i);
+      pre.setAttribute('data-ln', nums.join('\n'));
+    }
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'copy';
+    btn.textContent = 'Copy';
+    fig.querySelector('figcaption').appendChild(btn);
+    btn.addEventListener('click', function () {
+      var text = fig.querySelector('pre code').textContent;
+      function ok() { btn.textContent = 'Copied'; btn.classList.add('copied'); setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500); }
+      function fallback() {
+        var r = document.createRange(); r.selectNodeContents(fig.querySelector('pre code'));
+        var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        btn.textContent = 'Press Ctrl+C';
+      }
+      try {
+        navigator.clipboard.writeText(text).then(ok, fallback);
+      } catch (e) { fallback(); }
+    });
+  });
+})();
+</script>
+
+<dialog class="ask" id="ask" aria-labelledby="ask-title">
+  <div class="ask-head">
+    <div><h2 id="ask-title">Ask about <code id="ask-word"></code></h2><p class="ask-step" id="ask-step"></p></div>
+    <button type="button" class="ask-btn" id="ask-close">Close</button>
+  </div>
+  <div class="ask-thread" id="ask-thread" aria-live="polite"></div>
+  <div class="ask-chips" id="ask-chips">
+    <button type="button" class="ask-chip">What is this?</button>
+    <button type="button" class="ask-chip">Why do I need it?</button>
+    <button type="button" class="ask-chip">Give me a .NET comparison</button>
+  </div>
+  <form class="ask-form" id="ask-form">
+    <textarea id="ask-input" rows="1" placeholder="Type your question…" aria-label="Your question"></textarea>
+    <button type="submit" id="ask-send">Ask</button>
+  </form>
+</dialog>
+
+<script>
+// Right-click a word to ask a question about it. Answers come from the OpenAI API through server.js,
+// so this only switches on when the page is opened from that server (http://localhost:8788).
+(function () {
+  var hint = document.getElementById('ask-hint');
+  // Opened straight from disk: a page can't start a server, so jump to the served copy if the server is up,
+  // and otherwise say how to start it.
+  if (location.protocol === 'file:') {
+    var served = 'http://localhost:8788/';
+    fetch(served + 'api/status', { mode: 'no-cors' }).then(function () {
+      location.replace(served + location.pathname.split('/').pop() + location.hash);
+    }, function () {
+      hint.hidden = false;
+      hint.textContent = 'To ask questions about any word, close this tab and start the tutorial with ./start.sh in the tutorials folder (in Ubuntu).';
+    });
+    return;
+  }
+  if (!/^https?:$/.test(location.protocol) || !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return;
+
+  var main = document.querySelector('main');
+  var dlg = document.getElementById('ask');
+  var wordEl = document.getElementById('ask-word');
+  var stepEl = document.getElementById('ask-step');
+  var thread = document.getElementById('ask-thread');
+  var chips = document.getElementById('ask-chips');
+  var form = document.getElementById('ask-form');
+  var input = document.getElementById('ask-input');
+  var send = document.getElementById('ask-send');
+  var ctx = null, turns = [], ctl = null, busy = false;
+
+  fetch('/api/status').then(function (r) { return r.json(); }).then(function (s) {
+    hint.hidden = false;
+    if (s && s.ai) {
+      hint.innerHTML = '<kbd>Right-click</kbd> any word to ask a question about it. Select a phrase first to ask about the whole phrase.';
+      main.addEventListener('contextmenu', onContextMenu);
+    } else {
+      hint.textContent = 'Questions are switched off: set OPENAI_API_KEY and restart server.js to turn them on.';
+    }
+  }).catch(function () {});
+
+  // ---- Find the word under the pointer ----
+  var WORD = /[A-Za-z0-9_.\-\/:@$]/;
+  function wordAt(x, y) {
+    var node, offset, p;
+    if (document.caretPositionFromPoint) { p = document.caretPositionFromPoint(x, y); if (p) { node = p.offsetNode; offset = p.offset; } }
+    else if (document.caretRangeFromPoint) { p = document.caretRangeFromPoint(x, y); if (p) { node = p.startContainer; offset = p.startOffset; } }
+    if (!node || node.nodeType !== 3) return null;
+    var t = node.data, s = offset, e = offset;
+    while (s > 0 && WORD.test(t[s - 1])) s--;
+    while (e < t.length && WORD.test(t[e])) e++;
+    var word = t.slice(s, e).replace(/^[.:\/\-]+(?=[A-Za-z0-9])/, function (m) { return m.charAt(0) === '-' ? m : ''; }).replace(/[.:\/]+$/, '');
+    if (!word) return null;
+    return { word: word, near: t.slice(Math.max(0, s - 700), e + 700) };
+  }
+  function stepTitle(sec) {
+    if (!sec) return 'Tutorial overview';
+    var n = sec.querySelector('.num'), h = sec.querySelector('h2');
+    return (n && /^\d+$/.test(n.textContent) ? 'Step ' + n.textContent + ' · ' : '') + (h ? h.textContent : '');
+  }
+
+  function onContextMenu(e) {
+    if (e.shiftKey) return;                         // Shift+right-click keeps the browser's own menu
+    if (e.target.closest('input, textarea, select, a[href]')) return;
+    var sel = window.getSelection();
+    var picked = sel && !sel.isCollapsed && main.contains(sel.anchorNode) ? sel.toString().trim() : '';
+    var hit = wordAt(e.clientX, e.clientY);
+    var word = picked || (hit && hit.word);
+    if (!word) return;
+    e.preventDefault();
+    var block = e.target.closest('dd, dt, li, p, td, th, pre, h2, h3, h4, figcaption, summary');
+    var passage = block ? (block.innerText || block.textContent || '').trim() : '';
+    if ((!passage || passage.length > 1500) && hit) passage = hit.near;
+    if (block) { block.classList.add('flash'); setTimeout(function () { block.classList.remove('flash'); }, 700); }
+    open({ word: word.slice(0, 300), passage: passage.slice(0, 1500), step: stepTitle(e.target.closest('section[data-step]')) });
+  }
+
+  // ---- The box ----
+  function open(c) {
+    stop();
+    ctx = c; turns = [];
+    wordEl.textContent = c.word;
+    stepEl.textContent = c.step;
+    thread.innerHTML = '';
+    var p = document.createElement('p'); p.className = 'ask-empty'; p.textContent = 'Type a question below, or pick one of the suggestions.'; thread.appendChild(p);
+    chips.hidden = false;
+    input.value = ''; autosize();
+    if (!dlg.open) dlg.showModal();
+    input.focus();
+  }
+  function stop() { if (ctl) { ctl.abort(); ctl = null; } }
+  function setBusy(on) {
+    busy = on;
+    send.textContent = on ? 'Stop' : 'Ask';
+    send.classList.toggle('stop', on);
+    chips.querySelectorAll('button').forEach(function (b) { b.disabled = on; });
+  }
+  function note(msg) { var n = document.createElement('div'); n.className = 'ask-err'; n.textContent = msg; thread.appendChild(n); }
+
+  var ERRORS = {
+    no_key: 'OPENAI_API_KEY is not set. Set it and restart server.js.',
+    bad_key: 'OpenAI rejected the API key. Check OPENAI_API_KEY and restart server.js.',
+    rate_limited: 'OpenAI says the rate limit or quota is used up. Wait a minute, or check your OpenAI billing.',
+    server_gone: 'The local server is not answering. Start it again with: node server.js',
+    empty: 'The model returned nothing. Try asking in a different way.'
+  };
+
+  function ask(question) {
+    question = String(question || '').trim();
+    if (busy || !ctx || !question) return;
+    var empty = thread.querySelector('.ask-empty'); if (empty) empty.remove();
+    chips.hidden = true;
+
+    turns.push({ role: 'user', content: turns.length ? question :
+      'I am on: ' + ctx.step + '\n\nPassage I was reading:\n<<<\n' + ctx.passage + '\n>>>\n\nI right-clicked: "' + ctx.word + '"\n\nMy question: ' + question });
+
+    var q = document.createElement('div'); q.className = 'ask-q'; q.textContent = question; thread.appendChild(q);
+    var a = document.createElement('div'); a.className = 'ask-a thinking'; a.textContent = 'Thinking…'; thread.appendChild(a);
+    thread.scrollTop = thread.scrollHeight;
+
+    var mine = ctl = new AbortController();
+    var text = '';
+    setBusy(true);
+    fetch('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json', 'x-tutorial': '1' }, body: JSON.stringify({ messages: turns }), signal: mine.signal })
+      .then(function (res) {
+        if (!res.ok) return res.json().catch(function () { return {}; }).then(function (j) { throw { code: j.code || 'upstream_error', message: j.message }; });
+        var rd = res.body.getReader(), dec = new TextDecoder();
+        return (function pump() {
+          return rd.read().then(function (r) {
+            if (r.done) return;
+            text += dec.decode(r.value, { stream: true });
+            if (text.trim()) { a.classList.remove('thinking'); a.innerHTML = md(text); thread.scrollTop = thread.scrollHeight; }
+            return pump();
+          });
+        })();
+      })
+      .then(function () {
+        if (!text.trim()) throw { code: 'empty' };
+        turns.push({ role: 'assistant', content: text });
+      })
+      .catch(function (e) {
+        var cancelled = mine.signal.aborted;
+        if (text.trim()) { turns.push({ role: 'assistant', content: text }); if (cancelled) note('Stopped.'); else note('The answer was cut off. Ask again to retry.'); return; }
+        a.remove(); turns.pop();
+        if (cancelled) return;
+        var code = e && e.code ? e.code : 'server_gone';
+        note(ERRORS[code] || (e && e.message) || 'Something went wrong. Ask again to retry.');
+      })
+      .then(function () {
+        if (ctl === mine) ctl = null;
+        setBusy(false);
+        thread.scrollTop = thread.scrollHeight;
+      });
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (busy) { stop(); return; }
+    var q = input.value; input.value = ''; autosize();
+    ask(q);
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+  });
+  function autosize() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 140) + 'px'; }
+  input.addEventListener('input', autosize);
+  chips.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) ask(b.textContent); });
+  document.getElementById('ask-close').addEventListener('click', function () { dlg.close(); });
+  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });   // click outside the box
+  dlg.addEventListener('close', stop);
+
+  // ---- Markdown (small, safe subset) ----
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function inline(s) {
+    s = esc(s);
+    s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    return s;
+  }
+  function md(src) {
+    var lines = src.replace(/\r/g, '').split('\n'), out = [], i = 0, para = [], list = null, m;
+    function flushPara() { if (para.length) { out.push('<p>' + inline(para.join(' ')) + '</p>'); para = []; } }
+    function flushList() { if (list) { out.push('<' + list.tag + '>' + list.items.map(function (x) { return '<li>' + inline(x) + '</li>'; }).join('') + '</' + list.tag + '>'); list = null; } }
+    while (i < lines.length) {
+      var line = lines[i];
+      if (/^\s*```/.test(line)) {
+        flushPara(); flushList();
+        var code = []; i++;
+        while (i < lines.length && !/^\s*```/.test(lines[i])) { code.push(lines[i]); i++; }
+        out.push('<pre><code>' + esc(code.join('\n')) + '</code></pre>'); i++; continue;
+      }
+      if ((m = line.match(/^\s*#{1,4}\s+(.*)$/))) { flushPara(); flushList(); out.push('<h4>' + inline(m[1]) + '</h4>'); i++; continue; }
+      if ((m = line.match(/^\s*[-*]\s+(.*)$/))) { flushPara(); if (!list || list.tag !== 'ul') { flushList(); list = { tag: 'ul', items: [] }; } list.items.push(m[1]); i++; continue; }
+      if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) { flushPara(); if (!list || list.tag !== 'ol') { flushList(); list = { tag: 'ol', items: [] }; } list.items.push(m[1]); i++; continue; }
+      if (!line.trim()) { flushPara(); flushList(); i++; continue; }
+      if (list && /^\s{2,}\S/.test(line)) { list.items[list.items.length - 1] += ' ' + line.trim(); i++; continue; }
+      flushList(); para.push(line.trim()); i++;
+    }
+    flushPara(); flushList();
+    return out.join('');
+  }
+})();
+</script>
+<script>
+// Animated step-through diagrams (figure.anim). The steps come from the JSON inside each figure:
+// "path" is the list of points the packet moves through (leave it out for a step with no packet).
+// "on", "off", "bad" and "good" name the parts (data-k) to highlight, hide, mark as a problem, or mark as fine.
+(function () {
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var HOLD = 4200;
+  document.querySelectorAll('figure.anim').forEach(function (fig) {
+    var steps = JSON.parse(fig.querySelector('script[type="application/json"]').textContent);
+    var pkt = fig.querySelector('.a-pkt'), text = fig.querySelector('.anim-text'), count = fig.querySelector('.anim-count');
+    var playBtn = fig.querySelector('[data-act="play"]');
+    var i = 0, playing = !reduce, visible = false, timer = null, run = null;
+    function at(p) { return 'translate(' + p[0] + 'px,' + p[1] + 'px)'; }
+    function show(n, animate) {
+      i = (n + steps.length) % steps.length;
+      var s = steps[i], path = s.path || [], dur = 0;
+      text.innerHTML = s.text;
+      count.textContent = (i + 1) + ' / ' + steps.length;
+      fig.classList.toggle('back', !!s.back);
+      ['on', 'off', 'bad', 'good'].forEach(function (c) {
+        var keys = (s[c] || '').split(' ');
+        fig.querySelectorAll('[data-k]').forEach(function (el) { el.classList.toggle(c, keys.indexOf(el.getAttribute('data-k')) >= 0); });
+      });
+      pkt.classList.toggle('off', !path.length);
+      if (run) { run.cancel(); run = null; }
+      if (path.length) pkt.style.transform = at(path[path.length - 1]);
+      if (animate && !reduce && path.length > 1 && pkt.animate) {
+        var d = [0], total = 0;
+        for (var k = 1; k < path.length; k++) { total += Math.hypot(path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1]); d.push(total); }
+        dur = Math.max(800, Math.min(2800, total * 5.5));
+        run = pkt.animate(path.map(function (p, k) { return { transform: at(p), offset: d[k] / total }; }), { duration: dur, easing: 'cubic-bezier(.45, 0, .25, 1)' });
+      }
+      return dur;
+    }
+    function schedule(dur) {
+      clearTimeout(timer);
+      if (playing && visible) timer = setTimeout(function () { schedule(show(i + 1, true)); }, dur + HOLD);
+    }
+    function setPlaying(p) {
+      playing = p;
+      playBtn.textContent = p ? 'Pause' : 'Play';
+      clearTimeout(timer);
+    }
+    playBtn.addEventListener('click', function () { setPlaying(!playing); if (playing) schedule(show(i + 1, true)); });
+    fig.querySelector('[data-act="next"]').addEventListener('click', function () { setPlaying(false); show(i + 1, true); });
+    fig.querySelector('[data-act="back"]').addEventListener('click', function () { setPlaying(false); show(i - 1, false); });
+    setPlaying(playing);
+    show(0, false);
+    // Only run while the diagram is on screen (a closed "Explained" section counts as off screen).
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) {
+        visible = entries[entries.length - 1].isIntersecting;
+        if (visible) schedule(0); else clearTimeout(timer);
+      }, { threshold: 0.4 }).observe(fig);
+    } else { visible = true; schedule(0); }
+  });
+})();
+</script>
+<div class="note-menu note-ui" id="note-menu" role="menu" aria-label="Note or question" hidden>
+  <button type="button" role="menuitem" data-act="note" id="note-menu-note">Add a note<span class="sub" id="note-menu-sub"></span></button>
+  <button type="button" role="menuitem" data-act="bm" id="note-menu-bm">Bookmark this spot</button>
+  <button type="button" role="menuitem" data-act="ask" id="note-menu-ask">Ask the tutor</button>
+</div>
+<dialog class="note-dlg note-ui" id="note-dlg" aria-labelledby="note-title">
+  <form id="note-form">
+    <h2 id="note-title">Add a note</h2>
+    <p class="note-quote" id="note-quote"></p>
+    <textarea id="note-text" aria-label="Your note" placeholder="Write your note…"></textarea>
+    <div class="note-actions">
+      <button type="button" class="danger" id="note-del" hidden>Delete</button>
+      <span class="sp"></span>
+      <button type="button" id="note-cancel">Cancel</button>
+      <button type="submit" class="primary" id="note-save">Save</button>
+    </div>
+  </form>
+</dialog>
+<aside class="notes-pane note-ui margin" id="notes-pane" aria-label="Your notes" hidden>
+  <div class="notes-head"><h2>Your notes</h2><button type="button" id="notes-mode" title="Switch between notes beside the text and a list of all notes">List</button><button type="button" id="notes-close" aria-label="Close notes">×</button></div>
+  <div class="notes-margin" id="notes-margin"></div>
+</aside>
+<svg class="notes-lines note-ui" id="notes-lines" aria-hidden="true"></svg>
+<script>
+// Notes: right-click a word (or a selected phrase) and choose "Add a note". The note is saved in this browser
+// (localStorage), the text stays highlighted, and the note sits in the right margin joined to it by a line.
+(function () {
+  var main = document.querySelector('main');
+  if (!main || !window.Range || !document.createTreeWalker) return;
+  var PAGE = location.pathname.split('/').pop() || 'index';
+  var KEY = 'tutorial-notes:' + PAGE;
+  var notes = [];
+  try { notes = JSON.parse(localStorage.getItem(KEY) || '[]') || []; } catch (e) { notes = []; }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(notes)); } catch (e) {} }
+  function pref(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; }
+  var $ = function (id) { return document.getElementById(id); };
+  var menu = $('note-menu'), dlg = $('note-dlg'), pane = $('notes-pane'), box = $('notes-margin'), svg = $('notes-lines');
+  var btn = $('notes-btn'), countEl = $('notes-count'), area = $('note-text'), saveBtn = $('note-save'), delBtn = $('note-del');
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var SKIP = 'button, script, style, svg, textarea, .anim-bar, .ask-hint, .note-ui';
+  var WORD = /[A-Za-z0-9_.\-\/:@$]/;
+  var sections = Array.prototype.slice.call(document.querySelectorAll('section[data-step]'));
+  var pending = null, cur = null, open = false, raf = 0;
+  var wide = function () { return window.matchMedia('(min-width: 961px)').matches; };
+
+  // ---- Text positions: a note remembers its step, the character offset inside it, and the words ----
+  function textNodes(root) {
+    var out = [], w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), n;
+    while ((n = w.nextNode())) if (n.data && !n.parentElement.closest(SKIP)) out.push(n);
+    return out;
+  }
+  function fullText(c) { return textNodes(c).map(function (t) { return t.data; }).join(''); }
+  function containerOf(node) { var el = node.nodeType === 3 ? node.parentElement : node; return (el && el.closest('section[data-step]')) || main; }
+  function offsetIn(c, node, off) {
+    var r = document.createRange(); r.setStart(c, 0); r.setEnd(node, off);
+    var acc = 0;
+    textNodes(c).forEach(function (t) {
+      if (t === node) acc += off;
+      else if (r.comparePoint(t, t.length) <= 0) acc += t.length;
+    });
+    return acc;
+  }
+  function describe(range) {
+    var c = containerOf(range.startContainer), text = fullText(c);
+    var s = offsetIn(c, range.startContainer, range.startOffset);
+    var e = c.contains(range.endContainer) ? offsetIn(c, range.endContainer, range.endOffset) : text.length;
+    while (s < e && /\s/.test(text[s])) s++;
+    while (e > s && /\s/.test(text[e - 1])) e--;
+    if (e - s > 300) e = s + 300;
+    if (e <= s) return null;
+    return { sec: c === main ? '' : c.id, offset: s, quote: text.slice(s, e) };
+  }
+  function wordRange(x, y) {
+    var node, off, p;
+    if (document.caretPositionFromPoint) { p = document.caretPositionFromPoint(x, y); if (p) { node = p.offsetNode; off = p.offset; } }
+    else if (document.caretRangeFromPoint) { p = document.caretRangeFromPoint(x, y); if (p) { node = p.startContainer; off = p.startOffset; } }
+    if (!node || node.nodeType !== 3 || !main.contains(node) || node.parentElement.closest(SKIP)) return null;
+    var t = node.data, s = off, e = off;
+    while (s > 0 && WORD.test(t[s - 1])) s--;
+    while (e < t.length && WORD.test(t[e])) e++;
+    while (s < e && /[.:\/]/.test(t[s])) s++;
+    while (e > s && /[.:\/]/.test(t[e - 1])) e--;
+    if (s >= e) return null;
+    var r = document.createRange(); r.setStart(node, s); r.setEnd(node, e);
+    return r;
+  }
+  function locate(text, n) {
+    if (text.substr(n.offset, n.quote.length) === n.quote) return n.offset;
+    var best = -1, i = text.indexOf(n.quote);
+    while (i >= 0) { if (best < 0 || Math.abs(i - n.offset) < Math.abs(best - n.offset)) best = i; i = text.indexOf(n.quote, i + 1); }
+    return best;
+  }
+
+  // ---- Highlighting ----
+  function highlight(n, bm) {
+    var c = n.sec ? $(n.sec) : main;
+    if (!c) return false;
+    var at = locate(fullText(c), n);
+    if (at < 0) return false;
+    var end = at + n.quote.length, pos = 0, last = null, first = null;
+    textNodes(c).forEach(function (t) {
+      var a = pos, b = pos + t.length; pos = b;
+      var s = Math.max(at, a), e = Math.min(end, b);
+      if (s >= e || !t.data.slice(s - a, e - a).trim()) return;
+      var r = document.createRange(); r.setStart(t, s - a); r.setEnd(t, e - a);
+      var m = document.createElement('mark'); m.className = bm ? 'bm-hl' : 'note-hl'; m.setAttribute(bm ? 'data-bm' : 'data-note', n.id);
+      r.surroundContents(m);
+      last = m; if (!first) first = m;
+    });
+    if (bm) { if (first) first.classList.add('bm-start'); }
+    else if (last) last.classList.add('note-end');
+    return true;
+  }
+  function marksOf(id, bm) { return Array.prototype.slice.call(main.querySelectorAll(bm ? 'mark.bm-hl[data-bm="' + id + '"]' : 'mark.note-hl[data-note="' + id + '"]')); }
+  function unhighlight(id, bm) {
+    marksOf(id, bm).forEach(function (m) {
+      var p = m.parentNode;
+      while (m.firstChild) p.insertBefore(m.firstChild, m);
+      p.removeChild(m); p.normalize();
+    });
+  }
+  function find(id) { for (var i = 0; i < notes.length; i++) if (notes[i].id === id) return notes[i]; return null; }
+
+  // ---- The right-click menu ----
+  function askOn() { var h = $('ask-hint'); return !!h && !h.hidden && /Right-click/.test(h.textContent); }
+  function hideMenu() { menu.hidden = true; }
+  main.addEventListener('contextmenu', function (e) {
+    if (e.notesPass || e.shiftKey) return;           // Shift+right-click keeps the browser's own menu
+    if (e.target.closest('input, textarea, select, a[href]')) return;
+    var sel = window.getSelection(), range = null;
+    if (sel && sel.rangeCount && !sel.isCollapsed && main.contains(sel.anchorNode) && main.contains(sel.focusNode)) range = sel.getRangeAt(0).cloneRange();
+    if (!range) range = wordRange(e.clientX, e.clientY);
+    if (!range) return;
+    var info = describe(range);
+    if (!info) return;
+    e.preventDefault(); e.stopPropagation();
+    var mark = e.target.closest ? e.target.closest('mark.note-hl') : null;
+    var bmark = e.target.closest ? e.target.closest('mark.bm-hl') : null;
+    pending = { info: info, note: mark ? find(mark.getAttribute('data-note')) : null, bm: bmark ? findBm(bmark.getAttribute('data-bm')) : null, target: e.target, x: e.clientX, y: e.clientY };
+    $('note-menu-bm').textContent = pending.bm ? 'Remove bookmark' : 'Bookmark this spot';
+    $('note-menu-ask').hidden = !askOn();
+    $('note-menu-note').firstChild.nodeValue = pending.note ? 'Edit note' : 'Add a note';
+    $('note-menu-sub').textContent = '“' + (info.quote.length > 40 ? info.quote.slice(0, 40) + '…' : info.quote) + '”';
+    menu.hidden = false;
+    var w = menu.offsetWidth, h = menu.offsetHeight;
+    menu.style.left = Math.max(8, Math.min(e.clientX, window.innerWidth - w - 8)) + 'px';
+    menu.style.top = Math.max(8, Math.min(e.clientY, window.innerHeight - h - 8)) + 'px';
+    $('note-menu-note').focus();
+  }, true);
+  menu.addEventListener('mousedown', function (e) { e.preventDefault(); });   // keep the text selected
+  menu.addEventListener('click', function (e) { var b = e.target.closest('button[data-act]'); if (b) choose(b.getAttribute('data-act')); });
+  document.addEventListener('mousedown', function (e) { if (!menu.hidden && !menu.contains(e.target)) hideMenu(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hideMenu(); });
+  window.addEventListener('resize', hideMenu);
+  function choose(act) {
+    hideMenu();
+    var p = pending; if (!p) return;
+    if (act === 'note') { edit(p.note, p.info); return; }
+    if (act === 'bm') { toggleBm(p); return; }
+    setTimeout(function () {                          // hand the click to the Ask feature
+      var ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 2 });
+      ev.notesPass = true;
+      p.target.dispatchEvent(ev);
+    }, 0);
+  }
+
+  // ---- The box ----
+  function quoteText(q) { return '“' + (q.length > 160 ? q.slice(0, 160) + '…' : q) + '”'; }
+  function edit(note, info) {
+    cur = { note: note, info: note ? { sec: note.sec, offset: note.offset, quote: note.quote } : info };
+    $('note-title').textContent = note ? 'Note' : 'Add a note';
+    $('note-quote').textContent = quoteText(cur.info.quote);
+    area.value = note ? note.text : '';
+    delBtn.hidden = !note; delBtn.textContent = 'Delete'; delBtn.setAttribute('data-sure', '');
+    saveBtn.disabled = !area.value.trim();
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+    area.focus();
+  }
+  function closeBox() { if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); cur = null; }
+  area.addEventListener('input', function () { saveBtn.disabled = !area.value.trim(); });
+  area.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('note-form').requestSubmit ? $('note-form').requestSubmit() : saveBtn.click(); } });
+  $('note-cancel').addEventListener('click', closeBox);
+  dlg.addEventListener('click', function (e) { if (e.target === dlg) closeBox(); });
+  $('note-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var text = area.value.trim();
+    if (!text || !cur) return;
+    if (cur.note) { cur.note.text = text; cur.note.upd = Date.now(); }
+    else {
+      var n = { id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: cur.info.sec, offset: cur.info.offset, quote: cur.info.quote, text: text, ts: Date.now() };
+      notes.push(n); highlight(n);
+      setOpen(true);
+    }
+    save(); closeBox(); render();
+  });
+  delBtn.addEventListener('click', function () {
+    if (!cur || !cur.note) return;
+    if (delBtn.getAttribute('data-sure') !== '1') { delBtn.setAttribute('data-sure', '1'); delBtn.textContent = 'Click again to delete'; return; }
+    unhighlight(cur.note.id);
+    notes = notes.filter(function (n) { return n !== cur.note; });
+    save(); closeBox(); render();
+  });
+  main.addEventListener('click', function (e) {
+    var m = e.target.closest ? e.target.closest('mark.note-hl') : null;
+    var sel = window.getSelection();
+    if (!m || (sel && !sel.isCollapsed)) return;
+    var n = find(m.getAttribute('data-note')); if (n) edit(n);
+  });
+  function setActive(id, on) {
+    marksOf(id).forEach(function (m) { m.classList.toggle('active', on); });
+    var c = box.querySelector('.note-card[data-id="' + id + '"]'); if (c) c.classList.toggle('active', on);
+  }
+  main.addEventListener('mouseover', function (e) { var m = e.target.closest ? e.target.closest('mark.note-hl') : null; if (m) setActive(m.getAttribute('data-note'), true); });
+  main.addEventListener('mouseout', function (e) { var m = e.target.closest ? e.target.closest('mark.note-hl') : null; if (m) setActive(m.getAttribute('data-note'), false); });
+
+  // ---- The notes pane ----
+  function stepLabel(n) {
+    var s = n.sec ? $(n.sec) : null;
+    if (!s) return 'Tutorial';
+    var num = s.querySelector('.num'), h = s.querySelector('h2');
+    return (num && /^\d+$/.test(num.textContent) ? 'Step ' + num.textContent + ' · ' : '') + (h ? h.textContent : '');
+  }
+  function ordered() {
+    return notes.slice().sort(function (a, b) {
+      var ia = a.sec ? sections.indexOf($(a.sec)) : 999, ib = b.sec ? sections.indexOf($(b.sec)) : 999;
+      return ia - ib || a.offset - b.offset;
+    });
+  }
+  function el(tag, cls, text) { var x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; }
+  function whenText(n) {
+    var d = new Date(n.upd || n.ts);
+    if (isNaN(d)) return '';
+    var t = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return (n.upd ? 'Edited ' : '') + t;
+  }
+  function render() {
+    box.innerHTML = '';
+    countEl.hidden = !notes.length; countEl.textContent = notes.length;
+    if (!notes.length) box.appendChild(el('p', 'notes-empty', 'No notes yet. Right-click a word and choose “Add a note”.'));
+    ordered().forEach(function (n) {
+      var c = el('article', 'note-card'); c.setAttribute('data-id', n.id);
+      var top = el('div', 'note-top');
+      top.appendChild(el('span', 'note-step', stepLabel(n)));
+      top.appendChild(el('p', 'note-quote-s', quoteText(n.quote)));
+      var b = el('button', 'note-edit', 'Edit'); b.type = 'button'; b.setAttribute('aria-label', 'Edit this note');
+      top.appendChild(b);
+      c.appendChild(top);
+      c.appendChild(el('p', 'note-text', n.text));
+      var when = el('p', 'note-date', whenText(n)); when.title = 'Saved ' + new Date(n.ts).toLocaleString(); c.appendChild(when);
+      if (!marksOf(n.id).length) { c.setAttribute('data-gone', '1'); c.appendChild(el('p', 'note-old', 'This text has changed, so the highlight is gone.')); }
+      c.addEventListener('mouseenter', function () { setActive(n.id, true); });
+      c.addEventListener('mouseleave', function () { setActive(n.id, false); });
+      b.addEventListener('click', function (e) { e.stopPropagation(); edit(n); });
+      c.addEventListener('click', function () { jump(n); });
+      box.appendChild(c);
+    });
+    schedule();
+  }
+  function jump(n) {
+    var m = marksOf(n.id)[0]; if (!m) return;
+    var d = m.closest('details'); while (d) { d.open = true; d = d.parentElement ? d.parentElement.closest('details') : null; }
+    m.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setActive(n.id, true); setTimeout(function () { setActive(n.id, false); }, 1400);
+  }
+  function mode() { return !wide() || pref('tutorial-notes-mode') === 'list' ? 'list' : 'margin'; }
+  function setOpen(v) {
+    open = v; pref('tutorial-notes-open', v ? '1' : '0');
+    pane.hidden = !v;
+    btn.setAttribute('aria-pressed', v ? 'true' : 'false');
+    applyMode();
+  }
+  function applyMode() {
+    var m = mode();
+    pane.classList.toggle('list', m === 'list'); pane.classList.toggle('margin', m === 'margin');
+    $('notes-mode').textContent = m === 'list' ? 'Beside text' : 'List';
+    document.body.classList.toggle('notes-open', open && wide());
+    schedule();
+  }
+  btn.addEventListener('click', function () { setOpen(!open); });
+  $('notes-close').addEventListener('click', function () { setOpen(false); });
+  $('notes-mode').addEventListener('click', function () { pref('tutorial-notes-mode', mode() === 'list' ? 'margin' : 'list'); applyMode(); });
+
+  // Place each note card level with its word and draw the line between them.
+  function layout() {
+    raf = 0;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    if (!open || mode() !== 'margin') return;
+    var br = box.getBoundingClientRect(), cards = Array.prototype.slice.call(box.querySelectorAll('.note-card')), items = [];
+    cards.forEach(function (c) {
+      var ms = marksOf(c.getAttribute('data-id')), last = ms[ms.length - 1], rs = last ? last.getClientRects() : [];
+      var r = rs[rs.length - 1];
+      if (!r || (!r.width && !r.height)) { c.hidden = true; return; }
+      var y = r.top + r.height / 2;
+      if (y < br.top - 4 || y > br.bottom - 8) { c.hidden = true; return; }
+      c.hidden = false; items.push({ c: c, y: y, ly: r.bottom + 1, x: r.right });
+    });
+    items.sort(function (a, b) { return a.y - b.y; });
+    var cursor = 0;
+    items.forEach(function (it) {
+      var top = Math.max(it.y - br.top - 16, cursor);
+      it.c.style.top = top + 'px';
+      cursor = top + it.c.offsetHeight + 8;
+      if (top + it.c.offsetHeight > br.height) { it.c.hidden = true; return; }
+      var cy = br.top + top + 16, cx = br.left + 16, mx = Math.max(it.x + 6, cx - 18);
+      var p = document.createElementNS(SVGNS, 'path');
+      p.setAttribute('d', 'M' + (it.x - 8) + ' ' + it.ly + ' L' + mx + ' ' + it.ly + ' L' + cx + ' ' + cy);
+      svg.appendChild(p);
+      var d = document.createElementNS(SVGNS, 'circle');
+      d.setAttribute('cx', it.x - 8); d.setAttribute('cy', it.ly); d.setAttribute('r', 3);
+      svg.appendChild(d);
+    });
+  }
+  function schedule() { if (!raf) raf = requestAnimationFrame(layout); }
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', function () { applyMode(); });
+  document.addEventListener('toggle', schedule, true);
+  if (window.ResizeObserver) new ResizeObserver(schedule).observe(main);
+  if (window.matchMedia) window.matchMedia('(min-width: 961px)').addEventListener && window.matchMedia('(min-width: 961px)').addEventListener('change', applyMode);
+
+  // ---- Start up: put the saved highlights back ----
+
+  // ---- Bookmarks: saved spots, plus the place you stopped reading ----
+  var BKEY = 'tutorial-bookmarks:' + PAGE, PKEY = 'tutorial-pos:' + PAGE;
+  var marks = [], lastPos = null, ready = false, userMoved = false, saveT = 0;
+  try { marks = JSON.parse(localStorage.getItem(BKEY) || '[]') || []; } catch (e) { marks = []; }
+  try { lastPos = JSON.parse(localStorage.getItem(PKEY) || 'null'); } catch (e) { lastPos = null; }
+  var bmBtn = $('bm-btn'), bmList = $('bm-list'), toast = null, toastT = 0;
+  function saveMarks() { try { localStorage.setItem(BKEY, JSON.stringify(marks)); } catch (e) {} }
+  function findBm(id) { for (var i = 0; i < marks.length; i++) if (marks[i].id === id) return marks[i]; return null; }
+  function stamp(ts) {
+    var d = new Date(ts);
+    return isNaN(d) ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+  function showToast(text, actionLabel, action) {
+    if (!toast) { toast = el('div', 'bm-toast note-ui'); toast.setAttribute('role', 'status'); document.body.appendChild(toast); }
+    toast.innerHTML = ''; toast.appendChild(el('span', '', text));
+    if (actionLabel) { var b = el('button', '', actionLabel); b.type = 'button'; b.addEventListener('click', function () { toast.hidden = true; action(); }); toast.appendChild(b); }
+    toast.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { toast.hidden = true; }, 7000);
+  }
+  function toggleBm(p) {
+    if (p.bm) { unhighlight(p.bm.id, true); marks = marks.filter(function (b) { return b !== p.bm; }); showToast('Bookmark removed.'); }
+    else {
+      var b = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: p.info.sec, offset: p.info.offset, quote: p.info.quote, ts: Date.now() };
+      marks.push(b); highlight(b, true);
+      showToast('Bookmarked “' + (b.quote.length > 40 ? b.quote.slice(0, 40) + '…' : b.quote) + '”. Find it under Bookmarks at the top.');
+    }
+    saveMarks(); renderBm();
+  }
+  function goBm(b) {
+    var m = marksOf(b.id, true)[0]; if (!m) return;
+    var d = m.closest('details'); while (d) { d.open = true; d = d.parentElement ? d.parentElement.closest('details') : null; }
+    m.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    m.classList.add('active'); setTimeout(function () { m.classList.remove('active'); }, 1400);
+  }
+  function secName(id) {
+    var s = id ? $(id) : null; if (!s) return 'Tutorial';
+    var num = s.querySelector('.num'), h = s.querySelector('h2');
+    return (num && /^\d+$/.test(num.textContent) ? 'Step ' + num.textContent + ' · ' : '') + (h ? h.textContent : '');
+  }
+  function renderBm() {
+    if (!bmList) return;
+    bmList.innerHTML = '';
+    if (lastPos && $(lastPos.sec)) {
+      bmList.appendChild(el('p', 'bm-head', 'Where you stopped'));
+      var r = el('div', 'bm-item'); r.tabIndex = 0; r.setAttribute('role', 'menuitem');
+      var t = el('span', 't', 'Continue: ' + secName(lastPos.sec)); t.appendChild(el('span', 's', stamp(lastPos.ts)));
+      r.appendChild(t);
+      r.addEventListener('click', function () { hideBm(); toPos(lastPos, true); });
+      bmList.appendChild(r);
+    }
+    bmList.appendChild(el('p', 'bm-head', 'Your bookmarks'));
+    if (!marks.length) bmList.appendChild(el('p', 'bm-empty', 'None yet. Right-click a word and choose “Bookmark this spot”.'));
+    marks.slice().sort(function (a, b) {
+      var ia = a.sec ? sections.indexOf($(a.sec)) : 999, ib = b.sec ? sections.indexOf($(b.sec)) : 999;
+      return ia - ib || a.offset - b.offset;
+    }).forEach(function (b) {
+      var row = el('div', 'bm-item'); row.tabIndex = 0; row.setAttribute('role', 'menuitem');
+      var t = el('span', 't', quoteText(b.quote)); t.appendChild(el('span', 's', secName(b.sec) + ' · ' + stamp(b.ts)));
+      var x = el('button', 'bm-x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Remove this bookmark');
+      row.appendChild(t); row.appendChild(x);
+      row.addEventListener('click', function () { hideBm(); goBm(b); });
+      row.addEventListener('keydown', function (e) { if (e.key === 'Enter') { hideBm(); goBm(b); } });
+      x.addEventListener('click', function (e) { e.stopPropagation(); toggleBm({ bm: b }); });
+      bmList.appendChild(row);
+    });
+  }
+  function hideBm() { if (bmList) { bmList.hidden = true; bmBtn.setAttribute('aria-expanded', 'false'); } }
+  if (bmBtn && bmList) {
+    bmBtn.addEventListener('click', function (e) { e.stopPropagation(); var show = bmList.hidden; if (show) renderBm(); bmList.hidden = !show; bmBtn.setAttribute('aria-expanded', show ? 'true' : 'false'); });
+    document.addEventListener('click', function (e) { if (!bmList.hidden && !bmList.contains(e.target)) hideBm(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hideBm(); });
+  }
+  marks.forEach(function (b) { try { highlight(b, true); } catch (e) {} });
+
+  // Remember the place you stopped reading (a step and how far through it) and go back to it on the next visit.
+  var TOP = 80;
+  function here() {
+    for (var i = 0; i < sections.length; i++) {
+      var r = sections[i].getBoundingClientRect();
+      if (r.bottom > TOP) return { sec: sections[i].id, f: Math.max(0, Math.min(1, (TOP - r.top) / (r.height || 1))), ts: Date.now() };
+    }
+    var s = sections[sections.length - 1];
+    return s ? { sec: s.id, f: 1, ts: Date.now() } : null;
+  }
+  function savePos() {
+    if (!ready) return;
+    var h = here(); if (!h) return;
+    lastPos = h;
+    try { localStorage.setItem(PKEY, JSON.stringify(h)); } catch (e) {}
+  }
+  function toPos(p, smooth) {
+    var s = $(p.sec); if (!s) return;
+    var r = s.getBoundingClientRect();
+    window.scrollTo({ top: Math.max(0, window.scrollY + r.top + p.f * r.height - TOP), behavior: smooth ? 'smooth' : 'instant' });
+  }
+  ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(function (ev) { window.addEventListener(ev, function () { userMoved = true; }, { passive: true, capture: true }); });
+  window.addEventListener('scroll', function () { clearTimeout(saveT); saveT = setTimeout(savePos, 250); }, { passive: true });
+  window.addEventListener('pagehide', savePos);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') savePos(); });
+  try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (e) {}
+  function resume() {
+    var p = lastPos;
+    if (!p || location.hash || !$(p.sec) || (sections[0] && p.sec === sections[0].id && p.f < 0.02)) { setTimeout(function () { ready = true; }, 300); return; }
+    toPos(p, false);
+    setTimeout(function () { if (!userMoved) toPos(p, false); }, 500);         // once the diagrams and fonts have settled
+    showToast('Back where you left off: ' + secName(p.sec), 'Start at the top', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+    setTimeout(function () { ready = true; }, 1000);
+  }
+  if (document.readyState === 'complete') resume(); else window.addEventListener('load', resume);
+  notes.forEach(function (n) { try { highlight(n); } catch (e) {} });
+  open = pref('tutorial-notes-open') === '1' && notes.length > 0;
+  pane.hidden = !open;
+  btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+  applyMode();
+  render();
+  window.addEventListener('load', schedule);
+})();
+</script>
+</body>
+</html>

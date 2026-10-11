@@ -1,5 +1,22 @@
 [
-  { "file": "code-to-cluster-tutorial.html", "name": "Code to Cluster", "blurb": "Part 1. On your PC with kind. Free." },
-  { "file": "eyes-on-the-cluster-tutorial.html", "name": "Eyes on the Cluster", "blurb": "Part 2. Metrics, logs and alerts. Free." },
-  { "file": "todo-on-eks-tutorial.html", "name": "Todo on EKS", "blurb": "On AWS with EKS. Costs money." }
+  {
+    "file": "code-to-cluster-tutorial.html",
+    "name": "Code to Cluster",
+    "blurb": "Part 1. On your PC with kind. Free."
+  },
+  {
+    "file": "eyes-on-the-cluster-tutorial.html",
+    "name": "Eyes on the Cluster",
+    "blurb": "Part 2. Metrics, logs and alerts. Free."
+  },
+  {
+    "file": "platform-as-code-tutorial.html",
+    "name": "Platform as Code",
+    "blurb": "Part 3. The whole platform in Git. Free."
+  },
+  {
+    "file": "todo-on-eks-tutorial.html",
+    "name": "Todo on EKS",
+    "blurb": "On AWS with EKS. Costs money."
+  }
 ]

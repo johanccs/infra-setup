@@ -7,41 +7,12 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const http = require('node:http');
-const { spawnSync, spawn } = require('node:child_process');
+const { spawn } = require('node:child_process');
 const { extract, bashBlocks, blocksCaptioned } = require('./extract');
 
 const DOCS = path.join(__dirname, '..', 'docs');
 const FILE = path.join(DOCS, 'eyes-on-the-cluster-tutorial.html');
-const TOOLS = process.env.TOOLS_DIR || '';
-let fails = 0, passes = 0, skips = 0;
-const check = (ok, msg, detail) => { if (ok) passes++; else fails++; console.log((ok ? 'PASS ' : 'FAIL ') + msg + (!ok && detail ? '\n' + String(detail).trim().split('\n').map((l) => '     ' + l).join('\n') : '')); };
-const skip = (msg) => { skips++; console.log('SKIP ' + msg); };
-
-function find(tool) {
-  const isFile = (p) => fs.existsSync(p) && fs.statSync(p).isFile();
-  if (TOOLS) {
-    const dirs = [TOOLS, ...fs.readdirSync(TOOLS).map((d) => path.join(TOOLS, d)).filter((d) => fs.statSync(d).isDirectory())];
-    for (const dir of dirs) for (const name of [tool, tool + '.exe']) if (isFile(path.join(dir, name))) return path.join(dir, name);
-  }
-  const r = spawnSync('which', [tool], { encoding: 'utf8' });
-  return r.status === 0 ? r.stdout.split(/\r?\n/)[0].trim() : null;
-}
-const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, ...opts });
-const get = (url, opts = {}) => new Promise((resolve) => {
-  const r = http.request(url, { method: opts.method || 'GET', headers: { 'content-type': 'application/json' } }, (res) => {
-    let d = ''; res.on('data', (c) => { d += c; }); res.on('end', () => resolve({ status: res.statusCode, body: d }));
-  });
-  r.on('error', () => resolve({ status: 0, body: '' }));
-  r.end(opts.body);
-});
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const yamlDocs = (text) => {
-  const r = run('python3', ['-c', 'import sys,yaml,json; print(json.dumps([d for d in yaml.safe_load_all(sys.stdin) if d]))'], { input: text });
-  if (r.status !== 0) throw new Error(r.stderr);
-  return JSON.parse(r.stdout);
-};
-const CRDS = 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json';
+const { check, skip, summary, find, run, get, sleep, yamlDocs, CRDS } = require('./lib');
 
 async function main() {
   const page = fs.readFileSync(FILE, 'utf8');
@@ -179,8 +150,7 @@ async function main() {
   const dotnet = find('dotnet');
   if (!dotnet) skip('.NET SDK not installed, API not built');
   else await apiTest(dir, dotnet, bash);
-  console.log(`\n${passes} passed, ${fails} failed, ${skips} skipped`);
-  process.exit(fails ? 1 : 0);
+  process.exit(summary());
 }
 
 async function apiTest(dir, dotnet, bash) {

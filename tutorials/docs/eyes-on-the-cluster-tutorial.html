@@ -398,6 +398,7 @@ try {
     <div class="tmenu-list" id="tmenu-list" role="menu" aria-label="Tutorials" hidden>
       <a role="menuitem" href="code-to-cluster-tutorial.html"><b>Code to Cluster</b><span>Part 1. On your PC with kind. Free.</span></a>
       <a role="menuitem" href="eyes-on-the-cluster-tutorial.html" aria-current="page"><b>Eyes on the Cluster</b><span>Part 2. Metrics, logs and alerts. Free.</span></a>
+      <a role="menuitem" href="platform-as-code-tutorial.html"><b>Platform as Code</b><span>Part 3. The whole platform in Git. Free.</span></a>
       <a role="menuitem" href="todo-on-eks-tutorial.html"><b>Todo on EKS</b><span>On AWS with EKS. Costs money.</span></a>
     </div>
   </div>
@@ -1681,7 +1682,7 @@ todo:request_errors:ratio_rate1h / 0.01</code></pre></figure>
       <div class="step-head"><span class="num">→</span><h2>Where to go next</h2></div>
       <p>You now have the two halves of a platform: a road to production, and the means to see what's on it. These take it further, roughly in order:</p>
       <ul>
-        <li><strong>Part 3, Platform as Code,</strong> puts the monitoring stack, Loki and Alloy under Argo CD as an "app of apps", so the rebuild drill becomes one script and a wait.</li>
+        <li><strong>Part 3, <a href="platform-as-code-tutorial.html">Platform as Code</a>,</strong> puts the monitoring stack, Loki and Alloy under Argo CD as an "app of apps", so the rebuild drill becomes one script and a wait.</li>
         <li><strong>Watch the front door.</strong> The drills only see requests that reach the API. When the database is down the API pods stop being Ready, the Gateway has nowhere to send traffic, and users get errors that none of the API's own metrics record. NGINX Gateway Fabric exposes its own Prometheus metrics. Scrape them, graph them next to the API's, and write that drill yourself.</li>
         <li><strong>Send alerts somewhere.</strong> Configure an Alertmanager receiver for a Slack or Teams webhook, routing <code>critical</code> and <code>warning</code> differently.</li>
         <li><strong>Add tracing.</strong> Add OpenTelemetry tracing to the API and the UI's nginx, run Grafana Tempo, and follow one request across both services. Tracing is the third pillar after metrics and logs.</li>
