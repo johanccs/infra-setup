@@ -315,6 +315,25 @@ body.notes-open { padding-right: 300px; }
   #notes-mode { display: none; }
   body.notes-open { padding-right: 0; }
 }
+
+/* Bookmarks: save a spot with right-click, and the page remembers where you stopped reading. */
+#note-hint { display: block; max-width: 90ch; }
+mark.bm-hl { background: none; color: inherit; }
+mark.bm-hl.bm-start::before { content: "⚑"; color: var(--accent); font-size: .95em; margin-right: 3px; }
+.bm-wrap { position: relative; }
+.bm-list { position: absolute; right: 0; top: calc(100% + 8px); width: 330px; max-height: 60vh; overflow-y: auto; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); z-index: 16; }
+.bm-list[hidden] { display: none; }
+.bm-head { margin: 0; padding: 8px 10px 2px; font: 600 11.5px/1.2 var(--font-body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.bm-item { display: flex; align-items: flex-start; gap: 6px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; line-height: 1.35; }
+.bm-item:hover, .bm-item:focus-visible { background: var(--accent-soft); outline: none; }
+.bm-item .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.bm-item .s { display: block; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bm-x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 17px; line-height: 1; padding: 0 4px; }
+.bm-x:hover { color: var(--warn); }
+.bm-empty { margin: 0; padding: 10px; font-size: 13.5px; color: var(--muted); }
+.bm-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 40; max-width: calc(100% - 32px); display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; box-shadow: 0 8px 28px rgba(0, 0, 0, .2); font-size: 14px; }
+.bm-toast[hidden] { display: none; }
+.bm-toast button { font: 600 13px/1 var(--font-body); color: var(--accent); background: none; border: 0; cursor: pointer; padding: 4px; }
 </style>
 <script>
 // Apply the saved theme and text size before the page paints, so there is no flash.
@@ -339,6 +358,7 @@ try {
   <button type="button" class="tb-btn" id="font-down" aria-label="Smaller text" title="Smaller text">A−</button>
   <button type="button" class="tb-btn" id="font-pct" aria-label="Reset text size" title="Reset text size">100%</button>
   <button type="button" class="tb-btn" id="font-up" aria-label="Larger text" title="Larger text">A+</button>
+  <span class="bm-wrap"><button type="button" class="tb-btn" id="bm-btn" aria-haspopup="true" aria-expanded="false" aria-controls="bm-list" title="Bookmarks: go back to where you were">⚑<span class="tw"> Bookmarks</span></button><div class="bm-list" id="bm-list" role="menu" aria-label="Bookmarks" hidden></div></span>
   <button type="button" class="tb-btn" id="notes-btn" aria-pressed="false" aria-controls="notes-pane" title="Show your notes">Notes<span class="notes-count" id="notes-count" hidden></span></button>
   <button type="button" class="tb-btn" id="theme-btn"><span id="theme-glyph" aria-hidden="true">◐</span><span class="tw" id="theme-word"> Auto</span></button>
 </div>
@@ -364,7 +384,7 @@ try {
         <li>.NET 10</li><li>Angular 22</li><li>Docker</li><li>PostgreSQL</li><li>NGINX Gateway</li><li>Amazon ECR</li><li>Amazon EKS</li><li>Helm</li><li>Argo CD</li>
       </ul>
       <p class="ask-hint" id="ask-hint" hidden><span><kbd>Right-click</kbd> any text, or select some first, to ask the tutor about it.</span> <button type="button" class="ask-open" id="ask-open">Ask a question</button></p>
-      <p class="ask-hint" id="note-hint"><kbd>Right-click</kbd> a word and choose <b>Add a note</b> to save a comment. It stays highlighted, and your notes appear in the margin (button <b>Notes</b> at the top). They are kept in this browser.</p>
+      <p class="ask-hint" id="note-hint"><kbd>Right-click</kbd> a word and choose <b>Add a note</b> to save a comment. It stays highlighted, and your notes appear in the margin (button <b>Notes</b> at the top). Choose <b>Bookmark this spot</b> to mark a place you want to come back to. The page also remembers where you stopped reading. Everything is kept in this browser.</p>
     </header>
 
     <!-- ============ 0 ============ -->
@@ -2207,6 +2227,7 @@ aws ecr delete-repository --repository-name todo-ui  --force --region $AWS_REGIO
 </script>
 <div class="note-menu note-ui" id="note-menu" role="menu" aria-label="Note or question" hidden>
   <button type="button" role="menuitem" data-act="note" id="note-menu-note">Add a note<span class="sub" id="note-menu-sub"></span></button>
+  <button type="button" role="menuitem" data-act="bm" id="note-menu-bm">Bookmark this spot</button>
   <button type="button" role="menuitem" data-act="ask" id="note-menu-ask">Ask the tutor</button>
 </div>
 <dialog class="note-dlg note-ui" id="note-dlg" aria-labelledby="note-title">
@@ -2233,7 +2254,8 @@ aws ecr delete-repository --repository-name todo-ui  --force --region $AWS_REGIO
 (function () {
   var main = document.querySelector('main');
   if (!main || !window.Range || !document.createTreeWalker) return;
-  var KEY = 'tutorial-notes:' + (location.pathname.split('/').pop() || 'index');
+  var PAGE = location.pathname.split('/').pop() || 'index';
+  var KEY = 'tutorial-notes:' + PAGE;
   var notes = [];
   try { notes = JSON.parse(localStorage.getItem(KEY) || '[]') || []; } catch (e) { notes = []; }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(notes)); } catch (e) {} }
@@ -2297,27 +2319,28 @@ aws ecr delete-repository --repository-name todo-ui  --force --region $AWS_REGIO
   }
 
   // ---- Highlighting ----
-  function highlight(n) {
+  function highlight(n, bm) {
     var c = n.sec ? $(n.sec) : main;
     if (!c) return false;
     var at = locate(fullText(c), n);
     if (at < 0) return false;
-    var end = at + n.quote.length, pos = 0, last = null;
+    var end = at + n.quote.length, pos = 0, last = null, first = null;
     textNodes(c).forEach(function (t) {
       var a = pos, b = pos + t.length; pos = b;
       var s = Math.max(at, a), e = Math.min(end, b);
       if (s >= e || !t.data.slice(s - a, e - a).trim()) return;
       var r = document.createRange(); r.setStart(t, s - a); r.setEnd(t, e - a);
-      var m = document.createElement('mark'); m.className = 'note-hl'; m.setAttribute('data-note', n.id);
+      var m = document.createElement('mark'); m.className = bm ? 'bm-hl' : 'note-hl'; m.setAttribute(bm ? 'data-bm' : 'data-note', n.id);
       r.surroundContents(m);
-      last = m;
+      last = m; if (!first) first = m;
     });
-    if (last) last.classList.add('note-end');
+    if (bm) { if (first) first.classList.add('bm-start'); }
+    else if (last) last.classList.add('note-end');
     return true;
   }
-  function marksOf(id) { return Array.prototype.slice.call(main.querySelectorAll('mark.note-hl[data-note="' + id + '"]')); }
-  function unhighlight(id) {
-    marksOf(id).forEach(function (m) {
+  function marksOf(id, bm) { return Array.prototype.slice.call(main.querySelectorAll(bm ? 'mark.bm-hl[data-bm="' + id + '"]' : 'mark.note-hl[data-note="' + id + '"]')); }
+  function unhighlight(id, bm) {
+    marksOf(id, bm).forEach(function (m) {
       var p = m.parentNode;
       while (m.firstChild) p.insertBefore(m.firstChild, m);
       p.removeChild(m); p.normalize();
@@ -2339,8 +2362,10 @@ aws ecr delete-repository --repository-name todo-ui  --force --region $AWS_REGIO
     if (!info) return;
     e.preventDefault(); e.stopPropagation();
     var mark = e.target.closest ? e.target.closest('mark.note-hl') : null;
-    pending = { info: info, note: mark ? find(mark.getAttribute('data-note')) : null, target: e.target, x: e.clientX, y: e.clientY };
-    if (!askOn()) { choose('note'); return; }
+    var bmark = e.target.closest ? e.target.closest('mark.bm-hl') : null;
+    pending = { info: info, note: mark ? find(mark.getAttribute('data-note')) : null, bm: bmark ? findBm(bmark.getAttribute('data-bm')) : null, target: e.target, x: e.clientX, y: e.clientY };
+    $('note-menu-bm').textContent = pending.bm ? 'Remove bookmark' : 'Bookmark this spot';
+    $('note-menu-ask').hidden = !askOn();
     $('note-menu-note').firstChild.nodeValue = pending.note ? 'Edit note' : 'Add a note';
     $('note-menu-sub').textContent = '“' + (info.quote.length > 40 ? info.quote.slice(0, 40) + '…' : info.quote) + '”';
     menu.hidden = false;
@@ -2358,6 +2383,7 @@ aws ecr delete-repository --repository-name todo-ui  --force --region $AWS_REGIO
     hideMenu();
     var p = pending; if (!p) return;
     if (act === 'note') { edit(p.note, p.info); return; }
+    if (act === 'bm') { toggleBm(p); return; }
     setTimeout(function () {                          // hand the click to the Ask feature
       var ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 2 });
       ev.notesPass = true;
@@ -2519,6 +2545,115 @@ aws ecr delete-repository --repository-name todo-ui  --force --region $AWS_REGIO
   if (window.matchMedia) window.matchMedia('(min-width: 961px)').addEventListener && window.matchMedia('(min-width: 961px)').addEventListener('change', applyMode);
 
   // ---- Start up: put the saved highlights back ----
+
+  // ---- Bookmarks: saved spots, plus the place you stopped reading ----
+  var BKEY = 'tutorial-bookmarks:' + PAGE, PKEY = 'tutorial-pos:' + PAGE;
+  var marks = [], lastPos = null, ready = false, userMoved = false, saveT = 0;
+  try { marks = JSON.parse(localStorage.getItem(BKEY) || '[]') || []; } catch (e) { marks = []; }
+  try { lastPos = JSON.parse(localStorage.getItem(PKEY) || 'null'); } catch (e) { lastPos = null; }
+  var bmBtn = $('bm-btn'), bmList = $('bm-list'), toast = null, toastT = 0;
+  function saveMarks() { try { localStorage.setItem(BKEY, JSON.stringify(marks)); } catch (e) {} }
+  function findBm(id) { for (var i = 0; i < marks.length; i++) if (marks[i].id === id) return marks[i]; return null; }
+  function stamp(ts) {
+    var d = new Date(ts);
+    return isNaN(d) ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+  function showToast(text, actionLabel, action) {
+    if (!toast) { toast = el('div', 'bm-toast note-ui'); toast.setAttribute('role', 'status'); document.body.appendChild(toast); }
+    toast.innerHTML = ''; toast.appendChild(el('span', '', text));
+    if (actionLabel) { var b = el('button', '', actionLabel); b.type = 'button'; b.addEventListener('click', function () { toast.hidden = true; action(); }); toast.appendChild(b); }
+    toast.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { toast.hidden = true; }, 7000);
+  }
+  function toggleBm(p) {
+    if (p.bm) { unhighlight(p.bm.id, true); marks = marks.filter(function (b) { return b !== p.bm; }); showToast('Bookmark removed.'); }
+    else {
+      var b = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: p.info.sec, offset: p.info.offset, quote: p.info.quote, ts: Date.now() };
+      marks.push(b); highlight(b, true);
+      showToast('Bookmarked “' + (b.quote.length > 40 ? b.quote.slice(0, 40) + '…' : b.quote) + '”. Find it under Bookmarks at the top.');
+    }
+    saveMarks(); renderBm();
+  }
+  function goBm(b) {
+    var m = marksOf(b.id, true)[0]; if (!m) return;
+    var d = m.closest('details'); while (d) { d.open = true; d = d.parentElement ? d.parentElement.closest('details') : null; }
+    m.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    m.classList.add('active'); setTimeout(function () { m.classList.remove('active'); }, 1400);
+  }
+  function secName(id) {
+    var s = id ? $(id) : null; if (!s) return 'Tutorial';
+    var num = s.querySelector('.num'), h = s.querySelector('h2');
+    return (num && /^\d+$/.test(num.textContent) ? 'Step ' + num.textContent + ' · ' : '') + (h ? h.textContent : '');
+  }
+  function renderBm() {
+    if (!bmList) return;
+    bmList.innerHTML = '';
+    if (lastPos && $(lastPos.sec)) {
+      bmList.appendChild(el('p', 'bm-head', 'Where you stopped'));
+      var r = el('div', 'bm-item'); r.tabIndex = 0; r.setAttribute('role', 'menuitem');
+      var t = el('span', 't', 'Continue: ' + secName(lastPos.sec)); t.appendChild(el('span', 's', stamp(lastPos.ts)));
+      r.appendChild(t);
+      r.addEventListener('click', function () { hideBm(); toPos(lastPos, true); });
+      bmList.appendChild(r);
+    }
+    bmList.appendChild(el('p', 'bm-head', 'Your bookmarks'));
+    if (!marks.length) bmList.appendChild(el('p', 'bm-empty', 'None yet. Right-click a word and choose “Bookmark this spot”.'));
+    marks.slice().sort(function (a, b) {
+      var ia = a.sec ? sections.indexOf($(a.sec)) : 999, ib = b.sec ? sections.indexOf($(b.sec)) : 999;
+      return ia - ib || a.offset - b.offset;
+    }).forEach(function (b) {
+      var row = el('div', 'bm-item'); row.tabIndex = 0; row.setAttribute('role', 'menuitem');
+      var t = el('span', 't', quoteText(b.quote)); t.appendChild(el('span', 's', secName(b.sec) + ' · ' + stamp(b.ts)));
+      var x = el('button', 'bm-x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Remove this bookmark');
+      row.appendChild(t); row.appendChild(x);
+      row.addEventListener('click', function () { hideBm(); goBm(b); });
+      row.addEventListener('keydown', function (e) { if (e.key === 'Enter') { hideBm(); goBm(b); } });
+      x.addEventListener('click', function (e) { e.stopPropagation(); toggleBm({ bm: b }); });
+      bmList.appendChild(row);
+    });
+  }
+  function hideBm() { if (bmList) { bmList.hidden = true; bmBtn.setAttribute('aria-expanded', 'false'); } }
+  if (bmBtn && bmList) {
+    bmBtn.addEventListener('click', function (e) { e.stopPropagation(); var show = bmList.hidden; if (show) renderBm(); bmList.hidden = !show; bmBtn.setAttribute('aria-expanded', show ? 'true' : 'false'); });
+    document.addEventListener('click', function (e) { if (!bmList.hidden && !bmList.contains(e.target)) hideBm(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hideBm(); });
+  }
+  marks.forEach(function (b) { try { highlight(b, true); } catch (e) {} });
+
+  // Remember the place you stopped reading (a step and how far through it) and go back to it on the next visit.
+  var TOP = 80;
+  function here() {
+    for (var i = 0; i < sections.length; i++) {
+      var r = sections[i].getBoundingClientRect();
+      if (r.bottom > TOP) return { sec: sections[i].id, f: Math.max(0, Math.min(1, (TOP - r.top) / (r.height || 1))), ts: Date.now() };
+    }
+    var s = sections[sections.length - 1];
+    return s ? { sec: s.id, f: 1, ts: Date.now() } : null;
+  }
+  function savePos() {
+    if (!ready) return;
+    var h = here(); if (!h) return;
+    lastPos = h;
+    try { localStorage.setItem(PKEY, JSON.stringify(h)); } catch (e) {}
+  }
+  function toPos(p, smooth) {
+    var s = $(p.sec); if (!s) return;
+    var r = s.getBoundingClientRect();
+    window.scrollTo({ top: Math.max(0, window.scrollY + r.top + p.f * r.height - TOP), behavior: smooth ? 'smooth' : 'instant' });
+  }
+  ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(function (ev) { window.addEventListener(ev, function () { userMoved = true; }, { passive: true, capture: true }); });
+  window.addEventListener('scroll', function () { clearTimeout(saveT); saveT = setTimeout(savePos, 250); }, { passive: true });
+  window.addEventListener('pagehide', savePos);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') savePos(); });
+  try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (e) {}
+  function resume() {
+    var p = lastPos;
+    if (!p || location.hash || !$(p.sec) || (sections[0] && p.sec === sections[0].id && p.f < 0.02)) { setTimeout(function () { ready = true; }, 300); return; }
+    toPos(p, false);
+    setTimeout(function () { if (!userMoved) toPos(p, false); }, 500);         // once the diagrams and fonts have settled
+    showToast('Back where you left off: ' + secName(p.sec), 'Start at the top', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+    setTimeout(function () { ready = true; }, 1000);
+  }
+  if (document.readyState === 'complete') resume(); else window.addEventListener('load', resume);
   notes.forEach(function (n) { try { highlight(n); } catch (e) {} });
   open = pref('tutorial-notes-open') === '1' && notes.length > 0;
   pane.hidden = !open;

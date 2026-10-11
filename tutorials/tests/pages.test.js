@@ -322,7 +322,10 @@ async function noKeyTest(browser) {
     check(spec.file.startsWith('code') ? /switched off/.test(hint) : hint === '', `${spec.name}: asking is off and says so (or stays hidden)`);
     await pg.locator('#overview .glossary dd').first().click({ button: 'right' });
     check(await pg.evaluate(() => !document.querySelector('dialog#ask[open]') && (!document.getElementById('ctx') || document.getElementById('ctx').hidden)), `${spec.name}: with asking off, right-click opens no Ask box`);
-    // notes: with asking off, right-click goes straight to the note box
+    // notes
+    await pg.waitForSelector('#note-menu:not([hidden])', { timeout: 3000 });
+    check(await pg.locator('#note-menu-ask').isHidden() && await pg.locator('#note-menu-bm').isVisible(), `${spec.name}: with asking off the menu offers a note and a bookmark only`);
+    await pg.click('#note-menu-note');
     await pg.waitForSelector('#note-dlg[open]', { timeout: 3000 });
     check(await pg.textContent('#note-title') === 'Add a note' && /\S/.test(await pg.textContent('#note-quote')), `${spec.name}: right-click opens the Add a note box showing the word`);
     check(await pg.locator('#note-save').isDisabled(), `${spec.name}: an empty note cannot be saved`);
@@ -347,6 +350,32 @@ async function noKeyTest(browser) {
     await pg.locator('mark.note-hl').first().click(); await pg.waitForSelector('#note-dlg[open]');
     await pg.click('#note-del'); await pg.click('#note-del');
     check(await pg.locator('mark.note-hl').count() === 0 && await pg.locator('.note-card').count() === 0 && await pg.evaluate(() => document.querySelector('main').textContent.length) === copyTxt, `${spec.name}: deleting removes the highlight and leaves the text as it was`);
+    // bookmarks
+    await pg.locator('#overview .glossary dd').first().scrollIntoViewIfNeeded();
+    await pg.locator('#overview .glossary dd').first().click({ button: 'right' });
+    await pg.waitForSelector('#note-menu:not([hidden])');
+    const len0 = await pg.evaluate(() => document.querySelector('main').textContent.length);
+    await pg.click('#note-menu-bm');
+    check(await pg.locator('mark.bm-hl.bm-start').count() === 1 && await pg.evaluate(() => document.querySelector('main').textContent.length) === len0, `${spec.name}: bookmarking marks the spot with a flag and leaves the text unchanged`);
+    await pg.click('#bm-btn');
+    check(await pg.locator('#bm-list .bm-item').count() >= 1 && /Your bookmarks/.test(await pg.textContent('#bm-list')), `${spec.name}: the Bookmarks list shows it`);
+    await pg.reload(); await pg.waitForSelector('#rail-list li');
+    check(await pg.locator('mark.bm-hl.bm-start').count() === 1, `${spec.name}: the bookmark survives a reload`);
+    await pg.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' })); await pg.waitForTimeout(300);
+    await pg.click('#bm-btn'); await pg.locator('#bm-list .bm-item', { hasText: 'Step' }).first().click();
+    await pg.waitForFunction(() => { const r = document.querySelector('mark.bm-hl').getBoundingClientRect(); return r.top > 0 && r.bottom < innerHeight; }, null, { timeout: 4000 });
+    check(true, `${spec.name}: choosing a bookmark scrolls to it`);
+    await pg.click('#bm-btn'); await pg.locator('#bm-list .bm-x').first().click();
+    check(await pg.locator('mark.bm-hl').count() === 0 && await pg.evaluate(() => document.querySelector('main').textContent.length) === len0, `${spec.name}: removing a bookmark leaves the text as it was`);
+    // resume where you stopped
+    await pg.evaluate(() => { const s = document.getElementById('docker'); window.scrollTo({ top: scrollY + s.getBoundingClientRect().top + 300, behavior: 'instant' }); });
+    await pg.waitForTimeout(700);
+    await pg.reload(); await pg.waitForSelector('#rail-list li'); await pg.waitForTimeout(1500);
+    const top = await pg.evaluate(() => document.getElementById('docker').getBoundingClientRect().top);
+    check(Math.abs(top + 300) < 60 && await pg.locator('.bm-toast').isVisible(), `${spec.name}: reopening the page returns to where you stopped (${Math.round(top)})`);
+    const base = pg.url().split('#')[0];
+    await pg.goto('about:blank'); await pg.goto(base + '#cluster'); await pg.waitForTimeout(1500);
+    check(await pg.evaluate(() => { const t = document.querySelector('.bm-toast'); return !t || t.hidden; }), `${spec.name}: a link with #step wins over the remembered place`);
     await pg.close();
   }
   await ctx.close();
