@@ -8,7 +8,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const DOCS = path.join(__dirname, '..', 'docs');
-const SKIP = /0\.0\.0\.0|&lt;|config\/crd\/|localhost|127\.0\.0\.1|YOUR|your-user|\$|<|kubernetes\.default\.svc|\.svc\.cluster\.local|raw\.githubusercontent\.com|fonts\.(googleapis|gstatic)\.com\/?$|^http:\/\/todo-/;
+const SKIP = /0\.0\.0\.0|&lt;|config\/crd\/|localhost|127\.0\.0\.1|YOUR|your-user|\$|<|kubernetes\.default\.svc|\.svc\.cluster\.local|token\.actions\.githubusercontent\.com|raw\.githubusercontent\.com|fonts\.(googleapis|gstatic)\.com\/?$|^http:\/\/todo-/;
 const urls = new Map();
 for (const f of fs.readdirSync(DOCS).filter((n) => /\.(html|md)$/.test(n))) {
   for (const m of fs.readFileSync(path.join(DOCS, f), 'utf8').matchAll(/https?:\/\/[^\s)"'<>`|]+/g)) {

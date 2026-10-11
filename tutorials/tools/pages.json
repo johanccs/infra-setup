@@ -15,6 +15,11 @@
     "blurb": "Part 3. The whole platform in Git. Free."
   },
   {
+    "file": "secure-the-road-tutorial.html",
+    "name": "Secure the Road",
+    "blurb": "Part 4. Scan, sign, restrict. Free."
+  },
+  {
     "file": "todo-on-eks-tutorial.html",
     "name": "Todo on EKS",
     "blurb": "On AWS with EKS. Costs money."

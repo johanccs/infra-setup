@@ -494,6 +494,7 @@ try {
       <a role="menuitem" href="code-to-cluster-tutorial.html"><b>Code to Cluster</b><span>Part 1. On your PC with kind. Free.</span></a>
       <a role="menuitem" href="eyes-on-the-cluster-tutorial.html"><b>Eyes on the Cluster</b><span>Part 2. Metrics, logs and alerts. Free.</span></a>
       <a role="menuitem" href="platform-as-code-tutorial.html" aria-current="page"><b>Platform as Code</b><span>Part 3. The whole platform in Git. Free.</span></a>
+      <a role="menuitem" href="secure-the-road-tutorial.html"><b>Secure the Road</b><span>Part 4. Scan, sign, restrict. Free.</span></a>
       <a role="menuitem" href="todo-on-eks-tutorial.html"><b>Todo on EKS</b><span>On AWS with EKS. Costs money.</span></a>
     </div>
   </div>
@@ -1210,7 +1211,7 @@ git push</code></pre></figure>
     <section class="step" id="next" data-step>
       <div class="step-head"><span class="num">→</span><h2>Where to go next</h2></div>
       <ul>
-        <li><strong>Part 4, Secure the Road,</strong> adds scanning, signing and admission policies, using the pattern from this part for each new component.</li>
+        <li><strong>Part 4, <a href="secure-the-road-tutorial.html">Secure the Road</a>,</strong> adds scanning, signing and admission policies, using the pattern from this part for each new component.</li>
         <li><strong>Move the gateway under Argo CD.</strong> Add an Application for the Gateway API types (a kustomize source, <code>config/crd/gateway-api/standard</code> at tag <code>v2.7.2</code>) and one for the controller chart, so <code>infra/bootstrap.sh</code> shrinks to the cluster, Argo CD and the root app.</li>
         <li><strong>Let Argo CD manage itself.</strong> Install Argo CD from its Helm chart through an Application in <code>infra/platform/apps/</code>, so upgrading Argo CD is a pull request too.</li>
         <li><strong>Generate Applications.</strong> An <b>ApplicationSet</b> creates one Application per folder or per cluster from a template, instead of a file per component.</li>

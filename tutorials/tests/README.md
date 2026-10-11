@@ -1,6 +1,6 @@
 # Tests
 
-Five scripts. Run them from the `tutorials` folder (in Ubuntu). They never touch the real OpenAI API.
+Six scripts. Run them from the `tutorials` folder (in Ubuntu). They never touch the real OpenAI API.
 
 | Script | What it proves | Needs |
 |--------|----------------|-------|
@@ -8,6 +8,7 @@ Five scripts. Run them from the `tutorials` folder (in Ubuntu). They never touch
 | `node tests/content.test.js` | The files the tutorials tell you to create work as written: Helm chart lints and renders, manifests are valid Kubernetes, the CI workflow lints and its `sed` edits the chart, Dockerfiles lint, every bash block parses, and the .NET API builds with no warnings and answers every request the tutorial makes | Optional tools, each skipped if missing: `helm`, `kubeconform`, `actionlint`, `hadolint`, `dotnet`. Set `TOOLS_DIR` if they are not on `PATH` |
 | `node tests/monitoring.test.js` | Part 2 (Eyes on the Cluster) works as written: the API builds with its OpenTelemetry packages and serves `/metrics`, the fault switches fail, slow and crash the app as described, the chart and the Prometheus, Loki and Alloy values render with their pinned chart versions, every PromQL query parses, and the alert rules fire (or stay quiet) on synthetic data | .NET SDK, `helm`, `kubeconform`, `promtool`, `alloy`, internet (each is skipped if missing) |
 | `node tests/platform.test.js` | Part 3 (Platform as Code) works as written: the Argo CD Applications and AppProject are valid and consistent with each other and with parts 1 and 2, `infra/bootstrap.sh` runs its steps in order (against stand-in tools), and the pull request check renders the pinned charts, fails on the loud mistakes and passes the quiet one, exactly as the drills say | `helm`, `kubeconform`, `actionlint`, `yq`, internet (each is skipped if missing) |
+| `node tests/security.test.js` | Part 4 (Secure the Road) works as written: the pipeline's scan and signing steps run as written against stand-in tools, Trivy's gate passes on the images part 1 builds from and fails on the drill's old image, the Kyverno policy and External Secrets objects match their CRD schemas, the API, UI and database meet the restricted Pod Security Standard, the network policies allow exactly the intended calls (checked with a model of Kubernetes' rules), and the fingerprint change builds and runs | `helm`, `kubeconform`, `actionlint`, `yq`, `trivy`, .NET SDK, internet (each is skipped if missing) |
 | `node tests/links.js` | Every link in `docs/` still opens | `curl`, internet |
 
 The API test needs a PostgreSQL to talk to: set `TUTORIAL_PG` to a connection string such as `Host=localhost;Port=5432;Database=todo;Username=todo;Password=dev` (for example the container from step 2 of the tutorial). Without it the database-down checks still run and the rest is skipped.
