@@ -334,6 +334,7 @@ async function noKeyTest(browser) {
     await pg.waitForTimeout(300);
     const line = await pg.evaluate(() => { const p = document.querySelector('#notes-lines path'), c = document.querySelector('.note-card'); const m = document.querySelector('mark.note-hl').getBoundingClientRect(); if (!p || !c || c.hidden) return null; const n = p.getAttribute('d').match(/-?[\d.]+/g).map(Number); return { sx: n[0], sy: n[1], ex: n[n.length - 2], ey: n[n.length - 1], mr: m.right, mb: m.bottom, cl: c.getBoundingClientRect().left, ct: c.getBoundingClientRect().top, ch: c.getBoundingClientRect().height }; });
     check(!!line && Math.abs(line.sy - line.mb) < 6 && line.sx <= line.mr && line.ex <= line.cl + 2 && line.ey >= line.ct && line.ey <= line.ct + line.ch, `${spec.name}: a line joins the word to its note`);
+    check(/\d{4}.*\d{1,2}:\d{2}/.test(await pg.textContent('.note-card .note-date')), `${spec.name}: each note shows the date and time it was saved`);
     await pg.reload(); await pg.waitForSelector('#rail-list li');
     check(await pg.locator('mark.note-hl').count() >= 1 && await pg.locator('.note-card', { hasText: 'My first note' }).count() === 1, `${spec.name}: the note and its highlight survive a reload`);
     await pg.locator('mark.note-hl').first().scrollIntoViewIfNeeded();
@@ -341,7 +342,7 @@ async function noKeyTest(browser) {
     await pg.waitForSelector('#note-dlg[open]');
     check(await pg.inputValue('#note-text') === 'My first note' && !(await pg.locator('#note-del').isHidden()), `${spec.name}: clicking a highlight opens the note for editing`);
     await pg.fill('#note-text', 'Edited note'); await pg.click('#note-save');
-    check(await pg.locator('.note-card', { hasText: 'Edited note' }).count() === 1, `${spec.name}: editing updates the card`);
+    check(await pg.locator('.note-card', { hasText: 'Edited note' }).count() === 1 && /^Edited /.test(await pg.textContent('.note-card .note-date')), `${spec.name}: editing updates the card and marks it edited`);
     const copyTxt = await pg.evaluate(() => document.querySelector('main').textContent.length);
     await pg.locator('mark.note-hl').first().click(); await pg.waitForSelector('#note-dlg[open]');
     await pg.click('#note-del'); await pg.click('#note-del');

@@ -343,6 +343,7 @@ dialog.note-dlg::backdrop { background: rgba(10, 16, 22, .45); }
 .note-quote-s { flex: 1; margin: 0; font-size: 12px; color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .note-edit { font: 500 12px/1 var(--font-body); color: var(--accent); background: none; border: 0; padding: 2px 4px; cursor: pointer; }
 .note-text { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-date { margin: 6px 0 0; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .note-old { margin: 4px 0 0; font-size: 12px; color: var(--warn); }
 .notes-lines { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 12; }
 .notes-lines path { fill: none; stroke: var(--note-line); stroke-width: 1.5; opacity: .75; }
@@ -2762,7 +2763,7 @@ docker compose -f infra/docker-compose.yml down -v     # the step 4 stack and it
     e.preventDefault();
     var text = area.value.trim();
     if (!text || !cur) return;
-    if (cur.note) { cur.note.text = text; cur.note.ts = Date.now(); }
+    if (cur.note) { cur.note.text = text; cur.note.upd = Date.now(); }
     else {
       var n = { id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: cur.info.sec, offset: cur.info.offset, quote: cur.info.quote, text: text, ts: Date.now() };
       notes.push(n); highlight(n);
@@ -2804,6 +2805,12 @@ docker compose -f infra/docker-compose.yml down -v     # the step 4 stack and it
     });
   }
   function el(tag, cls, text) { var x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; }
+  function whenText(n) {
+    var d = new Date(n.upd || n.ts);
+    if (isNaN(d)) return '';
+    var t = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return (n.upd ? 'Edited ' : '') + t;
+  }
   function render() {
     box.innerHTML = '';
     countEl.hidden = !notes.length; countEl.textContent = notes.length;
@@ -2817,6 +2824,7 @@ docker compose -f infra/docker-compose.yml down -v     # the step 4 stack and it
       top.appendChild(b);
       c.appendChild(top);
       c.appendChild(el('p', 'note-text', n.text));
+      var when = el('p', 'note-date', whenText(n)); when.title = 'Saved ' + new Date(n.ts).toLocaleString(); c.appendChild(when);
       if (!marksOf(n.id).length) { c.setAttribute('data-gone', '1'); c.appendChild(el('p', 'note-old', 'This text has changed, so the highlight is gone.')); }
       c.addEventListener('mouseenter', function () { setActive(n.id, true); });
       c.addEventListener('mouseleave', function () { setActive(n.id, false); });
