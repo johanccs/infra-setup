@@ -1,0 +1,3 @@
+[submodule "infra-recover/infra-recover"]
+	path = infra-recover/infra-recover
+	url = https://github.com/johanccs/infra-recover.git
