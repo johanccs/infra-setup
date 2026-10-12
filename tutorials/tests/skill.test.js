@@ -59,7 +59,7 @@ const front = /^---\n([\s\S]*?)\n---\n/.exec(text);
 const field = (k) => ((new RegExp(`^${k}: (.*)$`, 'm')).exec(front[1]) || [])[1];
 check(front && field('name') === 'platform-engineering-gh' && path.basename(path.dirname(SKILL)) === 'platform-engineering-gh' && field('description').length > 40, 'the skill is named platform-engineering-gh (the project name plus -gh), with a description');
 check(field('disable-model-invocation') === 'true', 'it runs only when the user asks for it');
-check(/Start \*\*every\*\* Bash command with `cd \/home\/user\/platform_engineering &&`/.test(text) && (text.match(/cd \/home\/user\/platform_engineering &&/g) || []).length >= 5, 'it moves to the project folder in every command, so it can be run from anywhere');
+check(/Start \*\*every\*\* Bash command with `cd \/home\/user\/platform_engineering\/infra-setup &&`/.test(text) && (text.match(/cd \/home\/user\/platform_engineering\/infra-setup &&/g) || []).length >= 5, 'it moves to the project folder in every command, so it can be run from anywhere');
 check(/isPrivate/.test(text) && /Never force-push/.test(text) && /tutorials\/data\/tutorial\.db/.test(text) && /backup-db\.sh/.test(text), 'it checks the repository is private, never force-pushes, and commits only the database');
 check(fs.existsSync(path.join(TOOLS, '..', '..', 'tutorials', 'tools', 'backup-db.sh')) && fs.statSync(script).mode & 0o100, 'the script the skill calls exists and is executable');
 if (fs.existsSync(INSTALLED)) check(fs.readFileSync(INSTALLED, 'utf8') === text, 'the installed skill (~/.claude/skills) is the same as the copy in the repository');

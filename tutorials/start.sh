@@ -3,7 +3,7 @@
 #   ./start.sh            serve on http://localhost:8788
 # Asking questions needs OPENAI_API_KEY in the environment. It is never written to disk. The desktop shortcut passes the
 # Windows variable to Ubuntu for that launch only. From a terminal you can do the same with:
-#   cmd.exe /c 'set "WSLENV=OPENAI_API_KEY/u:%WSLENV%" && wsl.exe -d Ubuntu-26.04 --cd ~/platform_engineering/tutorials -- bash -lc ./start.sh'
+#   cmd.exe /c 'set "WSLENV=OPENAI_API_KEY/u:%WSLENV%" && wsl.exe -d Ubuntu-26.04 --cd ~/platform_engineering/infra-setup/tutorials -- bash -lc ./start.sh'
 cd "$(dirname "$0")" || exit 1
 PORT="${PORT:-8788}"
 URL="http://localhost:$PORT"
