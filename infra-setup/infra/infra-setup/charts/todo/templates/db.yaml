@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: todo-db
+type: Opaque
+stringData:
+  password: {{ .Values.db.password | quote }}
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-db
+spec:
+  clusterIP: None
+  selector: { app: todo-db }
+  ports:
+    - port: 5432
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: todo-db
+spec:
+  serviceName: todo-db
+  replicas: 1
+  selector:
+    matchLabels: { app: todo-db }
+  template:
+    metadata:
+      labels: { app: todo-db }
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.db.image }}
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: todo
+            - name: POSTGRES_USER
+              value: todo
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: todo-db, key: password }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+              exec:
+                command: ["pg_isready", "-U", "todo", "-d", "todo"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 512Mi }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.db.storage }}          

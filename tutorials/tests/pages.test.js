@@ -18,7 +18,7 @@ const TESTDB = path.join(os.tmpdir(), `tut-pages-${process.pid}.db`);   // never
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const REG = require('../tools/pages.json');
 const PAGES = [
-  { file: 'code-to-cluster-tutorial.html', name: 'Code to Cluster', steps: 17, mid: 'docker', link: 'cluster' },
+  { file: 'code-to-cluster-tutorial.html', name: 'Code to Cluster', steps: 18, mid: 'docker', link: 'cluster' },
   { file: 'eyes-on-the-cluster-tutorial.html', name: 'Eyes on the Cluster', steps: 20, mid: 'instrument', link: 'servicemonitor' },
   { file: 'platform-as-code-tutorial.html', name: 'Platform as Code', steps: 16, mid: 'project', link: 'bootstrap' },
   { file: 'secure-the-road-tutorial.html', name: 'Secure the Road', steps: 13, mid: 'verify', link: 'netpol' },

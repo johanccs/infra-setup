@@ -6,7 +6,7 @@ spec:
   replicas: {{ .Values.ui.replicas }}
   selector:
     matchLabels: { app: todo-ui }
-  templates:
+  template:
     metadata:
       labels: { app: todo-ui }
     spec:
@@ -32,30 +32,3 @@ spec:
   ports:
     - port: 80
       targetPort: 8080
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -5,7 +5,7 @@ metadata:
 spec:
   replicas: {{ .Values.api.replicas }}
   selector: 
-    matchLabels: {{ app: todo-api }}
+    matchLabels: { app: todo-api }
   template:
     metadata:
       labels: { app: todo-api }
@@ -43,27 +43,3 @@ spec:
   ports:
     - port: 8080
       targetPort: 8080
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

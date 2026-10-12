@@ -1099,9 +1099,9 @@ git push</code></pre></figure>
     <!-- ============ 8 ============ -->
     <section class="step" id="secrets" data-step>
       <div class="step-head"><span class="num">08</span><h2>Keep secrets out of Git</h2></div>
-      <p class="goal"><b>Goal:</b> the API receives a key from a secret store, <code>/api/info</code> shows its fingerprint, and you've seen what happens when the key is rotated.</p>
+      <p class="goal"><b>Goal:</b> the API receives a key from a secret store, <code>/api/info</code> shows its fingerprint, you've seen what happens when the key is rotated, and the database password has moved out of <code>values.yaml</code> into the store too.</p>
       <div class="why"><h4>Why this step</h4>
-        <p>Everything else is in Git, but secrets can't be: anything committed stays in the history forever, and Kubernetes Secrets in a repo are only base64, which anyone can decode. (Look at <code>db.password</code> in <code>values.yaml</code>: part 1 warned that it is for practice only.) Real platforms keep secrets in a <b>secret store</b> such as AWS Secrets Manager, Azure Key Vault or HashiCorp Vault. Git holds only a reference to them.</p>
+        <p>Everything else is in Git, but secrets can't be: anything committed stays in the history forever, and Kubernetes Secrets in a repo are only base64, which anyone can decode. (Look at <code>db.password</code> in <code>values.yaml</code>: part 1 warned that it is for practice only. You'll move it at the end of this step.) Real platforms keep secrets in a <b>secret store</b> such as AWS Secrets Manager, Azure Key Vault or HashiCorp Vault. Git holds only a reference to them.</p>
         <p>The <b>External Secrets Operator</b> (ESO) reads an <code>ExternalSecret</code> ("fetch the key <code>todo-notify</code> from the store") and creates a normal Kubernetes Secret from it, refreshing it on a timer. The app sees a normal Secret and needs no code for the store.</p>
         <p>You have no cloud account here, so a locked-down namespace called <code>secret-store</code> plays the part of the store. The ESO objects are exactly what you'd write for AWS Secrets Manager; only the <code>provider</code> block would differ.</p>
       </div>
@@ -1271,9 +1271,72 @@ kubectl -n todo port-forward svc/todo-api 5080:8080</code></pre></figure>
           <p>The quick fix is <code>kubectl -n todo rollout restart deploy/todo-api</code>. Lasting fixes: mount the Secret as a file, which Kubernetes updates in place, and have the app re-read it; or run a tool like Stakater Reloader that restarts pods when their Secrets change. Every platform needs an answer to "what happens when this secret rotates?" before the first rotation, not during it.</p>
         </div></details>
       </div>
+      <h3>The database password too</h3>
+      <p>Part 1 left the database password in <code>values.yaml</code>. Moving it is harder than the notify key, for two reasons. Postgres reads <code>POSTGRES_PASSWORD</code> only when it first creates its disk. After that the password lives <em>inside</em> the database, and the Secret is just what the apps use to log in. And the old value is already in Git's history, so changing where it comes from isn't enough: you also have to change the password itself.</p>
+      <p>So do it in two moves: first fetch the <em>same</em> password from the store (nothing changes for the apps), then rotate it. Copy the current value into the store, without printing it:</p>
+      <figure class="code"><figcaption>bash</figcaption><pre><code>kubectl -n secret-store create secret generic todo-db \
+  --from-literal=password="$(kubectl -n todo get secret todo-db -o jsonpath='{.data.password}' | base64 -d)"</code></pre></figure>
+      <p>Ask ESO for it. The Kubernetes Secret it creates gets a <b>new name</b>, <code>todo-db-credentials</code>. The chart still has its own Secret called <code>todo-db</code>, and two owners for one Secret would fight over it:</p>
+      <figure class="code"><figcaption>charts/todo/templates/secrets.yaml (add at the end)</figcaption><pre><code>---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: todo-db
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    name: lab-store
+    kind: SecretStore
+  target:
+    name: todo-db-credentials
+  data:
+    - secretKey: password
+      remoteRef:
+        key: todo-db
+        property: password</code></pre></figure>
+      <p>Now point Postgres and the API at the new Secret, delete the chart's own Secret (the first block of <code>db.yaml</code>) and remove the password from <code>values.yaml</code>. Three <code>sed</code> commands do it, run in <code>infra-setup/infra/</code> (or wherever <code>charts/</code> is):</p>
+      <figure class="code"><figcaption>bash</figcaption><pre><code>sed -i 's/name: todo-db, key: password/name: todo-db-credentials, key: password/' \
+  charts/todo/templates/api.yaml charts/todo/templates/db.yaml
+sed -i '1,/^---$/d' charts/todo/templates/db.yaml
+sed -i '/^  password:/d' charts/todo/values.yaml
+
+git add charts
+git commit -m "Fetch the database password from the secret store"
+git push</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the three edits</summary><div><dl>
+        <dt>First <code>sed</code></dt><dd>In both files, <code>secretKeyRef</code> now names <code>todo-db-credentials</code>. The key inside is still <code>password</code>.</dd>
+        <dt><code>1,/^---$/d</code></dt><dd>Delete from line 1 up to the first <code>---</code>. That is the <code>kind: Secret</code> block that read <code>.Values.db.password</code>.</dd>
+        <dt><code>/^  password:/d</code></dt><dd>Delete the indented <code>password:</code> line under <code>db:</code>. Open <code>values.yaml</code> to check that <code>image</code> and <code>storage</code> are still there.</dd>
+      </dl></div></details>
+      <p>The database pod restarts because its environment changed, and the disk and your todos stay. For a few seconds the new pods may sit in <code>CreateContainerConfigError</code> until ESO has created <code>todo-db-credentials</code>. Argo CD then removes the old <code>todo-db</code> Secret, since it is no longer in Git:</p>
+      <figure class="code"><figcaption>bash</figcaption><pre><code>kubectl -n todo get externalsecret                       # todo-db and todo-notify: SecretSynced, READY True
+kubectl -n todo get pods                                 # all Running
+kubectl -n todo get secret todo-db                       # Error: NotFound</code></pre></figure>
+      <p>The password is no longer in the chart, but it is still <code>todo-dev-password</code>, and that is in Git's history. Treat it as leaked and <b>change it</b>. Postgres must be changed first, because the store only feeds the apps. Then the store, then the API:</p>
+      <figure class="code"><figcaption>bash</figcaption><pre><code>NEW=$(openssl rand -hex 16)
+kubectl -n todo exec todo-db-0 -- psql -U todo -d todo -c "ALTER USER todo PASSWORD '$NEW'"
+
+kubectl -n secret-store create secret generic todo-db \
+  --from-literal=password="$NEW" --dry-run=client -o yaml | kubectl apply -f -
+
+# after up to a minute the Secret in todo holds the new value
+kubectl -n todo get secret todo-db-credentials -o jsonpath='{.data.password}' | base64 -d; echo
+kubectl -n todo rollout restart deploy/todo-api
+kubectl -n todo get pods                                 # todo-api pods Running and Ready</code></pre></figure>
+      <p>Part 1's pgAdmin steps used <code>todo-dev-password</code>. From now on, read the password with the <code>get secret todo-db-credentials</code> line above.</p>
+      <div class="drill">
+        <p class="drill-label">Drill: rotate in the wrong order</p>
+        <p>Rotate again, but this time change only the store: run the second command with a new value and skip the <code>ALTER USER</code>. Then restart the API. Predict what <code>kubectl -n todo logs deploy/todo-api</code> says and whether the site still works.</p>
+        <details class="answer"><summary>Check your answers</summary><div>
+          <p>The API pods start but never become Ready, and the logs say <code>password authentication failed for user "todo"</code>. Postgres still has the old password, and the API now sends the new one. The old pods keep serving until the new ones are Ready, so the site keeps working while the rollout is stuck. That is the point of a rolling update.</p>
+          <p>Repair it by running the <code>ALTER USER</code> with the value that is now in the store, then restart the API again. A real platform scripts this order, or avoids it with two database users that are rotated one at a time. A managed database such as Amazon RDS can rotate its own password and write it to Secrets Manager for you.</p>
+        </div></details>
+      </div>
       <div class="learn"><h4>What you just learned</h4><ul>
         <li>Git holds where a secret lives, never its value.</li>
         <li>Fetching a new secret value and the app using it are two different events. Design for rotation from the start.</li>
+        <li>A database password has two homes: the secret store, and the database itself. Rotate it in the database first, then in the store.</li>
+        <li>Removing a password from Git doesn't make it safe. If it was ever committed, change it.</li>
       </ul></div>
       <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
     </section>
@@ -1282,7 +1345,7 @@ kubectl -n todo port-forward svc/todo-api 5080:8080</code></pre></figure>
     <section class="step" id="cleanup" data-step>
       <div class="step-head"><span class="num">09</span><h2>Clean up</h2></div>
       <figure class="code"><figcaption>bash</figcaption><pre><code>kind delete cluster --name todo</code></pre></figure>
-      <p>Note that after the next <code>./infra/bootstrap.sh</code>, the hand-made secret is gone, and the API shows <code>"notifyKey": "not set"</code> until you run the <code>kubectl -n secret-store create secret</code> line again. A real store lives outside the cluster and survives a rebuild. That's one more reason it belongs outside.</p>
+      <p>Note that after the next <code>./infra/bootstrap.sh</code>, the hand-made secrets are gone. The API shows <code>"notifyKey": "not set"</code> until you run the notify <code>kubectl -n secret-store create secret</code> line again, and the database pod waits in <code>CreateContainerConfigError</code> until you create <code>todo-db</code> in the store too. On a new disk any password works. A real store lives outside the cluster and survives a rebuild. That's one more reason it belongs outside.</p>
       <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
     </section>
 
@@ -1305,6 +1368,8 @@ kubectl -n todo port-forward svc/todo-api 5080:8080</code></pre></figure>
           <tr><td>The UI loads but the list stays empty after step 7</td><td>The API rule doesn't match the gateway or UI pods, or the database rule is missing</td><td>Check the labels: <code>kubectl -n todo get pods --show-labels</code>. If the API pods are <code>0/1</code>, their log says whether the database is unreachable</td></tr>
           <tr><td>ExternalSecret shows <code>SecretSyncedError</code></td><td>The secret isn't in the store yet, or the RoleBinding doesn't match</td><td><code>kubectl -n todo describe externalsecret todo-notify</code> gives the reason</td></tr>
           <tr><td>SecretStore shows <code>InvalidProviderConfig</code></td><td>The <code>external-secrets.io/v1</code> API is newer than your ESO version</td><td>Use a recent ESO chart</td></tr>
+          <tr><td>After step 8 the <code>todo-db-0</code> or API pod shows <code>CreateContainerConfigError</code> and stays that way</td><td>The Secret <code>todo-db-credentials</code> doesn't exist: the store has no <code>todo-db</code> secret, or its key isn't <code>password</code></td><td><code>kubectl -n todo describe externalsecret todo-db</code> gives the reason. Create the store secret with the <code>create secret generic todo-db</code> line</td></tr>
+          <tr><td>The API logs <code>password authentication failed</code> after you rotated the database password</td><td>Postgres and the store hold different passwords, or the API still runs with the old one</td><td>Compare the store with what Postgres accepts, set Postgres to the store's value with <code>ALTER USER</code>, then <code>kubectl -n todo rollout restart deploy/todo-api</code></td></tr>
           <tr><td><code>notifyKey</code> says "not set" after a rebuild</td><td>The hand-made store secret went with the old cluster</td><td>Run the <code>create secret</code> line from step 8 again</td></tr>
         </tbody>
       </table></div>
@@ -1319,7 +1384,7 @@ kubectl -n todo port-forward svc/todo-api 5080:8080</code></pre></figure>
         <li><strong>Attach the scan to the image.</strong> <code>cosign attest</code> can attach Trivy's results or a software bill of materials (SBOM) to the image, and Kyverno can require them.</li>
         <li><strong>Keep scanning after release.</strong> Run Trivy on a schedule against what's deployed, or install Trivy Operator to scan in the cluster.</li>
         <li><strong>Limit outgoing traffic too.</strong> Add <code>Egress</code> policies. Remember the API must still reach DNS in <code>kube-system</code>.</li>
-        <li><strong>Use a real store.</strong> On AWS, swap the <code>kubernetes</code> provider for <code>aws</code> (Secrets Manager) with an IAM role for the service account. Nothing in the ExternalSecret changes. The same goes for the database password in <code>values.yaml</code>: fetch it from the store too.</li>
+        <li><strong>Use a real store.</strong> On AWS, swap the <code>kubernetes</code> provider for <code>aws</code> (Secrets Manager) with an IAM role for the service account. Nothing in the ExternalSecret changes. Or skip the database pod: with Amazon RDS, AWS can create and rotate the database password in Secrets Manager itself (<code>manage_master_user_password</code> in Terraform), and the <code>todo-db</code> StatefulSet goes away.</li>
       </ul>
       <footer>Written October 2026 against Trivy 0.75, cosign 2.6, Kyverno 1.19 (chart 3.9.1), External Secrets Operator 2.12 with the v1 API, NGINX Gateway Fabric 2.7 and kind 0.24 or later. Policy APIs evolve quickly; check each project's release notes when you upgrade.</footer>
     </section>

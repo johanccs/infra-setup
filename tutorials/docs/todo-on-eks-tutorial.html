@@ -1474,7 +1474,7 @@ spec:
         <dt><code>volumeMounts</code></dt><dd>Where the disk appears inside the container. Postgres writes its files there.</dd>
         <dt><code>volumeClaimTemplates</code></dt><dd>"Give each pod its own disk of this size." Kubernetes creates a <b>PersistentVolumeClaim</b> (a request for a disk) and the cluster supplies the disk. on EKS the EBS disk driver from step 7 creates a real EBS volume.</dd>
       </dl></div></details>
-      <div class="callout warn"><p><strong>The password is in Git.</strong> That is fine for a practice database on your own PC, but never do it for real data: anyone who can read the repo can read the password, and a Kubernetes Secret is only base64-encoded, not encrypted. Real teams keep secrets out of Git with tools such as Sealed Secrets, External Secrets or SOPS, or use a managed database from their cloud.</p></div>
+      <div class="callout warn"><p><strong>The password is in Git.</strong> That is fine for a practice database on your own PC, but never do it for real data: anyone who can read the repo can read the password, and a Kubernetes Secret is only base64-encoded, not encrypted. Real teams keep secrets out of Git with tools such as Sealed Secrets, External Secrets or SOPS, or use a managed database from their cloud. On AWS the natural home is Secrets Manager, read into the cluster by External Secrets (part 4 of the series builds exactly that), or a managed Amazon RDS database that keeps its own password there.</p></div>
       <h3>The front door</h3>
       <p>One last file tells the gateway what to do with traffic:</p>
       <figure class="code"><figcaption>charts/todo/templates/gateway.yaml</figcaption><pre><code>apiVersion: gateway.networking.k8s.io/v1

@@ -1693,7 +1693,7 @@ spec:
         <dt><code>volumeMounts</code></dt><dd>Where the disk appears inside the container. Postgres writes its files there.</dd>
         <dt><code>volumeClaimTemplates</code></dt><dd>"Give each pod its own disk of this size." Kubernetes creates a <b>PersistentVolumeClaim</b> (a request for a disk) and the cluster supplies the disk. kind includes a provisioner that does this automatically; cloud clusters provision real cloud disks.</dd>
       </dl></div></details>
-      <div class="callout warn"><p><strong>The password is in Git.</strong> That is fine for a practice database on your own PC, but never do it for real data: anyone who can read the repo can read the password, and a Kubernetes Secret is only base64-encoded, not encrypted. Real teams keep secrets out of Git with tools such as Sealed Secrets, External Secrets or SOPS, or use a managed database from their cloud.</p></div>
+      <div class="callout warn"><p><strong>The password is in Git.</strong> That is fine for a practice database on your own PC, but never do it for real data: anyone who can read the repo can read the password, and a Kubernetes Secret is only base64-encoded, not encrypted. Real teams keep secrets out of Git with tools such as Sealed Secrets, External Secrets or SOPS, or use a managed database from their cloud. Part 4 (<a href="secure-the-road-tutorial.html">Secure the Road</a>) moves this password into a secret store and changes it.</p></div>
       <h3>The front door</h3>
       <p>One last file tells the gateway what to do with traffic:</p>
       <figure class="code"><figcaption>charts/todo/templates/gateway.yaml</figcaption><pre><code>apiVersion: gateway.networking.k8s.io/v1
@@ -2175,8 +2175,132 @@ git push</code></pre></figure>
     </section>
 
     <!-- ============ 14 ============ -->
+    <section class="step" id="ports" data-step>
+      <div class="step-head"><span class="num">14</span><h2>Ports and addresses on one map</h2></div>
+      <p class="goal"><b>Goal:</b> you can say which port number belongs to which layer, which kind of address you are looking at, and which way in is right for which job.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>You have now met eight port numbers (<code>8080</code>, <code>31437</code>, <code>80</code>, <code>5432</code>, <code>5433</code>, <code>5080</code>, <code>8443</code>, <code>443</code>) and four kinds of address. Most Kubernetes confusion is one of them in the wrong place. This map puts them all in one picture. Play it with the arrows, or let it run.</p>
+      </div>
+      <figure class="anim" aria-label="Animated diagram: every port number and address on the way from your browser to the pods, and the port-forward shortcut">
+        <div class="anim-stage"><svg viewBox="0 0 860 430" role="img" aria-label="Your browser opens localhost:8080. Docker passes it to port 31437 on the kind node at 172.18.0.2. The NodePort Service hands it to the gateway pod. The gateway sends a path starting with slash to the todo-ui Service on port 80, which uses a pod on port 8080. A path starting with slash api goes to the todo-api Service on port 8080 and a pod on port 8080. The API reaches the database through the todo-db Service on port 5432. A kubectl port-forward on local port 5433 goes straight to the database pod on port 5432.">
+          <rect class="a-zone" x="8" y="8" width="844" height="414" rx="12"/>
+          <text class="a-cap" x="24" y="32">YOUR PC · 127.0.0.1</text>
+          <rect class="a-zone inner" x="210" y="24" width="626" height="386" rx="10"/>
+          <text class="a-cap" x="226" y="46">KIND NODE · A DOCKER CONTAINER · 172.18.0.2</text>
+          <text class="a-cap" x="505" y="58" text-anchor="middle">SERVICE · ClusterIP</text>
+          <text class="a-cap" x="730" y="58" text-anchor="middle">POD · pod IP</text>
+
+          <path class="a-route" data-k="r1" d="M148 139 H202"/>
+          <path class="a-route" data-k="r2" d="M220 139 H290"/>
+          <path class="a-route" data-k="r3" d="M400 129 L450 89"/>
+          <path class="a-route" data-k="r5" d="M400 149 L450 189"/>
+          <path class="a-route" data-k="r4" d="M560 89 H650"/>
+          <path class="a-route" data-k="r6" d="M560 189 H650"/>
+          <path class="a-route" data-k="r7" d="M700 214 L505 264"/>
+          <path class="a-route" data-k="r8" d="M560 289 H650"/>
+          <path class="a-route" data-k="r9" stroke-dasharray="7 5" d="M148 350 H730 V314"/>
+
+          <g class="a-door" data-k="door"><rect x="202" y="126" width="18" height="26" rx="4"/>
+            <text class="a-port" x="178" y="118">8080</text><text class="a-port" x="250" y="118">31437</text></g>
+          <text class="a-port" data-k="pUi" x="605" y="81">8080</text>
+          <text class="a-port" data-k="pApi" x="605" y="181">8080</text>
+          <text class="a-port" data-k="pDb" x="605" y="281">5432</text>
+          <text class="a-port" data-k="gUi" x="418" y="101">80</text>
+          <text class="a-port" data-k="gApi" x="412" y="184">8080</text>
+          <text class="a-port" data-k="pf" x="440" y="342">5433 → 5432</text>
+          <text class="a-lbl" data-k="pf" x="440" y="372">straight to the pod: no gateway, no Service</text>
+
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+
+          <g class="a-node" data-k="browser"><rect x="28" y="111" width="120" height="56" rx="8"/>
+            <text class="a-t" x="88" y="136">Browser</text><text class="a-s" x="88" y="155">localhost:8080</text></g>
+          <g class="a-node" data-k="kubectl"><rect x="28" y="322" width="120" height="56" rx="8"/>
+            <text class="a-t" x="88" y="347">kubectl</text><text class="a-s" x="88" y="366">localhost:5433</text></g>
+          <g class="a-node" data-k="gateway"><rect x="290" y="111" width="110" height="56" rx="8"/>
+            <text class="a-t" x="345" y="136">Gateway pod</text><text class="a-s" x="345" y="155">10.244.1.4</text></g>
+          <g class="a-node" data-k="svcUi"><rect x="450" y="64" width="110" height="50" rx="8"/>
+            <text class="a-t" x="505" y="86">todo-ui</text><text class="a-s" x="505" y="104">10.96.12.5:80</text></g>
+          <g class="a-node" data-k="svcApi"><rect x="450" y="164" width="110" height="50" rx="8"/>
+            <text class="a-t" x="505" y="186">todo-api</text><text class="a-s" x="505" y="204">10.96.40.7:8080</text></g>
+          <g class="a-node" data-k="svcDb"><rect x="450" y="264" width="110" height="50" rx="8"/>
+            <text class="a-t" x="505" y="286">todo-db</text><text class="a-s" x="505" y="304">no IP:5432</text></g>
+          <g class="a-node" data-k="podUi"><rect x="650" y="64" width="160" height="50" rx="8"/>
+            <text class="a-t" x="730" y="86">todo-ui pod</text><text class="a-s" x="730" y="104">10.244.1.5:8080</text></g>
+          <g class="a-node" data-k="podApi"><rect x="650" y="164" width="160" height="50" rx="8"/>
+            <text class="a-t" x="730" y="186">todo-api pod</text><text class="a-s" x="730" y="204">10.244.2.6:8080</text></g>
+          <g class="a-node" data-k="podDb"><rect x="650" y="264" width="160" height="50" rx="8"/>
+            <text class="a-t" x="730" y="286">todo-db-0 pod</text><text class="a-s" x="730" y="304">10.244.1.7:5432</text></g>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "browser", "path": [[158,139]], "text": "<b>Your PC.</b> The browser opens <code>localhost:8080</code>. <code>localhost</code> is <code>127.0.0.1</code>: this machine only. 8080 is the door, and you chose it in <code>kind-config.yaml</code>."},
+          {"on": "browser door r1", "path": [[158,139],[211,139]], "text": "<b>Door 1.</b> Docker publishes port <code>8080</code> on your PC and passes it to port <code>31437</code> on the node, a container with the Docker address <code>172.18.0.2</code>. Both numbers are in <code>kind-config.yaml</code>."},
+          {"on": "door r2 gateway", "path": [[211,139],[290,139],[345,139]], "text": "<b>Door 2.</b> The NodePort Service listens on <code>31437</code> of the node and hands the request to the gateway pod. A pod has its own address (<code>10.244.1.4</code>) that only exists inside the cluster."},
+          {"on": "gateway r3 gUi svcUi r4 pUi podUi", "path": [[345,139],[400,129],[450,89],[505,89],[560,89],[650,89],[730,89]], "text": "<b>Route /.</b> The gateway sends it to the <code>todo-ui</code> Service on its <b>port</b> (80). The Service has a stable virtual address, the <b>ClusterIP</b> <code>10.96.12.5</code>, picks a ready pod and forwards to the <b>targetPort</b> (8080)."},
+          {"on": "gateway r5 gApi svcApi r6 pApi podApi", "path": [[345,139],[400,149],[450,189],[505,189],[560,189],[650,189],[730,189]], "text": "<b>Route /api.</b> A path starting with <code>/api</code> goes to the <code>todo-api</code> Service on port 8080, then to one of the API pods, whose app listens on 8080. Two different 8080s: the Service's port and the container's port. Same number, different doors."},
+          {"on": "podApi r7 svcDb r8 pDb podDb", "path": [[730,189],[700,214],[505,264],[505,289],[560,289],[650,289],[730,289]], "text": "<b>Inside only.</b> The API calls <code>Host=todo-db</code>. That name resolves through cluster DNS to the database Service on 5432, then to the pod. There is no door from your PC to this, so the database can't be reached from outside."},
+          {"on": "kubectl r9 pf podDb", "path": [[158,350],[730,350],[730,314]], "text": "<b>port-forward.</b> <code>kubectl port-forward pod/todo-db-0 5433:5432</code> opens local port <b>5433</b> and tunnels to port <b>5432</b> of that one pod. Left of the colon is your PC, right of it is the target. Good for a quick look with pgAdmin."},
+          {"on": "podUi podApi podDb", "bad": "podUi podApi podDb", "text": "<b>Don't use pod IPs.</b> <code>10.244.1.5</code> is gone the moment the pod restarts or moves, and the new pod gets another. Never put one in a config file, a script or a route. Read them to debug (<code>kubectl get pods -o wide</code>), nothing more."},
+          {"on": "svcUi svcApi svcDb", "good": "svcUi svcApi svcDb", "text": "<b>Use Service names.</b> <code>todo-api</code> and <code>todo-db</code> stay the same while pods come and go, and the Service spreads the calls over whatever pods are ready. Calls between apps always go to a Service name, never to an IP."}
+        ]</script>
+      </figure>
+      <h3>Which port number belongs where</h3>
+      <p>The same number often appears twice. What matters is <b>which layer</b> listens on it, and where you set it:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Port</th><th>Which layer listens</th><th>Where you set it</th></tr></thead>
+        <tbody>
+          <tr><td><code>8080</code> (first)</td><td>Your PC (<code>hostPort</code>): the door you open in a browser</td><td><code>kind-config.yaml</code></td></tr>
+          <tr><td><code>31437</code></td><td>The node (<code>containerPort</code> in the kind file, <b>NodePort</b> in Kubernetes). Must be 30000–32767</td><td><code>kind-config.yaml</code> and <code>nginx.service.nodePorts</code> in step 5. The two must match</td></tr>
+          <tr><td><code>80</code></td><td>The gateway's listener, and the <code>todo-ui</code> Service <code>port</code></td><td><code>gateway.yaml</code>, the UI Service</td></tr>
+          <tr><td><code>8080</code> (Service)</td><td>The <code>todo-api</code> Service <code>port</code>: what callers use</td><td>The API Service, and <code>backendRefs</code> in the route</td></tr>
+          <tr><td><code>8080</code> (container)</td><td>The apps inside the pods (<code>containerPort</code>, <code>targetPort</code>)</td><td>The Dockerfiles (<code>EXPOSE 8080</code>), the Deployments</td></tr>
+          <tr><td><code>5432</code></td><td>PostgreSQL, in its pod and on its Service. This is Postgres's own default</td><td>Nothing to set: it is Postgres's default</td></tr>
+          <tr><td><code>5080</code>, <code>5433</code>, <code>8443</code></td><td>Your PC only: the local end of <code>docker run -p</code> or <code>port-forward</code>. You pick any free number</td><td>On the command line</td></tr>
+        </tbody>
+      </table></div>
+      <p>One rule reads every one of these: in <code>a:b</code> the left number is <b>where you stand</b> and the right number is <b>where it goes</b>. <code>-p 5080:8080</code>, <code>port-forward 5433:5432</code> and <code>8443:443</code> all work this way. In a Service, <code>port: 80</code> is what callers use and <code>targetPort: 8080</code> is what arrives at the pod.</p>
+      <h3>The four kinds of address</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Address</th><th>What it is</th><th>Good for</th><th>Bad for</th></tr></thead>
+        <tbody>
+          <tr><td><code>localhost</code> / <code>127.0.0.1</code></td><td>"This machine", whichever machine is asking</td><td>Your browser, and <code>port-forward</code>: only you can use it</td><td>Anything inside a container. <code>localhost:5432</code> in an API pod means the API pod itself, not the database. Use <code>todo-db</code></td></tr>
+          <tr><td><code>0.0.0.0</code></td><td>Not a destination: "listen on every network card"</td><td>Servers inside containers, which must listen on it or nothing can reach them (the apps here do, on 8080)</td><td>Your laptop on shared Wi-Fi. Docker's <code>-p</code> and kind's <code>hostPort</code> publish on it by default, so anyone on your network can open port 8080. Add <code>listenAddress: "127.0.0.1"</code> next to <code>hostPort</code> to keep it private, and the same for <code>port-forward</code> (its default is already <code>127.0.0.1</code>; <code>--address 0.0.0.0</code> opens it up)</td></tr>
+          <tr><td>Node address <code>172.18.0.x</code></td><td>The kind node's address on Docker's network</td><td>Seeing that a node is just a container</td><td>Bookmarks and scripts. With Docker Desktop your PC often can't reach it at all, and it changes when the cluster is rebuilt. That's why the lab opens a published port instead</td></tr>
+          <tr><td>Service ClusterIP <code>10.96.x.x</code></td><td>A stable virtual address that spreads calls over the ready pods. Reachable only inside the cluster</td><td>Calls between apps, by <b>name</b> (<code>todo-api</code>, or the full <code>todo-api.todo.svc.cluster.local</code>)</td><td>Hard-coding the number: the name survives deleting and recreating the Service, the number doesn't. Opening it from your PC: you can't</td></tr>
+          <tr><td>Pod IP <code>10.244.x.x</code></td><td>The pod's real address, new for every pod</td><td>Debugging, reading <code>kubectl get pods -o wide</code></td><td>Config, routes, anything that must still work tomorrow. It changes on every restart</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Which way in for which job</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Way in</th><th>Good for</th><th>Bad for</th></tr></thead>
+        <tbody>
+          <tr><td><code>kubectl port-forward</code></td><td>Looking at one thing: the database in pgAdmin, the Argo CD page. Needs no change to the cluster and only reaches your PC</td><td>Serving users. It binds to one pod when you connect (even if you name a Service) and does not spread load. It ends when that pod restarts or the terminal closes, and it has no login, TLS or limits</td></tr>
+          <tr><td>NodePort</td><td>The lab's front door on kind: one fixed number, no cloud needed</td><td>Real clusters. It opens the port on every node, the 30000–32767 numbers are awkward, and a load balancer does the job better</td></tr>
+          <tr><td>Gateway and routes</td><td>Real traffic: one address, routing by path or host name, TLS, many apps behind one door</td><td>A quick peek at one pod. A route is more work than <code>port-forward</code> for that</td></tr>
+          <tr><td>Service of type <code>LoadBalancer</code></td><td>The cloud (EKS, AKS): the cloud creates a public address for you</td><td>kind. There is no cloud to create it, which is why the lab uses a port mapping</td></tr>
+          <tr><td>Service name inside the cluster</td><td>Pod-to-pod calls: the API to the database, nginx to the API</td><td>Reaching in from your PC: the name only resolves inside</td></tr>
+        </tbody>
+      </table></div>
+      <p>See the real numbers on your own cluster. Run these before you clean up in the next step. The pod and Service addresses will differ from the map, which is the point of "don't hard-code them":</p>
+      <figure class="code"><figcaption>bash</figcaption><pre><code>kubectl -n todo get pods -o wide        # IP column: pod IPs
+kubectl -n todo get svc                 # CLUSTER-IP and PORT(S): Service addresses and ports
+docker ps --format '{{.Names}}  {{.Ports}}'    # 0.0.0.0:8080-&gt;31437/tcp: door 1
+docker inspect todo-control-plane --format '{{ .NetworkSettings.Networks.kind.IPAddress }}'   # the node address</code></pre></figure>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>The same number can be different doors: the Service <code>port</code>, the pod's <code>targetPort</code> and the host's port are separate things.</li>
+        <li>In <code>a:b</code>, <code>a</code> is where you stand and <code>b</code> is where it goes.</li>
+        <li>Pods come and go, so apps call Service names. IP addresses are for reading, not for writing into files.</li>
+        <li><code>port-forward</code> is a debugging tool. Real traffic goes through a gateway or load balancer.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 15 ============ -->
     <section class="step" id="cleanup" data-step>
-      <div class="step-head"><span class="num">14</span><h2>Clean up</h2></div>
+      <div class="step-head"><span class="num">15</span><h2>Clean up</h2></div>
       <p class="goal"><b>Goal:</b> the cluster is gone and your PC has its memory back.</p>
       <p>Stop any <code>port-forward</code> terminals (the Argo CD one) with Ctrl+C, then delete the cluster and any containers left over from the earlier steps:</p>
       <figure class="code"><figcaption>bash</figcaption><pre><code>kind delete cluster --name todo

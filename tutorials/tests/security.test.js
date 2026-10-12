@@ -228,9 +228,10 @@ async function main() {
       check(rule.failureAction === 'Audit' && rule.mutateDigest === false && rule.verifyDigest === false && /^docker\.io\/<your-dockerhub-user>\/\*$/.test(rule.imageReferences[0]) && /\/infra-setup\/\.github\/workflows\/ci\.yml@refs\/heads\/main$/.test(rule.attestors[0].entries[0].keyless.subject) && rule.attestors[0].entries[0].keyless.issuer === 'https://token.actions.githubusercontent.com', 'the policy starts in Audit, matches only your Docker Hub images and names the ci.yml workflow on main as the signer');
       check(bash.includes('--certificate-identity "https://github.com/<YourUser>/infra-setup/.github/workflows/ci.yml@refs/heads/main"') && rule.attestors[0].entries[0].keyless.subject.replace(/<YourUser>/, '') === 'https://github.com//infra-setup/.github/workflows/ci.yml@refs/heads/main', 'the cosign verify command and the policy ask for the same signer');
       for (const kind of ['SecretStore', 'ExternalSecret']) {
-        const obj = yamlDocs(read('charts/todo/templates/secrets.yaml')).find((x) => x.kind === kind);
-        const probs = schemaProblems(crdOf(eso.stdout, kind), obj);
-        check(probs.length === 0, `the ${kind} uses only fields the External Secrets 2.12.0 CRD accepts (apiVersion ${obj.apiVersion})`, probs.join('\n'));
+        for (const obj of yamlDocs(read('charts/todo/templates/secrets.yaml')).filter((x) => x.kind === kind)) {
+          const probs = schemaProblems(crdOf(eso.stdout, kind), obj);
+          check(probs.length === 0, `the ${kind} ${obj.metadata.name} uses only fields the External Secrets 2.12.0 CRD accepts (apiVersion ${obj.apiVersion})`, probs.join('\n'));
+        }
       }
     }
     // the secret chain: store -> remote key -> Kubernetes Secret -> environment variable
@@ -241,6 +242,28 @@ async function main() {
     const literal = /create secret generic (\S+) \\\n\s+--from-literal=(\w+)=/.exec(bash);
     check(ss.spec.provider.kubernetes.remoteNamespace === store.find((x) => x.kind === 'Namespace').metadata.name && ss.spec.provider.kubernetes.auth.serviceAccount.name === sa.metadata.name && bind.subjects[0].name === sa.metadata.name && bind.subjects[0].namespace === 'todo' && bind.roleRef.name === role.metadata.name && role.metadata.namespace === ss.spec.provider.kubernetes.remoteNamespace && role.rules[0].resources[0] === 'secrets' && !role.rules[0].verbs.includes('delete'), 'the store namespace, the service account that reads it and the read-only Role binding all agree');
     check(literal && es.spec.data[0].remoteRef.key === literal[1] && es.spec.data[0].remoteRef.property === literal[2] && es.spec.target.name === apiEnv.valueFrom.secretKeyRef.name && es.spec.data[0].secretKey === apiEnv.valueFrom.secretKeyRef.key && apiEnv.valueFrom.secretKeyRef.optional === true && es.spec.secretStoreRef.name === ss.metadata.name, `the chain holds together: the hand-made secret (${literal && literal[1]}, key ${literal && literal[2]}) -> the ExternalSecret -> the Kubernetes Secret -> NOTIFY_API_KEY, optional so the API starts without it`);
+    // the database password moves to the store: same value first, then the page's three sed edits
+    const dbLit = [...bash.matchAll(/create secret generic (\S+) \\\n\s+--from-literal=(\w+)=/g)].find((m) => m[1] === 'todo-db');
+    const dbEs = sec.filter((x) => x.kind === 'ExternalSecret').find((x) => x.metadata.name === 'todo-db');
+    check(dbLit && dbLit[2] === 'password' && dbEs && dbEs.spec.data[0].remoteRef.key === dbLit[1] && dbEs.spec.data[0].remoteRef.property === dbLit[2] && dbEs.spec.data[0].secretKey === 'password' && dbEs.spec.secretStoreRef.name === ss.metadata.name && dbEs.spec.target.name === 'todo-db-credentials', 'the database password chain: store secret todo-db (key password) -> ExternalSecret -> Kubernetes Secret todo-db-credentials');
+    const preDocs = render(dir);
+    check(preDocs.some((d) => d.kind === 'Secret' && d.metadata.name === 'todo-db') && !preDocs.some((d) => d.kind === 'Secret' && d.metadata.name === 'todo-db-credentials'), 'before the edits the chart makes the Secret todo-db itself, and nothing makes todo-db-credentials (so the new name cannot clash with it)');
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'tut-sec2-'));
+    fs.cpSync(dir, dir2, { recursive: true });
+    const seds = bashBlocks(FILE).map((b) => b.code).find((c) => c.includes('1,/^---$/d')).split('\n\n')[0].replace(/\\\n\s*/g, ' ').split('\n');
+    check(seds.length === 3, 'the page gives three sed edits for the database password');
+    const applied = run('bash', ['-ec', seds.join('\n')], { cwd: dir2 });
+    check(applied.status === 0, 'the three sed edits run', applied.stderr);
+    const afterRun = run(helm, ['template', 'todo', 'charts/todo'], { cwd: dir2 });
+    check(afterRun.status === 0, 'the chart still renders with db.password removed from values.yaml', afterRun.stderr);
+    const ad = yamlDocs(afterRun.stdout), pa = podsOf(ad);
+    const refs = pa.flatMap((p) => p.spec.containers.flatMap((c) => (c.env || []).filter((e) => e.valueFrom && e.valueFrom.secretKeyRef).map((e) => `${p.name}:${e.valueFrom.secretKeyRef.name}`)));
+    check(!ad.some((d) => d.kind === 'Secret') && refs.includes('todo-db:todo-db-credentials') && refs.includes('todo-api:todo-db-credentials') && !refs.some((r) => /:todo-db$/.test(r)), 'after the edits no Secret is rendered by the chart, and Postgres and the API both read todo-db-credentials', refs.join(', '));
+    const vals = read('charts/todo/values.yaml'), vals2 = fs.readFileSync(path.join(dir2, 'charts/todo/values.yaml'), 'utf8');
+    check(/password:/.test(vals) && !/password/i.test(vals2) && /image:/.test(vals2) && /storage:/.test(vals2) && vals.split('\n').filter((l) => /^  password:/.test(l)).length === 1, 'the values.yaml edit removes the one db password line and keeps the database image and storage');
+    check(ad.some((d) => d.kind === 'StatefulSet' && d.metadata.name === 'todo-db') && ad.filter((d) => d.kind === 'ExternalSecret').length === 2, 'the database StatefulSet and both ExternalSecrets are in the rendered chart');
+    check(/ALTER USER todo PASSWORD/.test(bash) && bash.indexOf('ALTER USER todo PASSWORD') < bash.indexOf('--from-literal=password="$NEW"') && /rollout restart deploy\/todo-api/.test(bash.slice(bash.indexOf('ALTER USER'))), 'the rotation changes Postgres first, then the store, then restarts the API');
+    fs.rmSync(dir2, { recursive: true, force: true });
   }
 
   // ---- the API change
