@@ -22,6 +22,7 @@ const PAGES = [
   { file: 'eyes-on-the-cluster-tutorial.html', name: 'Eyes on the Cluster', steps: 20, mid: 'instrument', link: 'servicemonitor' },
   { file: 'platform-as-code-tutorial.html', name: 'Platform as Code', steps: 16, mid: 'project', link: 'bootstrap' },
   { file: 'secure-the-road-tutorial.html', name: 'Secure the Road', steps: 13, mid: 'verify', link: 'netpol' },
+  { file: 'scale-and-capacity-tutorial.html', name: 'Scale and Capacity', steps: 12, mid: 'database', link: 'rightsize' },
   { file: 'todo-on-eks-tutorial.html', name: 'Todo on EKS', steps: 16, mid: 'docker', link: 'cluster' },
 ];
 

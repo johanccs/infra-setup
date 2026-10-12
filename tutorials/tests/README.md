@@ -1,6 +1,6 @@
 # Tests
 
-Seven scripts. Run them from the `tutorials` folder (in Ubuntu). They never touch the real OpenAI API.
+Eight scripts. Run them from the `tutorials` folder (in Ubuntu). They never touch the real OpenAI API.
 
 | Script | What it proves | Needs |
 |--------|----------------|-------|
@@ -9,6 +9,7 @@ Seven scripts. Run them from the `tutorials` folder (in Ubuntu). They never touc
 | `node tests/monitoring.test.js` | Part 2 (Eyes on the Cluster) works as written: the API builds with its OpenTelemetry packages and serves `/metrics`, the fault switches fail, slow and crash the app as described, the chart and the Prometheus, Loki and Alloy values render with their pinned chart versions, every PromQL query parses, and the alert rules fire (or stay quiet) on synthetic data | .NET SDK, `helm`, `kubeconform`, `promtool`, `alloy`, internet (each is skipped if missing) |
 | `node tests/platform.test.js` | Part 3 (Platform as Code) works as written: the Argo CD Applications and AppProject are valid and consistent with each other and with parts 1 and 2, `infra/bootstrap.sh` runs its steps in order (against stand-in tools), and the pull request check renders the pinned charts, fails on the loud mistakes and passes the quiet one, exactly as the drills say | `helm`, `kubeconform`, `actionlint`, `yq`, internet (each is skipped if missing) |
 | `node tests/security.test.js` | Part 4 (Secure the Road) works as written: the pipeline's scan and signing steps run as written against stand-in tools, Trivy's gate passes on the images part 1 builds from and fails on the drill's old image, the Kyverno policy and External Secrets objects match their CRD schemas, the API, UI and database meet the restricted Pod Security Standard, the network policies allow exactly the intended calls (checked with a model of Kubernetes' rules), and the fingerprint change builds and runs | `helm`, `kubeconform`, `actionlint`, `yq`, `trivy`, .NET SDK, internet (each is skipped if missing) |
+| `node tests/scale.test.js` | Part 5 (Scale and Capacity) works as written: the chart renders correctly in each of its three scaling modes (one autoscaler at most, no replica count when one is in charge, a misspelled mode leaves neither), the ScaledObject matches the KEDA CRD, the metrics-server and KEDA Applications render at their pinned versions, the k6 script runs with a real k6 against a stand-in API (passes when healthy, exits 99 on errors and on slow answers), every PromQL query is unit-tested with promtool on made-up series, Npgsql reads the pool size, the API builds with the 100-newest query (run on a stand-in database), and the connection arithmetic holds | `helm`, `kubeconform`, `yq`, `promtool`, `k6`, .NET SDK, internet (each is skipped if missing) |
 | `node tests/skill.test.js` | The one-command database backup: `tools/backup-db.sh` in a throwaway git repository (nothing to commit, changed, run from a subfolder, other staged files left alone, mid-write, damaged, missing) and the `platform-engineering-gh` skill file | `git`, Node 22.13+ |
 | `node tests/links.js` | Every link in `docs/` still opens | `curl`, internet |
 

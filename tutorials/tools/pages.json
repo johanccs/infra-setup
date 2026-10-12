@@ -20,6 +20,11 @@
     "blurb": "Part 4. Scan, sign, restrict. Free."
   },
   {
+    "file": "scale-and-capacity-tutorial.html",
+    "name": "Scale and Capacity",
+    "blurb": "Part 5. Size, load-test, autoscale. Free."
+  },
+  {
     "file": "todo-on-eks-tutorial.html",
     "name": "Todo on EKS",
     "blurb": "On AWS with EKS. Costs money."

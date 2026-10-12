@@ -495,6 +495,7 @@ try {
       <a role="menuitem" href="eyes-on-the-cluster-tutorial.html"><b>Eyes on the Cluster</b><span>Part 2. Metrics, logs and alerts. Free.</span></a>
       <a role="menuitem" href="platform-as-code-tutorial.html"><b>Platform as Code</b><span>Part 3. The whole platform in Git. Free.</span></a>
       <a role="menuitem" href="secure-the-road-tutorial.html" aria-current="page"><b>Secure the Road</b><span>Part 4. Scan, sign, restrict. Free.</span></a>
+      <a role="menuitem" href="scale-and-capacity-tutorial.html"><b>Scale and Capacity</b><span>Part 5. Size, load-test, autoscale. Free.</span></a>
       <a role="menuitem" href="todo-on-eks-tutorial.html"><b>Todo on EKS</b><span>On AWS with EKS. Costs money.</span></a>
     </div>
   </div>
@@ -1312,7 +1313,7 @@ kubectl -n todo port-forward svc/todo-api 5080:8080</code></pre></figure>
     <section class="step" id="next" data-step>
       <div class="step-head"><span class="num">→</span><h2>Where to go next</h2></div>
       <ul>
-        <li><strong>Part 5, Scale and Capacity,</strong> sizes the pods from measurements, load-tests the API and scales it on demand.</li>
+        <li><strong>Part 5, <a href="scale-and-capacity-tutorial.html">Scale and Capacity</a>,</strong> sizes the pods from measurements, load-tests the API and scales it on demand.</li>
         <li><strong>Deploy by digest.</strong> Have the pipeline write each image's digest into <code>values.yaml</code> as well as its tag. Then you can switch on <code>verifyDigest</code>, and what runs is provably what was scanned and signed.</li>
         <li><strong>Attach the scan to the image.</strong> <code>cosign attest</code> can attach Trivy's results or a software bill of materials (SBOM) to the image, and Kyverno can require them.</li>
         <li><strong>Keep scanning after release.</strong> Run Trivy on a schedule against what's deployed, or install Trivy Operator to scan in the cluster.</li>

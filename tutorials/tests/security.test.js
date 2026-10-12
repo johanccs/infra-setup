@@ -11,7 +11,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { extract, bashBlocks, blocksCaptioned } = require('./extract');
-const { check, skip, summary, find, run, get, sleep, yamlDocs, CRDS } = require('./lib');
+const { check, skip, summary, find, run, get, sleep, yamlDocs, CRDS, schemaProblems } = require('./lib');
 
 const DOCS = path.join(__dirname, '..', 'docs');
 const P = (n) => path.join(DOCS, n);
@@ -61,36 +61,6 @@ function ingressAllowed(policies, from, to, port) {
     });
     return portOk && peerOk;
   }));
-}
-
-// ---- check an object against a CRD's schema: unknown fields, wrong types, missing required fields
-function schemaProblems(crd, obj) {
-  const ver = crd.spec.versions.find((x) => x.name === obj.apiVersion.split('/')[1]);
-  if (!ver) return [`no ${obj.apiVersion} version in the CRD`];
-  const errs = [];
-  const walk = (s, v, p) => {
-    if (!s || s['x-kubernetes-preserve-unknown-fields'] || s['x-kubernetes-int-or-string']) return;
-    if (s.enum && !s.enum.includes(v)) errs.push(`${p}: ${JSON.stringify(v)} is not one of ${s.enum.join('|')}`);
-    if (s.type === 'object' || s.properties) {
-      if (v === null || typeof v !== 'object' || Array.isArray(v)) { errs.push(`${p}: expected an object`); return; }
-      const props = s.properties || {};
-      for (const k of Object.keys(v)) {
-        if (props[k]) walk(props[k], v[k], `${p}.${k}`);
-        else if (s.additionalProperties && typeof s.additionalProperties === 'object') walk(s.additionalProperties, v[k], `${p}.${k}`);
-        else if (s.additionalProperties !== true && !s['x-kubernetes-preserve-unknown-fields']) errs.push(`${p}.${k}: unknown field`);
-      }
-      for (const r of s.required || []) if (!(r in v)) errs.push(`${p}.${r}: required`);
-    } else if (s.type === 'array') {
-      if (!Array.isArray(v)) { errs.push(`${p}: expected a list`); return; }
-      v.forEach((x, i) => walk(s.items, x, `${p}[${i}]`));
-    } else if (s.type === 'string' && typeof v !== 'string') errs.push(`${p}: expected a string`);
-    else if (s.type === 'boolean' && typeof v !== 'boolean') errs.push(`${p}: expected true or false`);
-    else if ((s.type === 'integer' || s.type === 'number') && typeof v !== 'number') errs.push(`${p}: expected a number`);
-  };
-  const top = ver.schema.openAPIV3Schema;
-  const { apiVersion, kind, metadata, ...rest } = obj;
-  walk({ ...top, required: [] }, rest, kind);
-  return errs;
 }
 
 async function main() {
