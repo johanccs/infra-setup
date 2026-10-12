@@ -25,6 +25,7 @@ const PAGES = [
   { file: 'scale-and-capacity-tutorial.html', name: 'Scale and Capacity', steps: 12, mid: 'database', link: 'rightsize' },
   { file: 'terraform-the-lab-tutorial.html', name: 'Terraform the Lab', steps: 17, mid: 'module', link: 'gateway' },
   { file: 'todo-on-eks-tutorial.html', name: 'Todo on EKS', steps: 16, mid: 'docker', link: 'cluster' },
+  { file: 'github-actions-tutorial.html', name: 'GitHub Actions Lab', steps: 21, mid: 'matrix', link: 'oidc' },
 ];
 
 let fails = 0, passes = 0;

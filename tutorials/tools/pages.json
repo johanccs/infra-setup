@@ -33,5 +33,10 @@
     "file": "todo-on-eks-tutorial.html",
     "name": "Todo on EKS",
     "blurb": "On AWS with EKS. Costs money."
+  },
+  {
+    "file": "github-actions-tutorial.html",
+    "name": "GitHub Actions Lab",
+    "blurb": "Interactive. Write and fix pipelines. Free."
   }
 ]

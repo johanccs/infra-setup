@@ -1,0 +1,205 @@
+    <!-- ============ 1 ============ -->
+    <section class="step" id="first" data-step>
+      <div class="step-head"><span class="num">01</span><h2>Your first workflow</h2></div>
+      <p class="goal"><b>Goal:</b> a workflow that starts on the right events and prints two facts about the run, with no red lines in the editor.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>A workflow is a text file. If you can read the file, you can predict what GitHub will do. This step names the four parts you will see in every file, and the few YAML rules that cause most of the "why does nothing run" problems.</p>
+      </div>
+      <p>GitHub looks for workflows in the <code>.github/workflows</code> folder at the root of your repository, in files ending in <code>.yml</code> or <code>.yaml</code>. When something happens, GitHub reads the files <b>as they are in the commit that caused the event</b>. A workflow has these parts:</p>
+      <figure class="code"><figcaption>.github/workflows/hello.yml</figcaption><pre><code>name: Hello                    # shown in the Actions tab
+on:                            # 1. EVENTS: what starts it
+  push:
+    branches: [main]
+jobs:                          # 2. JOBS: what to run
+  hello:                       #    the job's id
+    runs-on: ubuntu-latest     # 3. RUNNER: the machine
+    steps:                     # 4. STEPS: in order, on that machine
+      - uses: actions/checkout@v7          # an action
+      - run: echo "Hello"                  # a shell command</code></pre></figure>
+      <div class="callout warn"><p><strong>YAML rules that bite.</strong> Indent with <b>spaces</b>: a tab is an error. A value that contains <code>: </code> (a colon and a space) must be quoted or written as a block: <code>run: echo "Title: x"</code> is invalid, while <code>run: |</code> followed by an indented line is fine. A pattern that starts with <code>*</code>, <code>[</code> or <code>!</code> needs quotes. And a version such as <code>3.10</code> is the number 3.1 unless you quote it: <code>'3.10'</code>. The editor below reports each of these as you type.</p></div>
+      <p>Wherever you see <code>${{ … }}</code>, GitHub evaluates the expression and pastes the result into the file <b>before</b> the shell sees it. <code>github</code> and <code>runner</code> are <b>contexts</b>: objects of facts about the run, such as <code>github.repository</code> and <code>runner.os</code>.</p>
+      <div data-lab="A1"></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/actions/concepts/workflows-and-actions/workflows">Workflows</a>, <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax">Workflow syntax</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A workflow has events, jobs, a runner, and steps. Steps are either <code>run</code> (a command) or <code>uses</code> (an action).</li>
+        <li>Branch filters sit under the event: <code>push: branches: [main]</code>.</li>
+        <li><code>${{ }}</code> is replaced with a value before the command runs.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 2 ============ -->
+    <section class="step" id="dotnet" data-step>
+      <div class="step-head"><span class="num">02</span><h2>Build and test the .NET API</h2></div>
+      <p class="goal"><b>Goal:</b> a job that checks out the code, installs .NET 10, restores, builds and tests the Todo API.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Continuous integration is this job: on every change, build the code and run the tests on a clean machine, so "works on my PC" is not the only evidence. Nearly every pipeline starts with these three moves.</p>
+      </div>
+      <p>The runner is empty at the start. <code>actions/checkout</code> downloads your repository onto it. <code>actions/setup-dotnet</code> puts the SDK you ask for on the path. GitHub-hosted runners come with some SDKs installed, but naming the version makes it part of your file: a build today and a build next year use the same SDK.</p>
+      <p>An action is written <code>owner/repo@version</code>. The version after the <code>@</code> is a tag, and each action's own repository decides which tags exist. The versions used on this page were read from each repository: <code>checkout@v7</code>, <code>setup-dotnet@v6</code>. The editor warns you if you use an older major version, or a version that does not exist.</p>
+      <ul>
+        <li><b><code>uses</code></b> runs an action. Its inputs go in <code>with:</code>.</li>
+        <li><b><code>run</code></b> runs a shell command. It uses bash on Linux runners.</li>
+        <li><b><code>defaults.run.working-directory</code></b> sets the folder for every <code>run</code> step in a job. It does <b>not</b> apply to <code>uses</code> steps.</li>
+        <li><b><code>--no-restore</code> and <code>--no-build</code></b> let each <code>dotnet</code> command reuse the work of the one before.</li>
+      </ul>
+      <figure class="code"><figcaption>Three steps that start every .NET job</figcaption><pre><code>- uses: actions/checkout@v7
+- uses: actions/setup-dotnet@v6
+  with:
+    dotnet-version: 10.0.x
+- run: dotnet restore</code></pre></figure>
+      <div data-lab="A2"></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/actions/tutorials/build-and-test-code/net">Building and testing .NET</a>, <a href="https://github.com/actions/setup-dotnet">actions/setup-dotnet</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>The standard CI job: checkout, setup, then restore, build and test.</li>
+        <li>Actions are versioned. Use the current major version, and read the action's repository for its inputs.</li>
+        <li>The red gutter and the Problems panel are the same rules a linter would apply on your own PC.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 3 ============ -->
+    <section class="step" id="triggers" data-step>
+      <div class="step-head"><span class="num">03</span><h2>Choose when it runs</h2></div>
+      <p class="goal"><b>Goal:</b> triggers that start the pipeline for the right branches, tags and files, by hand, and on a schedule, and the filter patterns to match them.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>A trigger that is too wide wastes minutes and hides the runs that matter. One that is too narrow leaves a change unchecked. Most "my workflow did not run" questions are a filter question, and filters have rules worth knowing exactly.</p>
+      </div>
+      <h3>Events and their filters</h3>
+      <ul>
+        <li><b><code>push</code></b> has <code>branches</code>, <code>tags</code>, <code>branches-ignore</code>, <code>tags-ignore</code>, <code>paths</code> and <code>paths-ignore</code>. If you list only <code>tags</code> (or only <code>branches</code>), the workflow does not run for the other kind of ref. If you list neither, it runs for both.</li>
+        <li><b><code>pull_request</code></b> filters <code>branches</code> on the <b>target</b> branch, the one you merge into. Its default activity types are <code>opened</code>, <code>synchronize</code> and <code>reopened</code>.</li>
+        <li><b><code>workflow_dispatch</code></b> adds a "Run workflow" button, with typed inputs (<code>string</code>, <code>number</code>, <code>boolean</code>, <code>choice</code>, <code>environment</code>). The file must be on the default branch for the button to show.</li>
+        <li><b><code>schedule</code></b> takes POSIX cron in UTC, runs on the latest commit of the default branch, and the shortest interval is 5 minutes. Runs are delayed when GitHub is busy, which includes the start of each hour. In a public repository, scheduled workflows are disabled after 60 days without repository activity.</li>
+      </ul>
+      <p>You cannot use <code>branches</code> with <code>branches-ignore</code>, <code>tags</code> with <code>tags-ignore</code>, or <code>paths</code> with <code>paths-ignore</code> for the same event. To include and exclude together, use the include list with <code>!</code> entries.</p>
+      <h3>The pattern rules</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Pattern</th><th>Meaning</th><th>Matches</th></tr></thead>
+        <tbody>
+          <tr><td><code>*</code></td><td>Anything except <code>/</code></td><td><code>feature/*</code> matches <code>feature/login</code>, not <code>feature/a/b</code></td></tr>
+          <tr><td><code>**</code></td><td>Anything, including <code>/</code></td><td><code>feature/**</code> matches <code>feature/a/b/c</code></td></tr>
+          <tr><td><code>?</code> and <code>+</code></td><td>Zero or one, or one or more, of the character before</td><td><code>v[0-9]+</code> matches <code>v2</code> and <code>v210</code></td></tr>
+          <tr><td><code>[0-9]</code></td><td>One character from a class (ranges <code>a-z</code>, <code>A-Z</code>, <code>0-9</code> only)</td><td><code>v[12].0</code> matches <code>v1.0</code>, <code>v2.0</code></td></tr>
+          <tr><td><code>!pattern</code></td><td>Removes what the patterns <b>before</b> it matched. A later positive pattern adds it back</td><td><code>releases/**</code> then <code>!releases/**-alpha</code></td></tr>
+          <tr><td><code>docs/**/*.md</code></td><td>For paths, <code>**/</code> may match no folder at all</td><td>matches <code>docs/README.md</code> and <code>docs/a/b.md</code></td></tr>
+        </tbody>
+      </table></div>
+      <figure class="code"><figcaption>Include, then exclude</figcaption><pre><code>on:
+  push:
+    branches:
+      - main
+      - 'releases/**'
+      - '!releases/**-alpha'     # a later ! removes what an earlier line matched
+    paths-ignore:
+      - 'docs/**'                # skip the run if only docs changed</code></pre></figure>
+      <p>Path patterns must match the whole path, from the repository root. Because <code>*</code>, <code>[</code> and <code>!</code> are special in YAML, a pattern that <em>starts</em> with one of them must be quoted. Try the drills first. You write the patterns, and the table shows every case at once.</p>
+      <div data-drill="f-branches"></div>
+      <div data-drill="f-tags"></div>
+      <div data-drill="f-paths"></div>
+      <div class="callout warn"><p><strong>Filters and required checks.</strong> If a workflow is skipped because of a path filter, a branch filter or a <code>[skip ci]</code> commit message, its checks stay <b>pending</b>. A pull request that requires those checks cannot merge. Do not put path filters on a workflow that a ruleset requires (step 13 shows the pattern that avoids this).</p></div>
+      <p>Now write the whole <code>on:</code> block. Use the preview under the editor: it takes the event you pick and tells you whether the workflow would start, and why.</p>
+      <div data-lab="A3"></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows">Events that trigger workflows</a>, <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#filter-pattern-cheat-sheet">Workflow syntax: filter pattern cheat sheet</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Branch and tag filters and path filters are separate, and both must pass when both are present.</li>
+        <li><code>pull_request</code> filters on the target branch. <code>**</code> crosses folders, <code>*</code> does not.</li>
+        <li>Skipped by a filter means pending, not passed, which matters for required checks.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 4 ============ -->
+    <section class="step" id="jobs" data-step>
+      <div class="step-head"><span class="num">04</span><h2>Jobs, conditions and expressions</h2></div>
+      <p class="goal"><b>Goal:</b> jobs in the right order, a condition that decides whether one runs, and data passed from one job to the next. You can write the condition and the expression yourself.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>A pipeline is a graph of jobs. <code>needs</code> draws the edges, <code>if</code> decides which jobs take part, and outputs carry data along the edges. Conditions are small programs, and they fail silently: a wrong one skips a job without a warning.</p>
+      </div>
+      <ul>
+        <li><b><code>needs</code></b> makes a job wait. If a needed job fails or is skipped, the job is skipped too, unless its <code>if</code> contains a status function such as <code>always()</code>.</li>
+        <li><b>A skipped job reports success.</b> It does not stop a pull request from merging, even if it is a required check.</li>
+        <li><b>Job outputs</b> are how data crosses jobs: a step writes <code>name=value</code> to the file <code>$GITHUB_OUTPUT</code>, the job lists it under <code>outputs</code>, and another job reads <code>needs.&lt;job&gt;.outputs.&lt;name&gt;</code>. A job can read only the jobs it lists in its own <code>needs</code>.</li>
+        <li><b>Status functions</b>: <code>success()</code> is applied by default. <code>failure()</code>, <code>cancelled()</code>, <code>always()</code>. GitHub recommends <code>!cancelled()</code> over <code>always()</code>, because <code>always()</code> also runs when you cancel the run.</li>
+      </ul>
+      <figure class="code"><figcaption>A step hands a value to its job, and the job to the next job</figcaption><pre><code>jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - id: ver
+        run: echo "version=1.0.${{ github.run_number }}" &gt;&gt; "$GITHUB_OUTPUT"
+  publish:
+    needs: build                 # only for the jobs listed here can you read needs.*
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "publishing ${{ needs.build.outputs.version }}"</code></pre></figure>
+      <div data-lab="A4"></div>
+      <h3>Expressions</h3>
+      <p>Inside <code>${{ }}</code> (or directly in an <code>if</code>) you can use literals, the operators <code>( ) [ ] . ! &lt; &lt;= &gt; &gt;= == != &amp;&amp; ||</code>, and a few functions. Rules worth knowing:</p>
+      <ul>
+        <li>Strings use <b>single quotes</b>; double quotes are an error. Comparing strings ignores case, so <code>'Main' == 'main'</code> is true.</li>
+        <li>Comparing different types converts them to numbers. <code>null</code> is 0, <code>true</code> is 1, an empty string is 0, and text that is not a number is <code>NaN</code>, which is never equal to anything.</li>
+        <li><code>&amp;&amp;</code> and <code>||</code> return one of their <em>values</em>, so <code>a || 'default'</code> works as a default.</li>
+        <li>In an <code>if</code>, <code>false</code>, <code>0</code>, <code>''</code> and <code>null</code> are false, and everything else is true. That is why <code>if: "${{ x }} == 'y'"</code> is always true: the text around the braces makes it a non-empty string.</li>
+        <li><code>contains()</code>, <code>startsWith()</code>, <code>endsWith()</code> ignore case. <code>format()</code>, <code>join()</code>, <code>toJSON()</code>, <code>fromJSON()</code>, <code>hashFiles()</code> and <code>case()</code> are the others, and <code>.*</code> picks a field from every item of a list.</li>
+      </ul>
+      <p>Where can you use which context? It depends on the key. The <code>if</code> of a <em>job</em> can read only <code>github</code>, <code>needs</code>, <code>vars</code> and <code>inputs</code>: no <code>secrets</code>, no <code>env</code>, no <code>matrix</code>. The <code>if</code> of a <em>step</em> can also read <code>env</code>, <code>steps</code>, <code>job</code>, <code>runner</code>, <code>matrix</code> and <code>strategy</code>, but still not <code>secrets</code>. The checker reports a context used in the wrong place.</p>
+      <p>Write six conditions. The table lists the cases your expression must get right.</p>
+      <div data-drill="e-main-or-tag"></div>
+      <div data-drill="e-skip-ci"></div>
+      <div data-drill="e-label"></div>
+      <div data-drill="e-format"></div>
+      <div data-drill="e-ternary"></div>
+      <div data-drill="e-status"></div>
+      <h3>Try your own</h3>
+      <p>Pick an example or write an expression, and change the context as JSON to see the value.</p>
+      <div data-playground></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/expressions">Expressions</a>, <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#context-availability">Contexts and where each is available</a>, <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-jobs-with-conditions">Control jobs with conditions</a>, <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/pass-job-outputs">Pass job outputs</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li><code>needs</code> orders jobs, outputs pass data, and <code>if</code> decides who takes part.</li>
+        <li>An <code>if</code> is an expression: case-insensitive strings, single quotes, <code>&amp;&amp;</code> and <code>||</code> that return values.</li>
+        <li>Never mix text and <code>${{ }}</code> in an <code>if</code>. Use <code>github.ref</code> for the full ref and <code>github.ref_name</code> for the short one.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 5 ============ -->
+    <section class="step" id="matrix" data-step>
+      <div class="step-head"><span class="num">05</span><h2>One job, many combinations</h2></div>
+      <p class="goal"><b>Goal:</b> a matrix that runs the tests on several systems and SDKs from one job definition, minus the combinations you do not need.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Software has to work on more than one thing: a second operating system, the SDK you support next to the one you build with. A matrix turns that into one job definition and a few lists, instead of copying jobs.</p>
+      </div>
+      <ul>
+        <li>Every key under <code>matrix</code> is a variable with a list. The job runs once for every combination: <code>os: [a, b]</code> and <code>dotnet: [x, y]</code> make four jobs.</li>
+        <li><code>exclude</code> removes the combinations that match every key you list.</li>
+        <li><code>include</code> adds values to the combinations it fits, or adds a new combination if it fits none without changing an original value.</li>
+        <li>A run can have at most <b>256</b> matrix jobs.</li>
+        <li><b><code>fail-fast</code></b> defaults to <code>true</code>: one failure cancels the jobs still running or waiting. Set it <code>false</code> to see every failure. <b><code>max-parallel</code></b> limits how many run at once. <b><code>continue-on-error</code></b> lets one leg fail without failing the job.</li>
+        <li>The matrix can come from data: <code>matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}</code>.</li>
+      </ul>
+      <figure class="code"><figcaption>Four combinations, minus one (from the GitHub docs' matrix pages)</figcaption><pre><code>strategy:
+  fail-fast: false
+  matrix:
+    os: [ubuntu-latest, windows-latest]
+    version: [10, 12, 14]
+    exclude:
+      - os: windows-latest
+        version: 14
+    include:
+      - os: ubuntu-latest        # adds a value to the combinations it fits
+        version: 14
+        experimental: true</code></pre></figure>
+      <div data-lab="A5"></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/run-job-variations">Running variations of jobs</a>, <a href="https://docs.github.com/en/actions/reference/limits">Actions limits</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Matrix variables multiply: two lists of two are four jobs. <code>exclude</code> subtracts.</li>
+        <li><code>matrix.&lt;name&gt;</code> reads the current job's values.</li>
+        <li>Think about <code>fail-fast</code>: it is on by default.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+

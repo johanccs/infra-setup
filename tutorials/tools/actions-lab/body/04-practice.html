@@ -1,0 +1,105 @@
+    <!-- ============ 15 ============ -->
+    <section class="step" id="scratch" data-step>
+      <div class="step-head"><span class="num">15</span><h2>Write it from scratch</h2></div>
+      <p class="goal"><b>Goal:</b> write six workflows from an empty editor, from a ten-line greeting to a staged delivery with keyless cloud access, using only a checklist.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>In the guided labs the editor started you off. Now it starts empty, and the right-hand list says <em>what</em> to build and not <em>how</em>. The lab shows an error the moment you type one. When something is not met yet it stays grey. Use hints only when you are stuck for more than a minute: the point is to get the syntax into your fingers.</p>
+      </div>
+      <p>The challenges get harder one by one. Your work is saved in this browser, so you can leave and come back.</p>
+      <div data-set="scratch" data-ids="B1 B2 B3 B4 B5 B6"></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>You can write a workflow's skeleton, its triggers, a matrix, a cache, an image build and a staged deploy without a template.</li>
+        <li>The same few patterns come back: a condition used twice, a gate job, one job's permission raised.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 16 ============ -->
+    <section class="step" id="capstone" data-step>
+      <div class="step-head"><span class="num">16</span><h2>The capstone: the enterprise pipeline</h2></div>
+      <p class="goal"><b>Goal:</b> write one pipeline for the Todo project that a security review would pass: 20 requirements, from an empty editor.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>This is the whole job in one file: continuous integration on pull requests and the merge queue, a signed and attested image for each push and release tag, a staged deployment with approval, no stored cloud keys, and every action pinned. If you can write this without looking, you can write the pipeline of a real team.</p>
+      </div>
+      <p>Build it in layers and check the preview after each: <b>1.</b> triggers, permissions, concurrency. <b>2.</b> <code>api</code> and <code>ui</code>. <b>3.</b> <code>dependency-review</code>. <b>4.</b> <code>image</code>, with sign and attest. <b>5.</b> <code>staging</code> and <code>production</code>. <b>6.</b> the <code>ci-ok</code> gate. One trap is waiting: a job can read <code>needs.X.outputs</code> only for jobs in <em>its own</em> <code>needs</code>, not for jobs further up the chain.</p>
+      <div data-lab="B7"></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>You can design the whole graph: CI jobs, an image job, two gated deploys, and a gate for the ruleset.</li>
+        <li>The settings that complete it are outside the file: the ruleset, the environment rules, the cloud trust policies and Dependabot.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 17 ============ -->
+    <section class="step" id="fix" data-step>
+      <div class="step-head"><span class="num">17</span><h2>Read it and fix it</h2></div>
+      <p class="goal"><b>Goal:</b> given a broken pipeline and what the team saw, find the cause and fix it, from a one-word typo to a pipeline with seven separate faults.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Most of your life with pipelines is reading ones you did not write, at the moment something has gone wrong. That is a different skill from writing. Each scenario starts with the <b>symptom</b>: a message, a log line, a person's complaint. You read the file, form a theory, and fix it. The right-hand list shows only how many problems remain, until you fix each one.</p>
+      </div>
+      <h3>A method for reading a pipeline</h3>
+      <ol>
+        <li><b>Does it start?</b> Triggers and filters. Branch or tag? Which files? Is it on the default branch (for <code>schedule</code> and <code>workflow_dispatch</code>)? Use the preview.</li>
+        <li><b>What may it do?</b> <code>permissions</code> at the top and on each job. Anything broader than the job needs is a finding.</li>
+        <li><b>In what order?</b> <code>needs</code>, <code>if</code> and the status functions. Which jobs run, which are skipped, and why?</li>
+        <li><b>Where does text go?</b> Every <code>${{ }}</code> inside <code>run</code>: is the value written by someone outside the team? Is a secret pasted into a script?</li>
+        <li><b>What does it depend on?</b> Every <code>uses</code>: a branch, a tag, or a SHA? An old major version?</li>
+        <li><b>What can run away?</b> <code>timeout-minutes</code>, <code>concurrency</code>, caches that never hit, artifacts that collide.</li>
+        <li><b>What changes production?</b> Environments, approval, concurrency on deploys, image tags.</li>
+      </ol>
+      <p>The scenarios are in order of difficulty. Each is a real mistake that people make.</p>
+      <div data-set="fix" data-ids="C1 C2 C3 C4 C5 C6 C7 C8 C9 C10 C11"></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Start from the symptom, then read in a fixed order: start, permissions, order, text, dependencies, limits, production.</li>
+        <li>A skipped job is quiet, a missing permission is loud, and an injected script is invisible until someone uses it.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 18 ============ -->
+    <section class="step" id="sandbox" data-step>
+      <div class="step-head"><span class="num">18</span><h2>Sandbox: check your own workflow</h2></div>
+      <p class="goal"><b>Goal:</b> paste any workflow from your own repositories and see what the checker and the run preview say.</p>
+      <p>The editor below starts with a small example. Replace it with a file of your own. The checker is the same one used in every lab, and the preview shows which jobs would start for each event. Nothing leaves your browser.</p>
+      <div data-free data-task="Paste or write any workflow. Problems show as you type, and the preview shows what would run."></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ Troubleshooting ============ -->
+    <section class="step" id="troubleshooting" data-step>
+      <div class="step-head"><span class="num">!</span><h2>When something breaks</h2></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>What you see</th><th>Likely cause</th><th>What to do</th></tr></thead>
+        <tbody>
+          <tr><td>The Actions tab shows <b>Invalid workflow file</b>, and no run starts</td><td>A YAML or structure error in the file</td><td>Run <code>actionlint</code> locally, or paste the file in the sandbox (step 18)</td></tr>
+          <tr><td>You pushed and nothing ran</td><td>A branch, tag or path filter does not match; the file is not on the default branch (for <code>schedule</code> and <code>workflow_dispatch</code>); the commit message has <code>[skip ci]</code> (or <code>[ci skip]</code>, <code>[no ci]</code>, <code>[skip actions]</code>, <code>[actions skip]</code>)</td><td>Use the run preview with the same event, and read the filters</td></tr>
+          <tr><td>A required check stays <b>Pending</b> forever</td><td>The workflow was skipped by a path filter, a branch filter or a commit message, so its check never reported</td><td>Do not filter a required workflow. Require one gate job instead (step 13)</td></tr>
+          <tr><td>A job shows <b>This check was skipped</b></td><td>Its <code>if</code> was false, or a job it <code>needs</code> failed or was skipped</td><td>Read the <code>if</code>. Check <code>github.ref</code> vs <code>github.ref_name</code>, and look for text around <code>${{ }}</code></td></tr>
+          <tr><td><code>Resource not accessible by integration</code> (HTTP 403)</td><td>The <code>GITHUB_TOKEN</code> lacks a permission for that call</td><td>Add the scope to the job's <code>permissions</code> (and only that job)</td></tr>
+          <tr><td>The cache is never restored</td><td>The key changes every run (for example it contains <code>github.sha</code>), or the cache was created on a branch the run cannot read</td><td>Key on <code>hashFiles</code> of the input files; add <code>restore-keys</code></td></tr>
+          <tr><td>An artifact upload fails with <code>(409) Conflict: an artifact with this name already exists</code></td><td>Two jobs, often matrix legs, upload the same name</td><td>Put the matrix values in the name; download with <code>pattern</code> and <code>merge-multiple</code></td></tr>
+          <tr><td>The cloud says <code>Not authorized to perform sts:AssumeRoleWithWebIdentity</code></td><td>The token's <code>sub</code> (or <code>aud</code>) does not match the role's trust policy: wrong environment, wrong repository, or old vs new subject format</td><td>Print the claims with <code>github/actions-oidc-debugger</code>; compare with the trust policy; check the job declares the environment</td></tr>
+          <tr><td>A run was cancelled and nobody cancelled it</td><td><code>cancel-in-progress: true</code> in a concurrency group, or the job reached its <code>timeout-minutes</code></td><td>Check <code>concurrency</code> and timeouts; never cancel deploys</td></tr>
+          <tr><td>A scheduled workflow stopped running</td><td>In a public repository, schedules are disabled after 60 days without repository activity</td><td><code>gh workflow enable &lt;file&gt;</code></td></tr>
+          <tr><td>Secrets are empty in a run for a pull request from a fork</td><td>Fork pull requests get a read-only token and no secrets, by design</td><td>Do not work around it with <code>pull_request_target</code> (step 17, scenario 10)</td></tr>
+          <tr><td>An environment has required reviewers set but the job does not wait</td><td>Your plan does not support them for this repository (private repositories need a higher plan)</td><td>Check <b>Settings → Environments</b> for a warning, and the plan notes in step 9</td></tr>
+          <tr><td>The lab says the checker is unavailable</td><td>The browser lacks WebAssembly or <code>DecompressionStream</code></td><td>Use a current Chrome, Edge, Firefox or Safari. The YAML and requirement checks still work</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section class="step" id="next" data-step>
+      <div class="step-head"><span class="num">→</span><h2>Where to go next</h2></div>
+      <p>You can write and read a pipeline. These widen what you can run it on and how you run it at scale:</p>
+      <ul>
+        <li><strong>Wire it to the cluster.</strong> Part 1 of the Todo series commits the new image tag to <code>values.yaml</code> and lets Argo CD deploy it. Replace that script with the image job from the capstone, and let the deploy jobs update the chart instead of calling <code>kubectl</code>.</li>
+        <li><strong>Your own runners.</strong> Self-hosted runners and the Actions Runner Controller on Kubernetes give you your own hardware and network access, and need more care: they are not isolated between runs, so never use them for untrusted pull requests.</li>
+        <li><strong>Larger and slim runners.</strong> GitHub-hosted larger runners (Team and Enterprise plans) have more CPU and static IP addresses. <code>ubuntu-slim</code> is a single-CPU, lower-cost runner for light jobs, with a 15-minute job limit.</li>
+        <li><strong>Share across an organisation.</strong> Workflow templates in the organisation's <code>.github</code> repository, and reusable workflows called by tag, give every team the same pipeline.</li>
+        <li><strong>Lock the dependencies.</strong> When workflow dependency lockfiles reach your plan, <code>gh actions-lock</code> pins every action, transitive ones included.</li>
+        <li><strong>More clouds.</strong> The OIDC pattern is the same for Azure, Google Cloud, HashiCorp Vault and others: only the trust configuration and the login action change.</li>
+        <li><strong>Custom protection rules.</strong> Environments can ask an outside system (an observability or change-management tool) to approve a deployment, through GitHub Apps.</li>
+        <li><strong>Terraform in the pipeline.</strong> Part 6 builds the layers. A pipeline job can run <code>terraform plan</code> on every pull request and <code>apply</code> after approval, with OIDC to the cloud.</li>
+      </ul>
+      <footer>Written October 2026 against the GitHub Actions documentation and the action repositories as published that month (actions/checkout 7, setup-dotnet 6, setup-node 7, cache 6, upload-artifact 7, download-artifact 8, docker actions 4 to 7, cosign-installer 4.1, attest 4, codeql-action 4, configure-aws-credentials 6) and actionlint 1.7.12. GitHub changes this area often: the lab reads each action's own repository for versions, so re-run the build script to refresh them.</footer>
+    </section>

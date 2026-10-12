@@ -1,0 +1,1179 @@
+{
+ "gh workflow run": {
+  "--field": {
+   "short": "-F",
+   "value": true
+  },
+  "--json": {
+   "short": null,
+   "value": false
+  },
+  "--raw-field": {
+   "short": "-f",
+   "value": true
+  },
+  "--ref": {
+   "short": "-r",
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh workflow list": {
+  "--all": {
+   "short": "-a",
+   "value": false
+  },
+  "--jq": {
+   "short": "-q",
+   "value": true
+  },
+  "--json": {
+   "short": null,
+   "value": true
+  },
+  "--limit": {
+   "short": "-L",
+   "value": true
+  },
+  "--template": {
+   "short": "-t",
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh workflow view": {
+  "--ref": {
+   "short": "-r",
+   "value": true
+  },
+  "--web": {
+   "short": "-w",
+   "value": false
+  },
+  "--yaml": {
+   "short": "-y",
+   "value": false
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh workflow enable": {
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh workflow disable": {
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh run list": {
+  "--all": {
+   "short": "-a",
+   "value": false
+  },
+  "--branch": {
+   "short": "-b",
+   "value": true
+  },
+  "--commit": {
+   "short": "-c",
+   "value": false
+  },
+  "--created": {
+   "short": null,
+   "value": true
+  },
+  "--event": {
+   "short": "-e",
+   "value": true
+  },
+  "--jq": {
+   "short": "-q",
+   "value": true
+  },
+  "--json": {
+   "short": null,
+   "value": true
+  },
+  "--limit": {
+   "short": "-L",
+   "value": true
+  },
+  "--status": {
+   "short": "-s",
+   "value": true
+  },
+  "--template": {
+   "short": "-t",
+   "value": true
+  },
+  "--user": {
+   "short": "-u",
+   "value": true
+  },
+  "--workflow": {
+   "short": "-w",
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh run watch": {
+  "--compact": {
+   "short": null,
+   "value": false
+  },
+  "--exit-status": {
+   "short": null,
+   "value": false
+  },
+  "--interval": {
+   "short": "-i",
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh run view": {
+  "--attempt": {
+   "short": "-a",
+   "value": true
+  },
+  "--exit-status": {
+   "short": null,
+   "value": false
+  },
+  "--job": {
+   "short": "-j",
+   "value": true
+  },
+  "--jq": {
+   "short": "-q",
+   "value": true
+  },
+  "--json": {
+   "short": null,
+   "value": true
+  },
+  "--log": {
+   "short": null,
+   "value": false
+  },
+  "--log-failed": {
+   "short": null,
+   "value": false
+  },
+  "--template": {
+   "short": "-t",
+   "value": true
+  },
+  "--verbose": {
+   "short": "-v",
+   "value": false
+  },
+  "--web": {
+   "short": "-w",
+   "value": false
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh run rerun": {
+  "--debug": {
+   "short": "-d",
+   "value": false
+  },
+  "--failed": {
+   "short": null,
+   "value": false
+  },
+  "--job": {
+   "short": "-j",
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh run cancel": {
+  "--force": {
+   "short": null,
+   "value": false
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh run download": {
+  "--dir": {
+   "short": "-D",
+   "value": true
+  },
+  "--name": {
+   "short": "-n",
+   "value": true
+  },
+  "--pattern": {
+   "short": "-p",
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh secret set": {
+  "--app": {
+   "short": "-a",
+   "value": true
+  },
+  "--body": {
+   "short": "-b",
+   "value": true
+  },
+  "--env": {
+   "short": "-e",
+   "value": true
+  },
+  "--env-file": {
+   "short": "-f",
+   "value": true
+  },
+  "--no-repos-selected": {
+   "short": null,
+   "value": false
+  },
+  "--no-store": {
+   "short": null,
+   "value": false
+  },
+  "--org": {
+   "short": "-o",
+   "value": true
+  },
+  "--repos": {
+   "short": "-r",
+   "value": true
+  },
+  "--user": {
+   "short": "-u",
+   "value": false
+  },
+  "--visibility": {
+   "short": "-v",
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh secret list": {
+  "--app": {
+   "short": "-a",
+   "value": true
+  },
+  "--env": {
+   "short": "-e",
+   "value": true
+  },
+  "--jq": {
+   "short": "-q",
+   "value": true
+  },
+  "--json": {
+   "short": null,
+   "value": true
+  },
+  "--org": {
+   "short": "-o",
+   "value": true
+  },
+  "--template": {
+   "short": "-t",
+   "value": true
+  },
+  "--user": {
+   "short": "-u",
+   "value": false
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh secret delete": {
+  "--app": {
+   "short": "-a",
+   "value": true
+  },
+  "--env": {
+   "short": "-e",
+   "value": true
+  },
+  "--org": {
+   "short": "-o",
+   "value": true
+  },
+  "--user": {
+   "short": "-u",
+   "value": false
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh variable set": {
+  "--body": {
+   "short": "-b",
+   "value": true
+  },
+  "--env": {
+   "short": "-e",
+   "value": true
+  },
+  "--env-file": {
+   "short": "-f",
+   "value": true
+  },
+  "--org": {
+   "short": "-o",
+   "value": true
+  },
+  "--repos": {
+   "short": "-r",
+   "value": true
+  },
+  "--visibility": {
+   "short": "-v",
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh variable list": {
+  "--env": {
+   "short": "-e",
+   "value": true
+  },
+  "--jq": {
+   "short": "-q",
+   "value": true
+  },
+  "--json": {
+   "short": null,
+   "value": true
+  },
+  "--org": {
+   "short": "-o",
+   "value": true
+  },
+  "--template": {
+   "short": "-t",
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh attestation verify": {
+  "--bundle": {
+   "short": "-b",
+   "value": true
+  },
+  "--bundle-from-oci": {
+   "short": null,
+   "value": false
+  },
+  "--cert-identity": {
+   "short": null,
+   "value": true
+  },
+  "--cert-identity-regex": {
+   "short": "-i",
+   "value": true
+  },
+  "--cert-oidc-issuer": {
+   "short": null,
+   "value": true
+  },
+  "--custom-trusted-root": {
+   "short": null,
+   "value": true
+  },
+  "--deny-self-hosted-runners": {
+   "short": null,
+   "value": false
+  },
+  "--digest-alg": {
+   "short": "-d",
+   "value": true
+  },
+  "--format": {
+   "short": null,
+   "value": true
+  },
+  "--hostname": {
+   "short": null,
+   "value": true
+  },
+  "--jq": {
+   "short": "-q",
+   "value": true
+  },
+  "--limit": {
+   "short": "-L",
+   "value": true
+  },
+  "--no-public-good": {
+   "short": null,
+   "value": false
+  },
+  "--owner": {
+   "short": "-o",
+   "value": true
+  },
+  "--predicate-type": {
+   "short": null,
+   "value": true
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  },
+  "--signer-digest": {
+   "short": null,
+   "value": true
+  },
+  "--signer-repo": {
+   "short": null,
+   "value": true
+  },
+  "--signer-workflow": {
+   "short": null,
+   "value": true
+  },
+  "--source-digest": {
+   "short": null,
+   "value": true
+  },
+  "--source-ref": {
+   "short": null,
+   "value": true
+  },
+  "--template": {
+   "short": "-t",
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  }
+ },
+ "gh cache list": {
+  "--jq": {
+   "short": "-q",
+   "value": true
+  },
+  "--json": {
+   "short": null,
+   "value": true
+  },
+  "--key": {
+   "short": "-k",
+   "value": true
+  },
+  "--limit": {
+   "short": "-L",
+   "value": true
+  },
+  "--order": {
+   "short": "-O",
+   "value": true
+  },
+  "--ref": {
+   "short": "-r",
+   "value": true
+  },
+  "--sort": {
+   "short": "-S",
+   "value": true
+  },
+  "--template": {
+   "short": "-t",
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh cache delete": {
+  "--all": {
+   "short": "-a",
+   "value": false
+  },
+  "--ref": {
+   "short": "-r",
+   "value": true
+  },
+  "--succeed-on-no-caches": {
+   "short": null,
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh pr checks": {
+  "--fail-fast": {
+   "short": null,
+   "value": false
+  },
+  "--interval": {
+   "short": "-i",
+   "value": true
+  },
+  "--jq": {
+   "short": "-q",
+   "value": true
+  },
+  "--json": {
+   "short": null,
+   "value": true
+  },
+  "--required": {
+   "short": null,
+   "value": false
+  },
+  "--template": {
+   "short": "-t",
+   "value": true
+  },
+  "--watch": {
+   "short": null,
+   "value": false
+  },
+  "--web": {
+   "short": "-w",
+   "value": false
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh api": {
+  "--allow-escape-sequences": {
+   "short": null,
+   "value": false
+  },
+  "--cache": {
+   "short": null,
+   "value": true
+  },
+  "--field": {
+   "short": "-F",
+   "value": true
+  },
+  "--header": {
+   "short": "-H",
+   "value": true
+  },
+  "--hostname": {
+   "short": null,
+   "value": true
+  },
+  "--include": {
+   "short": "-i",
+   "value": false
+  },
+  "--input": {
+   "short": null,
+   "value": true
+  },
+  "--jq": {
+   "short": "-q",
+   "value": true
+  },
+  "--method": {
+   "short": "-X",
+   "value": true
+  },
+  "--paginate": {
+   "short": null,
+   "value": false
+  },
+  "--preview": {
+   "short": "-p",
+   "value": true
+  },
+  "--raw-field": {
+   "short": "-f",
+   "value": true
+  },
+  "--silent": {
+   "short": null,
+   "value": false
+  },
+  "--slurp": {
+   "short": null,
+   "value": false
+  },
+  "--template": {
+   "short": "-t",
+   "value": true
+  },
+  "--verbose": {
+   "short": null,
+   "value": false
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  }
+ },
+ "git tag": {
+  "--list": {
+   "short": "-l",
+   "value": false
+  },
+  "-n": {
+   "short": null,
+   "value": false,
+   "onlyShort": true
+  },
+  "--delete": {
+   "short": "-d",
+   "value": false
+  },
+  "--verify": {
+   "short": "-v",
+   "value": false
+  },
+  "--annotate": {
+   "short": "-a",
+   "value": false
+  },
+  "--message": {
+   "short": "-m",
+   "value": true
+  },
+  "--file": {
+   "short": "-F",
+   "value": true
+  },
+  "--trailer": {
+   "short": null,
+   "value": true
+  },
+  "--edit": {
+   "short": "-e",
+   "value": false
+  },
+  "--sign": {
+   "short": "-s",
+   "value": false
+  },
+  "--cleanup": {
+   "short": null,
+   "value": true
+  },
+  "--local-user": {
+   "short": "-u",
+   "value": true
+  },
+  "--force": {
+   "short": "-f",
+   "value": false
+  },
+  "--create-reflog": {
+   "short": null,
+   "value": false
+  },
+  "--column": {
+   "short": null,
+   "value": false
+  },
+  "--contains": {
+   "short": null,
+   "value": true
+  },
+  "--no-contains": {
+   "short": null,
+   "value": true
+  },
+  "--merged": {
+   "short": null,
+   "value": true
+  },
+  "--no-merged": {
+   "short": null,
+   "value": true
+  },
+  "--omit-empty": {
+   "short": null,
+   "value": false
+  },
+  "--sort": {
+   "short": null,
+   "value": true
+  },
+  "--points-at": {
+   "short": null,
+   "value": true
+  },
+  "--format": {
+   "short": null,
+   "value": true
+  },
+  "--color": {
+   "short": null,
+   "value": false
+  },
+  "--ignore-case": {
+   "short": "-i",
+   "value": false
+  },
+  "--no-column": {
+   "short": null,
+   "value": false
+  }
+ },
+ "git push": {
+  "--verbose": {
+   "short": "-v",
+   "value": false
+  },
+  "--quiet": {
+   "short": "-q",
+   "value": false
+  },
+  "--repo": {
+   "short": null,
+   "value": true
+  },
+  "--all": {
+   "short": null,
+   "value": false
+  },
+  "--branches": {
+   "short": null,
+   "value": false
+  },
+  "--mirror": {
+   "short": null,
+   "value": false
+  },
+  "--delete": {
+   "short": "-d",
+   "value": false
+  },
+  "--tags": {
+   "short": null,
+   "value": false
+  },
+  "--dry-run": {
+   "short": "-n",
+   "value": false
+  },
+  "--porcelain": {
+   "short": null,
+   "value": false
+  },
+  "--force": {
+   "short": "-f",
+   "value": false
+  },
+  "--force-with-lease": {
+   "short": null,
+   "value": false
+  },
+  "--force-if-includes": {
+   "short": null,
+   "value": false
+  },
+  "--recurse-submodules": {
+   "short": null,
+   "value": false
+  },
+  "--thin": {
+   "short": null,
+   "value": false
+  },
+  "--receive-pack": {
+   "short": null,
+   "value": true
+  },
+  "--exec": {
+   "short": null,
+   "value": true
+  },
+  "--set-upstream": {
+   "short": "-u",
+   "value": false
+  },
+  "--progress": {
+   "short": null,
+   "value": false
+  },
+  "--prune": {
+   "short": null,
+   "value": false
+  },
+  "--no-verify": {
+   "short": null,
+   "value": false
+  },
+  "--verify": {
+   "short": null,
+   "value": false
+  },
+  "--follow-tags": {
+   "short": null,
+   "value": false
+  },
+  "--signed": {
+   "short": null,
+   "value": false
+  },
+  "--atomic": {
+   "short": null,
+   "value": false
+  },
+  "--push-option": {
+   "short": "-o",
+   "value": true
+  },
+  "--ipv4": {
+   "short": "-4",
+   "value": false
+  },
+  "--ipv6": {
+   "short": "-6",
+   "value": false
+  }
+ },
+ "git commit": {
+  "--quiet": {
+   "short": "-q",
+   "value": false
+  },
+  "--verbose": {
+   "short": "-v",
+   "value": false
+  },
+  "--file": {
+   "short": "-F",
+   "value": true
+  },
+  "--author": {
+   "short": null,
+   "value": true
+  },
+  "--date": {
+   "short": null,
+   "value": true
+  },
+  "--message": {
+   "short": "-m",
+   "value": true
+  },
+  "--reedit-message": {
+   "short": "-c",
+   "value": true
+  },
+  "--reuse-message": {
+   "short": "-C",
+   "value": true
+  },
+  "--fixup": {
+   "short": null,
+   "value": false
+  },
+  "--squash": {
+   "short": null,
+   "value": true
+  },
+  "--reset-author": {
+   "short": null,
+   "value": false
+  },
+  "--trailer": {
+   "short": null,
+   "value": true
+  },
+  "--signoff": {
+   "short": "-s",
+   "value": false
+  },
+  "--template": {
+   "short": "-t",
+   "value": true
+  },
+  "--edit": {
+   "short": "-e",
+   "value": false
+  },
+  "--cleanup": {
+   "short": null,
+   "value": true
+  },
+  "--status": {
+   "short": null,
+   "value": false
+  },
+  "--gpg-sign": {
+   "short": "-S",
+   "value": false
+  },
+  "--all": {
+   "short": "-a",
+   "value": false
+  },
+  "--include": {
+   "short": "-i",
+   "value": false
+  },
+  "--interactive": {
+   "short": null,
+   "value": false
+  },
+  "--patch": {
+   "short": "-p",
+   "value": false
+  },
+  "--unified": {
+   "short": "-U",
+   "value": true
+  },
+  "--inter-hunk-context": {
+   "short": null,
+   "value": true
+  },
+  "--only": {
+   "short": "-o",
+   "value": false
+  },
+  "--no-verify": {
+   "short": "-n",
+   "value": false
+  },
+  "--verify": {
+   "short": null,
+   "value": false
+  },
+  "--dry-run": {
+   "short": null,
+   "value": false
+  },
+  "--short": {
+   "short": null,
+   "value": false
+  },
+  "--branch": {
+   "short": null,
+   "value": false
+  },
+  "--ahead-behind": {
+   "short": null,
+   "value": false
+  },
+  "--porcelain": {
+   "short": null,
+   "value": false
+  },
+  "--long": {
+   "short": null,
+   "value": false
+  },
+  "--null": {
+   "short": "-z",
+   "value": false
+  },
+  "--amend": {
+   "short": null,
+   "value": false
+  },
+  "--no-post-rewrite": {
+   "short": null,
+   "value": false
+  },
+  "--post-rewrite": {
+   "short": null,
+   "value": false
+  },
+  "--untracked-files": {
+   "short": "-u",
+   "value": false
+  },
+  "--pathspec-from-file": {
+   "short": null,
+   "value": true
+  },
+  "--pathspec-file-nul": {
+   "short": null,
+   "value": false
+  },
+  "--allow-empty": {
+   "short": null,
+   "value": false
+  },
+  "--allow-empty-message": {
+   "short": null,
+   "value": false
+  }
+ },
+ "git rev-parse": {
+  "--parseopt": {
+   "short": null,
+   "value": false
+  },
+  "--sq-quote": {
+   "short": null,
+   "value": false
+  }
+ },
+ "git ls-remote": {
+  "--quiet": {
+   "short": "-q",
+   "value": false
+  },
+  "--upload-pack": {
+   "short": null,
+   "value": true
+  },
+  "--tags": {
+   "short": "-t",
+   "value": false
+  },
+  "--branches": {
+   "short": "-b",
+   "value": false
+  },
+  "--refs": {
+   "short": null,
+   "value": false
+  },
+  "--get-url": {
+   "short": null,
+   "value": false
+  },
+  "--sort": {
+   "short": null,
+   "value": true
+  },
+  "--exit-code": {
+   "short": null,
+   "value": false
+  },
+  "--symref": {
+   "short": null,
+   "value": false
+  },
+  "--server-option": {
+   "short": "-o",
+   "value": true
+  }
+ }
+}

@@ -1,0 +1,156 @@
+    <!-- ============ 11 ============ -->
+    <section class="step" id="reuse" data-step>
+      <div class="step-head"><span class="num">11</span><h2>Reuse: workflows and composite actions</h2></div>
+      <p class="goal"><b>Goal:</b> one build workflow that every service calls, and one composite action that packages a few steps, with typed inputs, secrets and outputs.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Teams copy a pipeline into every repository, and then fix a bug in one of twelve copies. Two tools remove the copies, and they are not the same thing, so knowing which to use is part of the skill.</p>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th>Reusable workflow</th><th>Composite action</th></tr></thead>
+        <tbody>
+          <tr><td>What it is</td><td>A whole workflow with <code>on: workflow_call</code>, called <b>as a job</b></td><td>A list of <b>steps</b> in an <code>action.yml</code>, used <b>as a step</b></td></tr>
+          <tr><td>Runs on</td><td>Its own runners, chosen by its own jobs</td><td>The runner of the job that uses it</td></tr>
+          <tr><td>Input and output</td><td>Typed inputs, secrets, outputs mapped from job outputs</td><td>Inputs and outputs (an output's <code>value</code> is an expression)</td></tr>
+          <tr><td>Called with</td><td><code>uses: ./.github/workflows/x.yml</code> or <code>owner/repo/.github/workflows/x.yml@ref</code></td><td><code>uses: ./.github/actions/x</code> or <code>owner/repo/path@ref</code></td></tr>
+          <tr><td>Use it to share</td><td>A pipeline stage, with its own jobs and environments</td><td>A few steps that belong inside a job</td></tr>
+        </tbody>
+      </table></div>
+      <ul>
+        <li>A <b>calling job</b> has <code>uses</code>, <code>with</code>, <code>secrets</code> (or <code>secrets: inherit</code>), and may have <code>needs</code> and <code>if</code>. It cannot have <code>runs-on</code>, <code>steps</code> or <code>environment</code>. Set the environment on a job <em>inside</em> the called workflow.</li>
+        <li>A workflow output must map to a <b>job</b> output; a job output maps to a step output.</li>
+        <li>A local reference (<code>./.github/workflows/…</code>) is taken from the same commit as the caller. For another repository, pin a tag or a full SHA.</li>
+        <li>Workflows can call workflows up to ten levels deep (the caller plus nine). Permissions through the chain can stay the same or shrink, never grow.</li>
+        <li>Every <code>run</code> step in a composite action needs a <code>shell</code>.</li>
+      </ul>
+      <figure class="code"><figcaption>The contract of a reusable workflow</figcaption><pre><code>on:
+  workflow_call:
+    inputs:
+      image:
+        type: string
+        required: true
+    secrets:
+      registry_token:
+        required: true
+    outputs:
+      tag:
+        value: ${{ jobs.build.outputs.tag }}</code></pre></figure>
+      <h3>Write the reusable workflow</h3>
+      <div data-lab="A11"></div>
+      <h3>Call it twice</h3>
+      <div data-lab="A12"></div>
+      <h3>Package steps as a composite action</h3>
+      <div data-lab="A13"></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows">Reuse workflows</a>, <a href="https://docs.github.com/en/actions/tutorials/create-actions/create-a-composite-action">Create a composite action</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A reusable workflow is called as a job and brings its own runners; a composite action is steps inside your job.</li>
+        <li>A job can read <code>needs.X.outputs</code> only for jobs it lists in <code>needs</code>.</li>
+        <li><code>shell</code> is required in composite actions.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 12 ============ -->
+    <section class="step" id="harden" data-step>
+      <div class="step-head"><span class="num">12</span><h2>Supply-chain security: pin, scan, sign</h2></div>
+      <p class="goal"><b>Goal:</b> pinned actions, code and dependency scanning on every change, and an image that is signed and carries proof of how it was built.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Your pipeline runs other people's code with your secrets, and it ships what it builds to production. Attackers know. Three layers cover most of the risk: control what runs in the pipeline, look for problems before they merge, and prove what you shipped.</p>
+      </div>
+      <h3>Control what runs</h3>
+      <ul>
+        <li><b>Pin to a full commit SHA.</b> A tag can be moved or deleted if the action's repository is compromised. A SHA cannot. Verify the SHA belongs to the action's own repository, not a fork, and keep a <code># v…</code> comment so Dependabot can update it.</li>
+        <li><b>Actions with immutable releases</b> publish exact tags (such as <code>dependency-review-action@v5.0.0</code>) that cannot be moved, with no moving <code>v5</code> tag. An exact version is as strong as it gets without a SHA.</li>
+        <li>GitHub is previewing <em>workflow dependency lockfiles</em> (<code>gh actions-lock</code>), which pin every action including the ones your actions use. It was in preview on GitHub Enterprise Cloud when this page was written.</li>
+        <li><b>Untrusted checkouts.</b> <code>pull_request_target</code> and <code>workflow_run</code> run with secrets and a writable token. Never build or run code from a pull request's head in them (a "pwn request"). <code>actions/checkout</code> refuses a fork's head ref in <code>pull_request_target</code> unless you set <code>allow-unsafe-pr-checkout: true</code>. GitHub also adds a default policy that blocks <code>pull_request_target</code> in public repositories, enforced from 2 November 2026 for repositories that were on the default policy.</li>
+        <li><code>persist-credentials: false</code> on checkout keeps the token out of the repository's git config for a build that never pushes.</li>
+      </ul>
+      <figure class="code"><figcaption>A pinned action: the SHA, then the version it is</figcaption><pre><code>- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+  with:
+    persist-credentials: false</code></pre></figure>
+      <div data-lab="A14"></div>
+      <h3>Look for problems</h3>
+      <p><b>CodeQL</b> scans source code for vulnerabilities and uploads the findings to the Security tab. <b>Dependency review</b> compares the dependencies of a pull request with the base and fails when it introduces a vulnerable package. Code scanning is free for public repositories. Dependency review works on public repositories, and on private ones with GitHub Advanced Security.</p>
+      <div data-lab="A15"></div>
+      <h3>Prove what you shipped</h3>
+      <p>Sign the image by <b>digest</b> (a tag can move, a digest cannot) with cosign, keyless, so the signature is tied to this workflow's identity and nothing is stored. Create a <b>build provenance attestation</b> with <code>actions/attest</code>: signed facts about which repository, workflow and commit built a digest. Check it later with <code>gh attestation verify</code>. In part 4 of the Todo series a Kyverno policy refuses an unsigned image from entering the cluster. This is the pipeline half of that.</p>
+      <div class="callout"><p><strong>Plans.</strong> Artifact attestations are available for public repositories on every plan. For private repositories on Free, Pro and Team they need GitHub Enterprise Cloud. Cosign signing works on any plan.</p></div>
+      <div data-lab="A16"></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/actions/reference/security/secure-use">Secure use reference</a>, <a href="https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target">Securely using pull_request_target</a>, <a href="https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations">Artifact attestations</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Pin by SHA (or exact immutable tag), and let Dependabot update the pin.</li>
+        <li>Never run a pull request's code in a privileged trigger.</li>
+        <li>Scan on every pull request, sign by digest, and attest what you built.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 13 ============ -->
+    <section class="step" id="govern" data-step>
+      <div class="step-head"><span class="num">13</span><h2>Governance: keep the pipeline honest</h2></div>
+      <p class="goal"><b>Goal:</b> dependencies that update themselves, one stable required check that works with a merge queue, and the right people reviewing the pipeline files.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>A good pipeline file means little if anyone can change it unreviewed, if it quietly falls out of date, or if the merge rules depend on job names that change. The last layer is a handful of files and settings around the workflow.</p>
+      </div>
+      <ul>
+        <li><b>Dependabot</b> opens pull requests for outdated dependencies, including the actions in your workflows, NuGet and npm packages, Docker base images, Helm charts and Terraform. Updates wait a default 3 days after a release (a cooldown), and you can lengthen that. Security updates are never delayed.</li>
+        <li><b>Rulesets</b> (<b>Settings → Rules</b>) can require status checks, pull request reviews and review from code owners before merging, and a <b>merge queue</b>. These are settings, not YAML, so you cannot test them here.</li>
+        <li><b>A required check is a name.</b> If you require <code>api</code> and <code>ui</code> by name, renaming or adding a job breaks the rule, and a skipped job reports success. Require one gate job that always runs and fails if anything failed.</li>
+        <li><b>Merge queue.</b> A queued pull request is built together with the latest <code>main</code> and the changes ahead of it. It starts workflows with the <code>merge_group</code> event, so every required workflow must listen for it, or the check never reports and the pull request never merges.</li>
+        <li><b>CODEOWNERS</b> asks the right team to review files they own. The last matching line wins. Owners must have write access. It is only a <em>requirement</em> if the ruleset says "require review from code owners".</li>
+      </ul>
+      <figure class="code"><figcaption>CODEOWNERS: the last matching line wins</figcaption><pre><code>*                      @octo-org/todo-devs
+/.github/workflows/    @octo-org/platform
+/infra/                @octo-org/platform</code></pre></figure>
+      <h3>Keep dependencies current</h3>
+      <div data-lab="A17"></div>
+      <h3>One required check for a merge queue</h3>
+      <div data-lab="A18"></div>
+      <h3>Who reviews the pipeline</h3>
+      <div data-lab="A19"></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference">Dependabot options reference</a>, <a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue">Managing a merge queue</a>, <a href="https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners">About code owners</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Require one gate job, not a list of job names, and make it listen to <code>merge_group</code>.</li>
+        <li>Dependabot, rulesets and CODEOWNERS are the files and settings around the workflow, and they matter as much.</li>
+        <li>A gate job needs <code>if: always()</code>, or a failure upstream skips it, and a skip counts as success.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 14 ============ -->
+    <section class="step" id="commands" data-step>
+      <div class="step-head"><span class="num">14</span><h2>Commands you should know by heart</h2></div>
+      <p class="goal"><b>Goal:</b> start, watch, debug and re-run a pipeline, manage its secrets, and look up a commit SHA, all from the terminal and without a search engine.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>The pipeline runs in the cloud, but you work on it from a terminal. The same twenty commands cover almost every day: they save you opening the browser to find a run, and they are the glue in scripts. Each drill takes a plain-English request, and checks what you type against the real command, including every flag it accepts.</p>
+      </div>
+      <h3>Start, watch and debug a run</h3>
+      <div data-cmd="run-manual"></div>
+      <div data-cmd="run-list"></div>
+      <div data-cmd="run-watch"></div>
+      <div data-cmd="run-log-failed"></div>
+      <div data-cmd="run-rerun"></div>
+      <div data-cmd="run-cancel"></div>
+      <div data-cmd="run-download"></div>
+      <div data-cmd="pr-checks"></div>
+      <h3>Secrets, variables, workflows and caches</h3>
+      <div data-cmd="secret-set"></div>
+      <div data-cmd="variable-set"></div>
+      <div data-cmd="secret-list"></div>
+      <div data-cmd="workflow-disable"></div>
+      <div data-cmd="cache-delete"></div>
+      <h3>Git, tags and proof</h3>
+      <div data-cmd="git-tag"></div>
+      <div data-cmd="git-empty"></div>
+      <div data-cmd="api-sha"></div>
+      <div data-cmd="attest-verify"></div>
+      <h3>Before you push</h3>
+      <div data-cmd="lint-local"></div>
+      <p class="sources"><b>Sources.</b> <a href="https://cli.github.com/manual/">GitHub CLI manual</a>, <a href="https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow">Manually running a workflow</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li><code>gh run list | watch | view --log-failed | rerun --failed</code> is the debugging loop.</li>
+        <li>Put secrets in with <code>gh secret set NAME</code> and let it ask for the value.</li>
+        <li><code>gh api repos/OWNER/REPO/commits/TAG --jq .sha</code> turns a tag into the SHA to pin.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+

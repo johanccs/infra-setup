@@ -1,0 +1,1403 @@
+{
+ "actions/checkout": {
+  "use": "v7",
+  "latestRelease": "v7.0.1",
+  "sha": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+  "using": "node24",
+  "inputs": {
+   "repository": {
+    "required": false,
+    "default": "${{ github.repository }}"
+   },
+   "ref": {
+    "required": false,
+    "default": null
+   },
+   "token": {
+    "required": false,
+    "default": "${{ github.token }}"
+   },
+   "ssh-key": {
+    "required": false,
+    "default": null
+   },
+   "ssh-known-hosts": {
+    "required": false,
+    "default": null
+   },
+   "ssh-strict": {
+    "required": false,
+    "default": "true"
+   },
+   "ssh-user": {
+    "required": false,
+    "default": "git"
+   },
+   "persist-credentials": {
+    "required": false,
+    "default": "true"
+   },
+   "path": {
+    "required": false,
+    "default": null
+   },
+   "clean": {
+    "required": false,
+    "default": "true"
+   },
+   "filter": {
+    "required": false,
+    "default": null
+   },
+   "sparse-checkout": {
+    "required": false,
+    "default": null
+   },
+   "sparse-checkout-cone-mode": {
+    "required": false,
+    "default": "true"
+   },
+   "fetch-depth": {
+    "required": false,
+    "default": "1"
+   },
+   "fetch-tags": {
+    "required": false,
+    "default": "false"
+   },
+   "show-progress": {
+    "required": false,
+    "default": "true"
+   },
+   "lfs": {
+    "required": false,
+    "default": "false"
+   },
+   "submodules": {
+    "required": false,
+    "default": "false"
+   },
+   "set-safe-directory": {
+    "required": false,
+    "default": "true"
+   },
+   "github-server-url": {
+    "required": false,
+    "default": null
+   },
+   "allow-unsafe-pr-checkout": {
+    "required": false,
+    "default": "false"
+   }
+  },
+  "outputs": [
+   "ref",
+   "commit"
+  ]
+ },
+ "actions/setup-dotnet": {
+  "use": "v6",
+  "latestRelease": "v6.0.0",
+  "sha": "a98b56852c35b8e3190ac28c8c2271da59106c68",
+  "using": "node24",
+  "inputs": {
+   "dotnet-version": {
+    "required": false,
+    "default": null
+   },
+   "dotnet-quality": {
+    "required": false,
+    "default": null
+   },
+   "dotnet-channel": {
+    "required": false,
+    "default": null
+   },
+   "global-json-file": {
+    "required": false,
+    "default": null
+   },
+   "source-url": {
+    "required": false,
+    "default": null
+   },
+   "owner": {
+    "required": false,
+    "default": null
+   },
+   "config-file": {
+    "required": false,
+    "default": null
+   },
+   "cache": {
+    "required": false,
+    "default": "false"
+   },
+   "cache-dependency-path": {
+    "required": false,
+    "default": null
+   },
+   "workloads": {
+    "required": false,
+    "default": null
+   },
+   "architecture": {
+    "required": false,
+    "default": null
+   }
+  },
+  "outputs": [
+   "cache-hit",
+   "dotnet-version"
+  ]
+ },
+ "actions/setup-node": {
+  "use": "v7",
+  "latestRelease": "v7.1.0",
+  "sha": "949feb2413d6458794dcd2491c4babbbce0c15c1",
+  "using": "node24",
+  "inputs": {
+   "node-version": {
+    "required": false,
+    "default": null
+   },
+   "node-version-file": {
+    "required": false,
+    "default": null
+   },
+   "architecture": {
+    "required": false,
+    "default": null
+   },
+   "check-latest": {
+    "required": false,
+    "default": "false"
+   },
+   "registry-url": {
+    "required": false,
+    "default": null
+   },
+   "scope": {
+    "required": false,
+    "default": null
+   },
+   "token": {
+    "required": false,
+    "default": "${{ github.server_url == 'https://github.com' && github.token || '' }}"
+   },
+   "cache": {
+    "required": false,
+    "default": null
+   },
+   "package-manager-cache": {
+    "required": false,
+    "default": "true"
+   },
+   "cache-dependency-path": {
+    "required": false,
+    "default": null
+   },
+   "mirror": {
+    "required": false,
+    "default": null
+   },
+   "mirror-token": {
+    "required": false,
+    "default": null
+   }
+  },
+  "outputs": [
+   "cache-hit",
+   "cache-primary-key",
+   "cache-matched-key",
+   "node-version"
+  ]
+ },
+ "actions/cache": {
+  "use": "v6",
+  "latestRelease": "v6.1.0",
+  "sha": "55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+  "using": "node24",
+  "inputs": {
+   "path": {
+    "required": true,
+    "default": null
+   },
+   "key": {
+    "required": true,
+    "default": null
+   },
+   "restore-keys": {
+    "required": false,
+    "default": null
+   },
+   "upload-chunk-size": {
+    "required": false,
+    "default": null
+   },
+   "enableCrossOsArchive": {
+    "required": false,
+    "default": "false"
+   },
+   "fail-on-cache-miss": {
+    "required": false,
+    "default": "false"
+   },
+   "lookup-only": {
+    "required": false,
+    "default": "false"
+   },
+   "save-always": {
+    "required": false,
+    "default": "false"
+   }
+  },
+  "outputs": [
+   "cache-hit"
+  ]
+ },
+ "actions/upload-artifact": {
+  "use": "v7",
+  "latestRelease": "v7.0.2",
+  "sha": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+  "using": "node24",
+  "inputs": {
+   "name": {
+    "required": false,
+    "default": "artifact"
+   },
+   "path": {
+    "required": true,
+    "default": null
+   },
+   "if-no-files-found": {
+    "required": false,
+    "default": "warn"
+   },
+   "retention-days": {
+    "required": false,
+    "default": null
+   },
+   "compression-level": {
+    "required": false,
+    "default": "6"
+   },
+   "overwrite": {
+    "required": false,
+    "default": "false"
+   },
+   "include-hidden-files": {
+    "required": false,
+    "default": "false"
+   },
+   "archive": {
+    "required": false,
+    "default": "true"
+   }
+  },
+  "outputs": [
+   "artifact-id",
+   "artifact-url",
+   "artifact-digest"
+  ]
+ },
+ "actions/download-artifact": {
+  "use": "v8",
+  "latestRelease": "v8.0.2",
+  "sha": "9000827ccba6bdab643e8b6fd33ac0654aef8333",
+  "using": "node24",
+  "inputs": {
+   "name": {
+    "required": false,
+    "default": null
+   },
+   "artifact-ids": {
+    "required": false,
+    "default": null
+   },
+   "path": {
+    "required": false,
+    "default": null
+   },
+   "pattern": {
+    "required": false,
+    "default": null
+   },
+   "merge-multiple": {
+    "required": false,
+    "default": "false"
+   },
+   "github-token": {
+    "required": false,
+    "default": null
+   },
+   "repository": {
+    "required": false,
+    "default": "${{ github.repository }}"
+   },
+   "run-id": {
+    "required": false,
+    "default": "${{ github.run_id }}"
+   },
+   "skip-decompress": {
+    "required": false,
+    "default": "false"
+   },
+   "digest-mismatch": {
+    "required": false,
+    "default": "error"
+   }
+  },
+  "outputs": [
+   "download-path"
+  ]
+ },
+ "actions/github-script": {
+  "use": "v9",
+  "latestRelease": "v9.0.0",
+  "sha": "3a2844b7e9c422d3c10d287c895573f7108da1b3",
+  "using": "node24",
+  "inputs": {
+   "script": {
+    "required": true,
+    "default": null
+   },
+   "github-token": {
+    "required": false,
+    "default": "${{ github.token }}"
+   },
+   "debug": {
+    "required": false,
+    "default": "${{ runner.debug == '1' }}"
+   },
+   "user-agent": {
+    "required": false,
+    "default": "actions/github-script"
+   },
+   "previews": {
+    "required": false,
+    "default": null
+   },
+   "result-encoding": {
+    "required": false,
+    "default": "json"
+   },
+   "retries": {
+    "required": false,
+    "default": "0"
+   },
+   "retry-exempt-status-codes": {
+    "required": false,
+    "default": "400,401,403,404,422"
+   },
+   "base-url": {
+    "required": false,
+    "default": null
+   }
+  },
+  "outputs": [
+   "result"
+  ]
+ },
+ "actions/dependency-review-action": {
+  "use": "v5.0.0",
+  "latestRelease": "v5.0.0",
+  "sha": "a1d282b36b6f3519aa1f3fc636f609c47dddb294",
+  "using": "node24",
+  "inputs": {
+   "repo-token": {
+    "required": false,
+    "default": "${{ github.token }}"
+   },
+   "fail-on-severity": {
+    "required": false,
+    "default": null
+   },
+   "fail-on-scopes": {
+    "required": false,
+    "default": null
+   },
+   "base-ref": {
+    "required": false,
+    "default": null
+   },
+   "head-ref": {
+    "required": false,
+    "default": null
+   },
+   "config-file": {
+    "required": false,
+    "default": null
+   },
+   "allow-licenses": {
+    "required": false,
+    "default": null
+   },
+   "deny-licenses": {
+    "required": false,
+    "default": null
+   },
+   "allow-dependencies-licenses": {
+    "required": false,
+    "default": null
+   },
+   "allow-ghsas": {
+    "required": false,
+    "default": null
+   },
+   "external-repo-token": {
+    "required": false,
+    "default": null
+   },
+   "license-check": {
+    "required": false,
+    "default": null
+   },
+   "vulnerability-check": {
+    "required": false,
+    "default": null
+   },
+   "comment-summary-in-pr": {
+    "required": false,
+    "default": null
+   },
+   "deny-packages": {
+    "required": false,
+    "default": null
+   },
+   "deny-groups": {
+    "required": false,
+    "default": null
+   },
+   "retry-on-snapshot-warnings": {
+    "required": false,
+    "default": null
+   },
+   "retry-on-snapshot-warnings-timeout": {
+    "required": false,
+    "default": null
+   },
+   "warn-only": {
+    "required": false,
+    "default": null
+   },
+   "show-openssf-scorecard": {
+    "required": false,
+    "default": null
+   },
+   "warn-on-openssf-scorecard-level": {
+    "required": false,
+    "default": null
+   },
+   "show-patched-versions": {
+    "required": false,
+    "default": null
+   }
+  },
+  "outputs": [
+   "comment-content",
+   "dependency-changes",
+   "vulnerable-changes",
+   "invalid-license-changes",
+   "denied-changes"
+  ]
+ },
+ "actions/attest": {
+  "use": "v4",
+  "latestRelease": "v4.2.2",
+  "sha": "1e69f48acb82d1966a394da916b4c1698aa569d6",
+  "using": "node24",
+  "inputs": {
+   "subject-path": {
+    "required": false,
+    "default": null
+   },
+   "subject-digest": {
+    "required": false,
+    "default": null
+   },
+   "subject-name": {
+    "required": false,
+    "default": null
+   },
+   "subject-checksums": {
+    "required": false,
+    "default": null
+   },
+   "subject-version": {
+    "required": false,
+    "default": null
+   },
+   "sbom-path": {
+    "required": false,
+    "default": null
+   },
+   "predicate-type": {
+    "required": false,
+    "default": null
+   },
+   "predicate": {
+    "required": false,
+    "default": null
+   },
+   "predicate-path": {
+    "required": false,
+    "default": null
+   },
+   "push-to-registry": {
+    "required": false,
+    "default": "false"
+   },
+   "create-storage-record": {
+    "required": false,
+    "default": "true"
+   },
+   "show-summary": {
+    "required": false,
+    "default": "true"
+   },
+   "github-token": {
+    "required": false,
+    "default": "${{ github.token }}"
+   }
+  },
+  "outputs": [
+   "bundle-path",
+   "attestation-id",
+   "attestation-url",
+   "storage-record-ids"
+  ]
+ },
+ "docker/login-action": {
+  "use": "v4",
+  "latestRelease": "v4.6.0",
+  "sha": "dbcb813823bdd20940b903addbd779551569679f",
+  "using": "node24",
+  "inputs": {
+   "registry": {
+    "required": false,
+    "default": null
+   },
+   "username": {
+    "required": false,
+    "default": null
+   },
+   "password": {
+    "required": false,
+    "default": null
+   },
+   "ecr": {
+    "required": false,
+    "default": null
+   },
+   "scope": {
+    "required": false,
+    "default": null
+   },
+   "logout": {
+    "required": false,
+    "default": "true"
+   },
+   "registry-auth": {
+    "required": false,
+    "default": null
+   }
+  },
+  "outputs": []
+ },
+ "docker/setup-buildx-action": {
+  "use": "v4",
+  "latestRelease": "v4.4.1",
+  "sha": "f87e5991a6d7451dcb8d9637bfbc97413f497069",
+  "using": "node24",
+  "inputs": {
+   "version": {
+    "required": false,
+    "default": null
+   },
+   "driver": {
+    "required": false,
+    "default": "docker-container"
+   },
+   "driver-opts": {
+    "required": false,
+    "default": null
+   },
+   "buildkitd-flags": {
+    "required": false,
+    "default": null
+   },
+   "buildkitd-config": {
+    "required": false,
+    "default": null
+   },
+   "buildkitd-config-inline": {
+    "required": false,
+    "default": null
+   },
+   "use": {
+    "required": false,
+    "default": "true"
+   },
+   "name": {
+    "required": false,
+    "default": null
+   },
+   "endpoint": {
+    "required": false,
+    "default": null
+   },
+   "platforms": {
+    "required": false,
+    "default": null
+   },
+   "append": {
+    "required": false,
+    "default": null
+   },
+   "keep-state": {
+    "required": false,
+    "default": "false"
+   },
+   "cache-binary": {
+    "required": false,
+    "default": "true"
+   },
+   "cleanup": {
+    "required": false,
+    "default": "true"
+   }
+  },
+  "outputs": [
+   "name",
+   "driver",
+   "platforms",
+   "nodes",
+   "endpoint",
+   "status",
+   "flags"
+  ]
+ },
+ "docker/build-push-action": {
+  "use": "v7",
+  "latestRelease": "v7.4.0",
+  "sha": "c3c9e263c25d99ce0380d002d59b67737d91b0dc",
+  "using": "node24",
+  "inputs": {
+   "add-hosts": {
+    "required": false,
+    "default": null
+   },
+   "allow": {
+    "required": false,
+    "default": null
+   },
+   "annotations": {
+    "required": false,
+    "default": null
+   },
+   "attests": {
+    "required": false,
+    "default": null
+   },
+   "build-args": {
+    "required": false,
+    "default": null
+   },
+   "build-contexts": {
+    "required": false,
+    "default": null
+   },
+   "builder": {
+    "required": false,
+    "default": null
+   },
+   "cache-from": {
+    "required": false,
+    "default": null
+   },
+   "cache-to": {
+    "required": false,
+    "default": null
+   },
+   "call": {
+    "required": false,
+    "default": null
+   },
+   "cgroup-parent": {
+    "required": false,
+    "default": null
+   },
+   "context": {
+    "required": false,
+    "default": null
+   },
+   "file": {
+    "required": false,
+    "default": null
+   },
+   "labels": {
+    "required": false,
+    "default": null
+   },
+   "load": {
+    "required": false,
+    "default": "false"
+   },
+   "network": {
+    "required": false,
+    "default": null
+   },
+   "no-cache": {
+    "required": false,
+    "default": "false"
+   },
+   "no-cache-filters": {
+    "required": false,
+    "default": null
+   },
+   "outputs": {
+    "required": false,
+    "default": null
+   },
+   "platforms": {
+    "required": false,
+    "default": null
+   },
+   "provenance": {
+    "required": false,
+    "default": null
+   },
+   "pull": {
+    "required": false,
+    "default": "false"
+   },
+   "push": {
+    "required": false,
+    "default": "false"
+   },
+   "sbom": {
+    "required": false,
+    "default": null
+   },
+   "secrets": {
+    "required": false,
+    "default": null
+   },
+   "secret-envs": {
+    "required": false,
+    "default": null
+   },
+   "secret-files": {
+    "required": false,
+    "default": null
+   },
+   "shm-size": {
+    "required": false,
+    "default": null
+   },
+   "ssh": {
+    "required": false,
+    "default": null
+   },
+   "tags": {
+    "required": false,
+    "default": null
+   },
+   "target": {
+    "required": false,
+    "default": null
+   },
+   "ulimit": {
+    "required": false,
+    "default": null
+   },
+   "github-token": {
+    "required": false,
+    "default": "${{ github.token }}"
+   }
+  },
+  "outputs": [
+   "imageid",
+   "digest",
+   "metadata"
+  ]
+ },
+ "docker/metadata-action": {
+  "use": "v6",
+  "latestRelease": "v6.2.0",
+  "sha": "dc802804100637a589fabce1cb79ff13a1411302",
+  "using": "node24",
+  "inputs": {
+   "context": {
+    "required": true,
+    "default": "workflow"
+   },
+   "images": {
+    "required": false,
+    "default": null
+   },
+   "tags": {
+    "required": false,
+    "default": null
+   },
+   "flavor": {
+    "required": false,
+    "default": null
+   },
+   "labels": {
+    "required": false,
+    "default": null
+   },
+   "annotations": {
+    "required": false,
+    "default": null
+   },
+   "sep-tags": {
+    "required": false,
+    "default": null
+   },
+   "sep-labels": {
+    "required": false,
+    "default": null
+   },
+   "sep-annotations": {
+    "required": false,
+    "default": null
+   },
+   "bake-target": {
+    "required": false,
+    "default": null
+   },
+   "github-token": {
+    "required": true,
+    "default": "${{ github.token }}"
+   }
+  },
+  "outputs": [
+   "version",
+   "tags",
+   "tag-names",
+   "labels",
+   "annotations",
+   "json",
+   "bake-file-tags",
+   "bake-file-labels",
+   "bake-file-annotations",
+   "bake-file"
+  ]
+ },
+ "sigstore/cosign-installer": {
+  "use": "v4.1.2",
+  "latestRelease": "v4.1.2",
+  "sha": "6f9f17788090df1f26f669e9d70d6ae9567deba6",
+  "using": "composite",
+  "inputs": {
+   "cosign-release": {
+    "required": false,
+    "default": "v3.0.6"
+   },
+   "install-dir": {
+    "required": false,
+    "default": "$HOME/.cosign"
+   },
+   "use-sudo": {
+    "required": false,
+    "default": "false"
+   }
+  },
+  "outputs": []
+ },
+ "aquasecurity/trivy-action": {
+  "use": "v0.36.0",
+  "latestRelease": "v0.36.0",
+  "sha": "ed142fd0673e97e23eac54620cfb913e5ce36c25",
+  "using": "composite",
+  "inputs": {
+   "scan-type": {
+    "required": false,
+    "default": "image"
+   },
+   "image-ref": {
+    "required": false,
+    "default": null
+   },
+   "input": {
+    "required": false,
+    "default": ""
+   },
+   "scan-ref": {
+    "required": false,
+    "default": "."
+   },
+   "exit-code": {
+    "required": false,
+    "default": null
+   },
+   "ignore-unfixed": {
+    "required": false,
+    "default": "false"
+   },
+   "vuln-type": {
+    "required": false,
+    "default": "os,library"
+   },
+   "severity": {
+    "required": false,
+    "default": "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+   },
+   "format": {
+    "required": false,
+    "default": "table"
+   },
+   "template": {
+    "required": false,
+    "default": ""
+   },
+   "output": {
+    "required": false,
+    "default": ""
+   },
+   "skip-dirs": {
+    "required": false,
+    "default": ""
+   },
+   "skip-files": {
+    "required": false,
+    "default": ""
+   },
+   "cache-dir": {
+    "required": false,
+    "default": "${{ github.workspace }}/.cache/trivy"
+   },
+   "timeout": {
+    "required": false,
+    "default": ""
+   },
+   "ignore-policy": {
+    "required": false,
+    "default": ""
+   },
+   "hide-progress": {
+    "required": false,
+    "default": null
+   },
+   "list-all-pkgs": {
+    "required": false,
+    "default": "false"
+   },
+   "scanners": {
+    "required": false,
+    "default": ""
+   },
+   "trivyignores": {
+    "required": false,
+    "default": ""
+   },
+   "github-pat": {
+    "required": false,
+    "default": null
+   },
+   "trivy-config": {
+    "required": false,
+    "default": null
+   },
+   "tf-vars": {
+    "required": false,
+    "default": null
+   },
+   "limit-severities-for-sarif": {
+    "required": false,
+    "default": null
+   },
+   "docker-host": {
+    "required": false,
+    "default": null
+   },
+   "version": {
+    "required": false,
+    "default": "v0.70.0"
+   },
+   "cache": {
+    "required": false,
+    "default": "true"
+   },
+   "skip-setup-trivy": {
+    "required": false,
+    "default": "false"
+   },
+   "token-setup-trivy": {
+    "required": false,
+    "default": "${{ github.token }}"
+   }
+  },
+  "outputs": []
+ },
+ "github/codeql-action/init": {
+  "use": "v4",
+  "latestRelease": "v4.38.3",
+  "sha": "24c54180a607b1449ed407dd24f251e4e9147c8d",
+  "using": "node24",
+  "inputs": {
+   "tools": {
+    "required": false,
+    "default": null
+   },
+   "languages": {
+    "required": false,
+    "default": null
+   },
+   "build-mode": {
+    "required": false,
+    "default": null
+   },
+   "analysis-kinds": {
+    "required": true,
+    "default": "code-scanning"
+   },
+   "token": {
+    "required": false,
+    "default": "${{ github.token }}"
+   },
+   "registries": {
+    "required": false,
+    "default": null
+   },
+   "matrix": {
+    "required": false,
+    "default": "${{ toJson(matrix) }}"
+   },
+   "config-file": {
+    "required": false,
+    "default": null
+   },
+   "db-location": {
+    "required": false,
+    "default": null
+   },
+   "config": {
+    "required": false,
+    "default": null
+   },
+   "queries": {
+    "required": false,
+    "default": null
+   },
+   "quality-queries": {
+    "required": false,
+    "default": null
+   },
+   "packs": {
+    "required": false,
+    "default": null
+   },
+   "external-repository-token": {
+    "required": false,
+    "default": null
+   },
+   "setup-python-dependencies": {
+    "required": false,
+    "default": null
+   },
+   "source-root": {
+    "required": false,
+    "default": null
+   },
+   "ram": {
+    "required": false,
+    "default": null
+   },
+   "threads": {
+    "required": false,
+    "default": null
+   },
+   "debug": {
+    "required": false,
+    "default": "false"
+   },
+   "debug-artifact-name": {
+    "required": false,
+    "default": null
+   },
+   "debug-database-name": {
+    "required": false,
+    "default": null
+   },
+   "trap-caching": {
+    "required": false,
+    "default": null
+   },
+   "dependency-caching": {
+    "required": false,
+    "default": null
+   },
+   "check-run-id": {
+    "required": false,
+    "default": "${{ job.check_run_id }}"
+   },
+   "job-status": {
+    "required": false,
+    "default": "${{ job.status }}"
+   }
+  },
+  "outputs": [
+   "codeql-path",
+   "codeql-version"
+  ]
+ },
+ "github/codeql-action/analyze": {
+  "use": "v4",
+  "latestRelease": "v4.38.3",
+  "sha": "24c54180a607b1449ed407dd24f251e4e9147c8d",
+  "using": "node24",
+  "inputs": {
+   "check_name": {
+    "required": false,
+    "default": null
+   },
+   "output": {
+    "required": false,
+    "default": "../results"
+   },
+   "upload": {
+    "required": false,
+    "default": "always"
+   },
+   "cleanup-level": {
+    "required": false,
+    "default": null
+   },
+   "ram": {
+    "required": false,
+    "default": null
+   },
+   "add-snippets": {
+    "required": false,
+    "default": null
+   },
+   "skip-queries": {
+    "required": false,
+    "default": "false"
+   },
+   "threads": {
+    "required": false,
+    "default": null
+   },
+   "checkout_path": {
+    "required": false,
+    "default": "${{ github.workspace }}"
+   },
+   "ref": {
+    "required": false,
+    "default": null
+   },
+   "sha": {
+    "required": false,
+    "default": null
+   },
+   "category": {
+    "required": false,
+    "default": null
+   },
+   "upload-database": {
+    "required": false,
+    "default": "true"
+   },
+   "post-processed-sarif-path": {
+    "required": false,
+    "default": null
+   },
+   "wait-for-processing": {
+    "required": true,
+    "default": "true"
+   },
+   "token": {
+    "required": false,
+    "default": "${{ github.token }}"
+   },
+   "matrix": {
+    "required": false,
+    "default": "${{ toJson(matrix) }}"
+   },
+   "expect-error": {
+    "required": false,
+    "default": "false"
+   }
+  },
+  "outputs": [
+   "db-locations",
+   "sarif-output",
+   "sarif-id"
+  ]
+ },
+ "aws-actions/configure-aws-credentials": {
+  "use": "v6",
+  "latestRelease": "v6.3.0",
+  "sha": "e1253824e5c10ff9df46874f81ed3ec929e19cfd",
+  "using": "node24",
+  "inputs": {
+   "aws-region": {
+    "required": true,
+    "default": null
+   },
+   "aws-profile": {
+    "required": false,
+    "default": null
+   },
+   "overwrite-aws-profile": {
+    "required": false,
+    "default": null
+   },
+   "role-to-assume": {
+    "required": false,
+    "default": null
+   },
+   "aws-access-key-id": {
+    "required": false,
+    "default": null
+   },
+   "aws-secret-access-key": {
+    "required": false,
+    "default": null
+   },
+   "aws-session-token": {
+    "required": false,
+    "default": null
+   },
+   "web-identity-token-file": {
+    "required": false,
+    "default": null
+   },
+   "role-chaining": {
+    "required": false,
+    "default": null
+   },
+   "audience": {
+    "required": false,
+    "default": "sts.amazonaws.com"
+   },
+   "http-proxy": {
+    "required": false,
+    "default": null
+   },
+   "no-proxy": {
+    "required": false,
+    "default": null
+   },
+   "mask-aws-account-id": {
+    "required": false,
+    "default": null
+   },
+   "role-duration-seconds": {
+    "required": false,
+    "default": null
+   },
+   "role-external-id": {
+    "required": false,
+    "default": null
+   },
+   "role-session-name": {
+    "required": false,
+    "default": null
+   },
+   "role-skip-session-tagging": {
+    "required": false,
+    "default": null
+   },
+   "transitive-tag-keys": {
+    "required": false,
+    "default": null
+   },
+   "inline-session-policy": {
+    "required": false,
+    "default": null
+   },
+   "managed-session-policies": {
+    "required": false,
+    "default": null
+   },
+   "output-credentials": {
+    "required": false,
+    "default": null
+   },
+   "output-env-credentials": {
+    "required": false,
+    "default": null
+   },
+   "unset-current-credentials": {
+    "required": false,
+    "default": null
+   },
+   "disable-retry": {
+    "required": false,
+    "default": null
+   },
+   "retry-max-attempts": {
+    "required": false,
+    "default": null
+   },
+   "special-characters-workaround": {
+    "required": false,
+    "default": null
+   },
+   "use-existing-credentials": {
+    "required": false,
+    "default": null
+   },
+   "allowed-account-ids": {
+    "required": false,
+    "default": null
+   },
+   "force-skip-oidc": {
+    "required": false,
+    "default": null
+   },
+   "action-timeout-s": {
+    "required": false,
+    "default": null
+   },
+   "custom-tags": {
+    "required": false,
+    "default": null
+   },
+   "sts-endpoint": {
+    "required": false,
+    "default": null
+   },
+   "translate-env-variables": {
+    "required": false,
+    "default": null
+   }
+  },
+  "outputs": [
+   "aws-account-id",
+   "aws-access-key-id",
+   "aws-secret-access-key",
+   "aws-session-token",
+   "aws-expiration"
+  ]
+ },
+ "azure/setup-helm": {
+  "use": "v5",
+  "latestRelease": "v5.0.1",
+  "sha": "9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310",
+  "using": "node24",
+  "inputs": {
+   "version": {
+    "required": true,
+    "default": "latest"
+   },
+   "token": {
+    "required": false,
+    "default": "${{ github.token }}"
+   },
+   "downloadBaseURL": {
+    "required": false,
+    "default": "https://get.helm.sh"
+   }
+  },
+  "outputs": [
+   "helm-path"
+  ]
+ }
+}

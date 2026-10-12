@@ -1,0 +1,233 @@
+    <!-- ============ 6 ============ -->
+    <section class="step" id="speed" data-step>
+      <div class="step-head"><span class="num">06</span><h2>Caches and artifacts</h2></div>
+      <p class="goal"><b>Goal:</b> packages restored from a cache instead of downloaded, and a build output kept as an artifact that a later job can download.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Every job starts on an empty machine, so each run downloads every package again, and the files a job makes disappear when it ends. A <b>cache</b> removes the repeated download. An <b>artifact</b> keeps what you built. They look alike and do different jobs.</p>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th>Cache</th><th>Artifact</th></tr></thead>
+        <tbody>
+          <tr><td>For</td><td>Things you can rebuild, to save time: packages, build intermediates</td><td>Results you want to keep or pass on: build output, test reports</td></tr>
+          <tr><td>Found by</td><td>A <b>key</b>. An exact match is a hit; <code>restore-keys</code> are prefixes tried next</td><td>A <b>name</b>, unique within the run</td></tr>
+          <tr><td>If it is missing</td><td>The job still works, only slower. A new cache is saved at the end if the job succeeded</td><td>The job that needs it fails</td></tr>
+          <tr><td>Lifetime</td><td>Removed after 7 days without use. 10 GB per repository by default</td><td>Kept for the retention you set</td></tr>
+          <tr><td>Visible to</td><td>Runs on the same branch, or on the default branch</td><td>Downloadable from the run page and with <code>gh run download</code></td></tr>
+        </tbody>
+      </table></div>
+      <ul>
+        <li>A cache key should change <b>only when the inputs change</b>: <code>hashFiles('**/*.csproj')</code>. A key that includes <code>github.sha</code> never matches an earlier run.</li>
+        <li><code>actions/setup-dotnet</code> has <code>cache: true</code>, but it needs a <code>packages.lock.json</code> and fails without one. The Todo API has none, so use <code>actions/cache</code> with the project files. <code>actions/setup-node</code> has <code>cache: npm</code>, which uses the <code>package-lock.json</code>.</li>
+        <li>Do not store secrets in a cache: anyone who can open a pull request against the repository can read caches of the base branch.</li>
+        <li>Artifact names must be unique in a run and artifacts cannot be changed once created. In a matrix, put the matrix values in the name.</li>
+        <li><code>working-directory</code> does not apply to <code>uses:</code> steps, so an action's <code>path</code> starts from the repository root.</li>
+      </ul>
+      <figure class="code"><figcaption>A cache step: the key changes only when the inputs change</figcaption><pre><code>- uses: actions/cache@v6
+  with:
+    path: ~/.nuget/packages
+    key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+    restore-keys: |
+      ${{ runner.os }}-nuget-</code></pre></figure>
+      <div data-lab="A6"></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching">Dependency caching</a>, <a href="https://github.com/actions/upload-artifact">actions/upload-artifact</a>, <a href="https://github.com/actions/cache">actions/cache</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A cache key must repeat when the inputs repeat. <code>hashFiles</code> does that.</li>
+        <li>Artifacts are the way to hand files to a later job, and each name can be used once.</li>
+        <li>Paths in <code>with:</code> are from the repository root.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 7 ============ -->
+    <section class="step" id="secrets" data-step>
+      <div class="step-head"><span class="num">07</span><h2>Secrets, variables and least privilege</h2></div>
+      <p class="goal"><b>Goal:</b> a workflow where secrets cannot leak through a script, the automatic token has only the access the job needs, and untrusted text is never run as code.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>A pipeline holds your keys and can write to your repository. It runs code that came from other people's pull requests and from third-party actions. The habits here are the difference between a pipeline and an open door.</p>
+      </div>
+      <ul>
+        <li><b>Secrets</b> (<code>secrets.NAME</code>) are encrypted, and masked in logs. <b>Variables</b> (<code>vars.NAME</code>) are plain text, for settings such as a user name. Both can be set for a repository, an environment, or an organization. <code>gh secret set</code> and <code>gh variable set</code> are in the command drills.</li>
+        <li>Anyone with write access can read every repository secret through a workflow. Secrets are not a defence against your own collaborators, so keep the value's power small.</li>
+        <li>Masking is not guaranteed once a secret is transformed (Base64, URL-encoding, a JSON blob). Do not store structured data as a secret, and register any derived sensitive value with <code>::add-mask::</code>.</li>
+        <li><b>The <code>GITHUB_TOKEN</code></b> is created for each run. Its permissions come from <code>permissions</code>: once you list any scope, every scope you do not list becomes <code>none</code>. A job-level <code>permissions</code> replaces the workflow-level one for that job. <code>read-all</code>, <code>write-all</code> and <code>{}</code> (none) are the shorthands. GitHub's advice is to default the token to read-only for repository contents and raise it per job.</li>
+        <li><b>Script injection.</b> <code>${{ }}</code> is replaced before the shell runs, so text written by other people (a pull request title, a branch name, a commit message, an issue body) pasted into <code>run:</code> becomes code. Pass it through <code>env</code> and read the shell variable.</li>
+        <li><b>Fork pull requests</b> get a read-only token and no secrets. That is why <code>pull_request</code> is safe for untrusted code.</li>
+      </ul>
+      <figure class="code"><figcaption>Least privilege, and untrusted text as data</figcaption><pre><code>permissions:
+  contents: read                 # everything not listed becomes none
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write       # replaces the workflow level for this job
+    steps:
+      - env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: echo "Title is $TITLE"</code></pre></figure>
+      <div data-lab="A7"></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/actions/reference/security/secure-use">Secure use reference</a>, <a href="https://docs.github.com/en/actions/tutorials/authenticate-with-github_token">Use GITHUB_TOKEN for authentication</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Put secrets and untrusted text in <code>env</code>, never in the script text.</li>
+        <li>Name the permissions you need and nothing else. Raise them on the one job that needs it.</li>
+        <li><code>secrets</code> are for sensitive values, <code>vars</code> for settings.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 8 ============ -->
+    <section class="step" id="image" data-step>
+      <div class="step-head"><span class="num">08</span><h2>Build and push the image</h2></div>
+      <p class="goal"><b>Goal:</b> the Docker workflow of the Todo project, with pull requests that build without pushing, tags that are derived for you, and layers cached between runs.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>In the first tutorial you wrote <code>docker build</code> and <code>docker push</code> by hand in a script. The actions published by Docker do the same work, with caching, multiple tags and the right labels, and they make "build on pull requests, publish on merges" a two-line condition.</p>
+      </div>
+      <ul>
+        <li><b><code>docker/login-action</code></b> logs in to the registry. Without <code>registry</code> it uses Docker Hub. Store the token as a secret, the user name as a variable.</li>
+        <li><b><code>docker/setup-buildx-action</code></b> prepares the builder that supports caching and multiple platforms.</li>
+        <li><b><code>docker/metadata-action</code></b> computes tags and labels from the event: <code>type=sha</code> gives <code>sha-a1b2c3d</code> (add <code>prefix=</code> for the bare 7 characters), <code>type=ref,event=tag</code> gives the tag name, <code>type=raw,value=…</code> gives a fixed name. Its outputs are <code>tags</code> and <code>labels</code>.</li>
+        <li><b><code>docker/build-push-action</code></b> builds, and pushes when <code>push: true</code>. <code>cache-from: type=gha</code> and <code>cache-to: type=gha,mode=max</code> keep layers in the GitHub Actions cache.</li>
+        <li><b>Docker Hub limits.</b> GitHub-hosted runners are exempt from Docker Hub's pull rate limit when pulling <em>public</em> images. Pulling private images from Docker Hub is subject to it, and self-hosted runners always are.</li>
+        <li>Never publish a moving tag like <code>latest</code> as the thing you deploy: you cannot tell what is running or roll back. Deploy by commit tag, and later by digest.</li>
+      </ul>
+      <figure class="code"><figcaption>metadata-action: tags from the event</figcaption><pre><code>- id: meta
+  uses: docker/metadata-action@v6
+  with:
+    images: docker.io/octocat/todo-api
+    tags: |
+      type=sha,prefix=           # a1b2c3d
+      type=ref,event=tag         # v1.2.0 on a tag push</code></pre></figure>
+      <div data-lab="A8"></div>
+      <p class="sources"><b>Sources.</b> <a href="https://github.com/docker/build-push-action">docker/build-push-action</a>, <a href="https://github.com/docker/metadata-action">docker/metadata-action</a>, <a href="https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images">Publishing Docker images</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Build on every pull request, push only on trusted events: one condition used twice.</li>
+        <li>Let <code>metadata-action</code> compute tags and labels, and the Docker cache keep the layers.</li>
+        <li>Tag with the commit, not <code>latest</code>.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 9 ============ -->
+    <section class="step" id="environments" data-step>
+      <div class="step-head"><span class="num">09</span><h2>Environments, approvals and concurrency</h2></div>
+      <p class="goal"><b>Goal:</b> a path from build to staging to production where production waits for approval, deploys never overlap, and a running production deploy is never cancelled.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Continuous delivery is not "deploy everything instantly". It is a pipeline where each stage has the checks it deserves. GitHub environments hold those rules, and <code>concurrency</code> keeps two deploys from fighting.</p>
+      </div>
+      <h3>Environments</h3>
+      <p>An environment is named in the job with <code>environment: production</code>. Its rules are set in the repository under <b>Settings → Environments</b>, not in the YAML:</p>
+      <ul>
+        <li><b>Required reviewers</b>: up to six people or teams; one of them must approve. You can forbid the person who started the deployment from approving it.</li>
+        <li><b>Wait timer</b>: delay a job by 1 to 43,200 minutes (30 days).</li>
+        <li><b>Deployment branches and tags</b>: which refs may deploy to it.</li>
+        <li><b>Environment secrets and variables</b>: available only to jobs that name the environment, and for an environment with reviewers only <em>after</em> approval.</li>
+      </ul>
+      <div class="callout warn"><p><strong>Check your plan.</strong> On GitHub Free, Pro and Team, required reviewers and wait timers on environments are available for <b>public</b> repositories only. Private repositories need a higher plan for them. Environment secrets for private repositories also need a paid plan. The YAML in this step is valid either way, but the gate only holds if your plan supports it.</p></div>
+      <h3>Concurrency</h3>
+      <ul>
+        <li>A <code>concurrency</code> group allows one running job or run at a time. A new one waits as <em>pending</em>, and by default a newer pending run replaces an older pending one.</li>
+        <li><code>cancel-in-progress: true</code> also cancels the one that is running. It is right for pull request checks and wrong for a deployment.</li>
+        <li>Group names are case-insensitive and can use the <code>github</code>, <code>inputs</code> and <code>vars</code> contexts (at job level also <code>needs</code>, <code>strategy</code> and <code>matrix</code>).</li>
+        <li>Set <code>timeout-minutes</code> on every job. The default is 360 minutes (6 hours), the longest a GitHub-hosted job can run.</li>
+      </ul>
+      <figure class="code"><figcaption>An environment and a deploy group</figcaption><pre><code>production:
+  needs: staging
+  runs-on: ubuntu-latest
+  timeout-minutes: 15
+  environment:
+    name: production
+    url: https://todo.example.com
+  concurrency:
+    group: deploy-production
+    cancel-in-progress: false</code></pre></figure>
+      <div data-lab="A9"></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments">Deployments and environments</a>, <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency">Workflow syntax: concurrency</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>An environment is a name in the YAML and a set of rules in the settings. The job pauses until the rules are met.</li>
+        <li>Cancel superseded checks, never a running deploy.</li>
+        <li>A timeout is part of every job.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 10 ============ -->
+    <section class="step" id="oidc" data-step>
+      <div class="step-head"><span class="num">10</span><h2>Keyless access to the cloud</h2></div>
+      <p class="goal"><b>Goal:</b> a deploy job that reaches AWS with a short-lived identity token, with no access key stored in GitHub.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>A cloud access key kept as a secret never expires, can be copied by anyone who can run a workflow, and is the thing that leaks. OpenID Connect replaces it: GitHub vouches for the job, and the cloud decides whether to trust that statement.</p>
+      </div>
+        <figure class="anim" aria-label="Animated diagram: how a job exchanges a GitHub token for temporary AWS credentials">
+          <div class="anim-stage"><svg viewBox="0 0 820 320" role="img" aria-label="The job asks GitHub's OIDC provider for a token. GitHub signs a token with claims. The job sends it to AWS STS. AWS checks the signature and the trust policy conditions. If they match, AWS returns temporary credentials, and the job uses them to call AWS resources. If they do not match, AWS refuses.">
+            <rect class="a-zone" x="8" y="8" width="804" height="304" rx="12"/>
+            <path class="a-route" data-k="q" d="M172 120 L330 80"/>
+            <path class="a-route" data-k="t" d="M330 100 L172 140"/>
+            <path class="a-route" data-k="s" d="M160 170 H640"/>
+            <path class="a-route" data-k="c" d="M640 190 H160"/>
+            <path class="a-route" data-k="u" d="M120 205 L120 250 H640"/>
+            <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+            <g class="a-node" data-k="job"><rect x="30" y="100" width="142" height="120" rx="8"/>
+              <text class="a-t" x="101" y="130">Your job</text><text class="a-s" x="101" y="150">on the runner</text><text class="a-s" x="101" y="172">id-token: write</text><text class="a-s" x="101" y="194">role-to-assume</text></g>
+            <g class="a-node" data-k="gh"><rect x="330" y="30" width="170" height="70" rx="8"/>
+              <text class="a-t" x="415" y="58">GitHub OIDC</text><text class="a-s" x="415" y="78">signs the token</text></g>
+            <g class="a-node" data-k="sts"><rect x="640" y="140" width="150" height="76" rx="8"/>
+              <text class="a-t" x="715" y="168">AWS STS</text><text class="a-s" x="715" y="188">trust policy</text><text class="a-s" x="715" y="206">checks aud and sub</text></g>
+            <g class="a-node" data-k="res"><rect x="640" y="232" width="150" height="56" rx="8"/>
+              <text class="a-t" x="715" y="256">EKS · S3 · ECR</text><text class="a-s" x="715" y="274">your resources</text></g>
+            <text class="a-lbl" data-k="q" x="248" y="84">1 · request</text>
+            <text class="a-lbl" data-k="t" x="248" y="132">2 · signed token</text>
+            <text class="a-lbl" data-k="s" x="400" y="162">3 · AssumeRoleWithWebIdentity</text>
+            <text class="a-lbl" data-k="c" x="400" y="184">temporary credentials</text>
+          </svg></div>
+          <div class="anim-bar">
+            <p class="anim-text"></p>
+            <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+          </div>
+          <script type="application/json">[
+            {"on": "job", "path": [[101,160]], "text": "<b>The job needs AWS.</b> It has <code>permissions: id-token: write</code>. That permission only lets it <em>ask</em> for an identity token. It writes nothing."},
+            {"on": "job q gh", "path": [[101,160],[172,120],[330,80],[415,65]], "text": "<b>It asks GitHub's OIDC provider for a token.</b> The <code>configure-aws-credentials</code> action does this for you."},
+            {"on": "gh t job", "back": true, "path": [[415,65],[330,100],[172,140],[101,160]], "text": "<b>GitHub signs a token (a JWT).</b> Its claims describe this run: the repository, the branch or environment (<code>sub</code>), the workflow, the audience (<code>aud</code>)."},
+            {"on": "job s sts", "path": [[101,170],[160,170],[640,170],[715,175]], "text": "<b>The job sends the token to AWS.</b> It names the role to assume in <code>role-to-assume</code>."},
+            {"on": "sts", "bad": "sts", "path": [[715,178]], "text": "<b>AWS says no when a claim does not match.</b> A different environment, repository or ref gives <code>Not authorized to perform sts:AssumeRoleWithWebIdentity</code>. The role's <b>trust policy</b> decides, not the workflow."},
+            {"on": "sts", "good": "sts", "path": [[715,178]], "text": "<b>AWS says yes when they match.</b> It verifies GitHub's signature, then the conditions on <code>aud</code> and <code>sub</code> in the trust policy."},
+            {"on": "sts c job", "back": true, "path": [[715,190],[640,190],[160,190],[101,190]], "text": "<b>Temporary credentials come back.</b> They last 1 hour by default (15 minutes to 12 hours). Nothing was stored in GitHub, and nothing is left to leak."},
+            {"on": "job u res", "path": [[101,205],[120,250],[640,250],[715,260]], "text": "<b>The job uses them</b> to call EKS, S3 or ECR. When the job ends, the credentials expire on their own."}
+          ]</script>
+        </figure>
+      <figure class="code"><figcaption>A role's trust policy (AWS), after the GitHub docs: trust only this environment</figcaption><pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": { "Federated": "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+        "token.actions.githubusercontent.com:sub": "repo:octo-org/octo-repo:environment:production"
+      }
+    }
+  }]
+}</code></pre></figure>
+      <h3>The subject claim</h3>
+      <p>The trust policy should accept only the subjects you expect. By default the subject is built from the job:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>The job</th><th>Subject, repositories created before 15 July 2026</th></tr></thead>
+        <tbody>
+          <tr><td>uses an environment</td><td><code>repo:OWNER/REPO:environment:NAME</code></td></tr>
+          <tr><td>runs for a pull request, no environment</td><td><code>repo:OWNER/REPO:pull_request</code></td></tr>
+          <tr><td>on a branch, no environment</td><td><code>repo:OWNER/REPO:ref:refs/heads/BRANCH</code></td></tr>
+          <tr><td>on a tag, no environment</td><td><code>repo:OWNER/REPO:ref:refs/tags/TAG</code></td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout warn"><p><strong>Newer repositories use a different form.</strong> For repositories created after 15 July 2026, and for repositories renamed or transferred after that date, the default subject includes the numeric owner and repository ids: <code>repo:OWNER@OWNER_ID/REPO@REPO_ID:environment:NAME</code>. A trust policy written in the old form is refused for such a repository. Older repositories keep the old form unless you opt in. Use GitHub's <code>actions-oidc-debugger</code> action to print the claims a run would send before you write the policy.</p></div>
+      <p>Always put at least one condition on <code>sub</code> in the trust policy. Without one, any repository could ask for your role. Using an <code>environment</code> in the job, with deployment branch rules on that environment, makes the subject depend on a protected name.</p>
+      <div data-lab="A10"></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/actions/reference/security/oidc">OpenID Connect reference</a>, <a href="https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws">OIDC in Amazon Web Services</a>, <a href="https://github.com/aws-actions/configure-aws-credentials">aws-actions/configure-aws-credentials</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li><code>id-token: write</code> lets a job request an identity token. The cloud's trust policy decides whether to accept it.</li>
+        <li>The subject names the environment, branch, tag or pull request, and in newer repositories the numeric ids.</li>
+        <li>Give <code>id-token: write</code> only to the job that deploys.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+

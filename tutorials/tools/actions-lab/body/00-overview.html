@@ -1,0 +1,89 @@
+    <!-- ============ 0 ============ -->
+    <section class="step" id="overview" data-step>
+      <div class="step-head"><span class="num">00</span><h2>What you'll be able to do</h2></div>
+      <p class="goal"><b>Goal:</b> by the end you can <b>write</b> an enterprise CI/CD pipeline for GitHub Actions from an empty file, and <b>read</b> someone else's pipeline, find what is wrong with it and fix it, <b>without looking up a single command</b>.</p>
+      <div class="why"><h4>How this lab works</h4>
+        <p>Reading about pipelines does not teach you to write them. So most of this page is an <b>editor</b>. You are told what to build, you type it, and the page checks it <b>as you type</b>. A line with a mistake turns red with the line number and a plain explanation. A requirement turns green when you meet it. Nothing is hidden until you ask for a hint.</p>
+        <p>The checking is done by three things working together: <b>actionlint</b>, GitHub's best-known workflow linter (version 1.7.12, compiled to WebAssembly so it runs inside this page, and nothing you type leaves your browser); <b>requirement checks</b> written for each exercise (the right trigger, the right permission, the right order); and <b>a run preview</b> that shows which jobs would start for a push, a pull request, a tag or a merge queue, and why.</p>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Part</th><th>What you do</th><th>Skill</th></tr></thead>
+        <tbody>
+          <tr><td><b>Steps 1 to 13</b>: guided labs</td><td>One idea per step, a short explanation, then an editor that starts you off. Easy at the top, expert at the bottom: triggers, jobs, matrix, caches, secrets, images, environments, OIDC, reuse, hardening, governance.</td><td>Learn the pieces</td></tr>
+          <tr><td><b>Step 14</b>: command drills</td><td>Type the <code>gh</code> and <code>git</code> commands a pipeline needs. Each answer is checked against the real command's flags.</td><td>No more googling commands</td></tr>
+          <tr><td><b>Step 15</b>: write from scratch</td><td>An empty editor and a checklist. Six challenges from easy to hard.</td><td><b>Write</b> a pipeline</td></tr>
+          <tr><td><b>Step 16</b>: the capstone</td><td>The enterprise pipeline for the Todo project, with 20 requirements, from nothing.</td><td><b>Write</b> an enterprise pipeline</td></tr>
+          <tr><td><b>Step 17</b>: read and fix</td><td>Eleven broken pipelines with the symptom the team saw, from "invalid workflow file" to a pipeline with seven separate faults.</td><td><b>Read</b> a pipeline and fix it</td></tr>
+          <tr><td><b>Step 18</b>: sandbox</td><td>Paste any workflow of your own and check it.</td><td>Use it on real work</td></tr>
+        </tbody>
+      </table></div>
+      <p>Every example is about the project you build in the other tutorials: a .NET API in <code>src/api</code>, an Angular UI in <code>src/ui</code>, a Docker Hub image, a Helm chart and a cluster. Every action named here is at the version its own repository publishes today, read from GitHub when this page was built.</p>
+      <div class="callout"><p><strong>What the checker cannot do.</strong> It cannot run your workflow, reach GitHub or AWS, or know your repository's settings. It checks structure, names, types, expressions and the logic of your conditions. GitHub also validates a file when you push it. Things that live in the repository's settings (rulesets, environment protection rules, secrets) cannot be tested here, and each step says where they are. The actionlint build in the browser leaves out the optional <code>shellcheck</code> and <code>pyflakes</code> checks of your scripts.</p></div>
+      <h3>Your lab progress</h3>
+      <div class="ga-progress" id="ga-progress" aria-live="polite"></div>
+      <p>This is the route a change takes through GitHub Actions, from <code>git push</code> to a result on the pull request. Play it with the arrows, or let it run:</p>
+        <figure class="anim" aria-label="Animated diagram: what happens from a git push to a result on the pull request">
+          <div class="anim-stage"><svg viewBox="0 0 820 330" role="img" aria-label="You push a commit. GitHub records a push event and finds the workflow file. The workflow starts a job on a fresh runner, which runs its steps in order: checkout, setup-dotnet, dotnet test. A second job named deploy waits for the first. The result is reported as a check on the pull request.">
+            <rect class="a-zone" x="8" y="8" width="804" height="314" rx="12"/>
+            <rect class="a-zone inner" x="168" y="30" width="628" height="276" rx="10"/>
+            <text class="a-cap" x="184" y="52">GITHUB</text>
+            <rect class="a-zone inner" x="504" y="62" width="280" height="234" rx="10"/>
+            <text class="a-cap" x="520" y="82" data-k="zone">RUNNER · A FRESH VIRTUAL MACHINE</text>
+
+            <path class="a-route" data-k="r1" d="M130 150 H190"/>
+            <path class="a-route" data-k="r2" d="M310 150 H345"/>
+            <path class="a-route" data-k="r3" d="M465 150 H520"/>
+            <path class="a-route" data-k="r4" d="M520 248 L465 268"/>
+
+            <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+
+            <g class="a-node" data-k="dev"><rect x="20" y="120" width="110" height="60" rx="8"/>
+              <text class="a-t" x="75" y="146">You</text><text class="a-s" x="75" y="165">git push</text></g>
+            <g class="a-node" data-k="ev"><rect x="190" y="120" width="120" height="60" rx="8"/>
+              <text class="a-t" x="250" y="146">Event</text><text class="a-s" x="250" y="165">push · a1b2c3d</text></g>
+            <g class="a-node" data-k="wf"><rect x="345" y="120" width="120" height="60" rx="8"/>
+              <text class="a-t" x="405" y="146">Workflow</text><text class="a-s" x="405" y="165">ci.yml</text></g>
+            <g class="a-node" data-k="b"><rect x="520" y="94" width="248" height="112" rx="8"/>
+              <text class="a-t" x="644" y="114">job: build</text></g>
+            <g class="a-node" data-k="s1"><rect x="534" y="122" width="220" height="24" rx="5"/><text class="a-s" x="644" y="139">1 · actions/checkout</text></g>
+            <g class="a-node" data-k="s2"><rect x="534" y="150" width="220" height="24" rx="5"/><text class="a-s" x="644" y="167">2 · actions/setup-dotnet</text></g>
+            <g class="a-node" data-k="s3"><rect x="534" y="178" width="220" height="24" rx="5"/><text class="a-s" x="644" y="195">3 · run: dotnet test</text></g>
+            <g class="a-node" data-k="dep"><rect x="520" y="222" width="248" height="52" rx="8"/>
+              <text class="a-t" x="644" y="244">job: deploy</text><text class="a-s" x="644" y="263">needs: build</text></g>
+            <g class="a-node" data-k="chk"><rect x="345" y="238" width="120" height="60" rx="8"/>
+              <text class="a-t" x="405" y="264">Check</text><text class="a-s" x="405" y="283">on the pull request</text></g>
+          </svg></div>
+          <div class="anim-bar">
+            <p class="anim-text"></p>
+            <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+          </div>
+          <script type="application/json">[
+            {"on": "dev", "path": [[75,150]], "text": "<b>You push.</b> A commit reaches GitHub. Every push, pull request, tag, schedule or button press is an <b>event</b>."},
+            {"on": "dev r1 ev", "path": [[75,150],[130,150],[190,150],[250,150]], "text": "<b>An event is recorded.</b> It carries the commit SHA and the Git ref (<code>refs/heads/main</code>, a tag, a pull request merge ref)."},
+            {"on": "ev r2 wf", "path": [[250,150],[310,150],[345,150],[405,150]], "text": "<b>GitHub finds the workflow.</b> It reads <code>.github/workflows/*.yml</code> <em>at that commit</em> and starts every file whose <code>on:</code>, branch, tag and path filters match."},
+            {"on": "wf r3 zone b", "path": [[405,150],[465,150],[520,150],[560,128]], "text": "<b>A job gets a machine.</b> Each job is queued and runs on its own fresh runner (a virtual machine named by <code>runs-on</code>). Jobs without <code>needs</code> start in parallel."},
+            {"on": "b s1 s2 s3", "path": [[548,134],[548,162],[548,190]], "text": "<b>Steps run in order</b> on that one machine: check out the code, install .NET, run the tests. A step that fails stops the job, unless you said otherwise."},
+            {"on": "b dep", "path": [[548,190],[548,236]], "text": "<b>Dependent jobs wait.</b> <code>deploy</code> needs <code>build</code>, so it starts only if <code>build</code> succeeded. If build fails or is skipped, deploy is skipped too."},
+            {"on": "dep r4 chk", "path": [[548,248],[520,248],[465,268],[405,268]], "text": "<b>The result comes back</b> as a check on the commit and the pull request. A ruleset can require it before the merge button turns green."},
+            {"on": "chk zone", "path": [[405,268]], "text": "<b>The machine is thrown away.</b> Nothing is left behind, so keep files with <b>artifacts</b> and speed up the next run with a <b>cache</b>. You will do both in this lab."}
+          ]</script>
+        </figure>
+      <h3>Words you will meet</h3>
+      <dl class="glossary">
+        <dt>Workflow</dt><dd>One YAML file in <code>.github/workflows/</code>. It says <em>when</em> to run and <em>what</em> to run. A repository can have many.</dd>
+        <dt>Event</dt><dd>What starts a workflow: a push, a pull request, a tag, a schedule, a button, or another workflow.</dd>
+        <dt>Job</dt><dd>A group of steps that run on one machine. Jobs run in parallel unless one <code>needs</code> another.</dd>
+        <dt>Step</dt><dd>One command (<code>run</code>) or one action (<code>uses</code>), run in order inside a job.</dd>
+        <dt>Runner</dt><dd>The machine that runs a job. GitHub-hosted runners are fresh virtual machines; self-hosted runners are your own.</dd>
+        <dt>Action</dt><dd>A packaged, reusable step written by someone else (or you), such as <code>actions/checkout</code>.</dd>
+        <dt>Context</dt><dd>An object of facts about the run that you read in <code>${{ }}</code>: <code>github</code>, <code>runner</code>, <code>env</code>, <code>vars</code>, <code>secrets</code>, <code>needs</code>, <code>matrix</code>, <code>steps</code>, <code>inputs</code>.</dd>
+        <dt>Expression</dt><dd>A small formula in <code>${{ }}</code> or in an <code>if</code>: comparisons, <code>&amp;&amp;</code>, <code>||</code>, and functions like <code>contains()</code>.</dd>
+        <dt>Secret and variable</dt><dd>Stored values. Secrets are encrypted and masked; variables are plain settings.</dd>
+        <dt>Artifact and cache</dt><dd>An artifact keeps files from a run, for download or for a later job. A cache keeps files (such as packages) so the next run does not download them again.</dd>
+        <dt>Environment</dt><dd>A named place you deploy to, such as <code>staging</code>. It can require approval and holds its own secrets.</dd>
+        <dt>Matrix</dt><dd>One job definition run once for every combination of values you list.</dd>
+        <dt>Reusable workflow</dt><dd>A workflow that other workflows call as a job, with inputs, secrets and outputs.</dd>
+        <dt>OIDC</dt><dd>OpenID Connect: GitHub gives a job a short-lived signed token, and a cloud exchanges it for temporary credentials, so no long-lived key is stored.</dd>
+      </dl>
+    </section>
+
