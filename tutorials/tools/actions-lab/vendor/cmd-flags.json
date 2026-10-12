@@ -663,6 +663,174 @@
    "value": true
   }
  },
+ "gh pr create": {
+  "--assignee": {
+   "short": "-a",
+   "value": true
+  },
+  "--attach": {
+   "short": null,
+   "value": true
+  },
+  "--base": {
+   "short": "-B",
+   "value": true
+  },
+  "--body": {
+   "short": "-b",
+   "value": true
+  },
+  "--body-file": {
+   "short": "-F",
+   "value": true
+  },
+  "--draft": {
+   "short": "-d",
+   "value": false
+  },
+  "--dry-run": {
+   "short": null,
+   "value": false
+  },
+  "--editor": {
+   "short": "-e",
+   "value": false
+  },
+  "--fill": {
+   "short": "-f",
+   "value": false
+  },
+  "--fill-first": {
+   "short": null,
+   "value": false
+  },
+  "--fill-verbose": {
+   "short": null,
+   "value": false
+  },
+  "--head": {
+   "short": "-H",
+   "value": true
+  },
+  "--label": {
+   "short": "-l",
+   "value": true
+  },
+  "--milestone": {
+   "short": "-m",
+   "value": true
+  },
+  "--no-maintainer-edit": {
+   "short": null,
+   "value": false
+  },
+  "--project": {
+   "short": "-p",
+   "value": true
+  },
+  "--recover": {
+   "short": null,
+   "value": true
+  },
+  "--reviewer": {
+   "short": "-r",
+   "value": true
+  },
+  "--template": {
+   "short": "-T",
+   "value": true
+  },
+  "--title": {
+   "short": "-t",
+   "value": true
+  },
+  "--web": {
+   "short": "-w",
+   "value": false
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh repo create": {
+  "--add-readme": {
+   "short": null,
+   "value": false
+  },
+  "--clone": {
+   "short": "-c",
+   "value": false
+  },
+  "--description": {
+   "short": "-d",
+   "value": true
+  },
+  "--disable-issues": {
+   "short": null,
+   "value": false
+  },
+  "--disable-wiki": {
+   "short": null,
+   "value": false
+  },
+  "--gitignore": {
+   "short": "-g",
+   "value": true
+  },
+  "--homepage": {
+   "short": "-h",
+   "value": false
+  },
+  "--include-all-branches": {
+   "short": null,
+   "value": false
+  },
+  "--internal": {
+   "short": null,
+   "value": false
+  },
+  "--license": {
+   "short": "-l",
+   "value": true
+  },
+  "--private": {
+   "short": null,
+   "value": false
+  },
+  "--public": {
+   "short": null,
+   "value": false
+  },
+  "--push": {
+   "short": null,
+   "value": false
+  },
+  "--remote": {
+   "short": "-r",
+   "value": true
+  },
+  "--source": {
+   "short": "-s",
+   "value": true
+  },
+  "--team": {
+   "short": "-t",
+   "value": true
+  },
+  "--template": {
+   "short": "-p",
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  }
+ },
  "gh api": {
   "--allow-escape-sequences": {
    "short": null,

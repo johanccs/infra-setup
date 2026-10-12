@@ -686,10 +686,11 @@ try {
           <tr><td><b>Step 16</b>: the capstone</td><td>The enterprise pipeline for the Todo project, with 20 requirements, from nothing.</td><td><b>Write</b> an enterprise pipeline</td></tr>
           <tr><td><b>Step 17</b>: read and fix</td><td>Eleven broken pipelines with the symptom the team saw, from "invalid workflow file" to a pipeline with seven separate faults.</td><td><b>Read</b> a pipeline and fix it</td></tr>
           <tr><td><b>Step 18</b>: sandbox</td><td>Paste any workflow of your own and check it.</td><td>Use it on real work</td></tr>
+          <tr><td><b>Step 19</b>: run it for real</td><td>Put an exercise in a practice repository on GitHub, trigger it, watch it and read its logs.</td><td>See it run</td></tr>
         </tbody>
       </table></div>
       <p>Every example is about the project you build in the other tutorials: a .NET API in <code>src/api</code>, an Angular UI in <code>src/ui</code>, a Docker Hub image, a Helm chart and a cluster. Every action named here is at the version its own repository publishes today, read from GitHub when this page was built.</p>
-      <div class="callout"><p><strong>What the checker cannot do.</strong> It cannot run your workflow, reach GitHub or AWS, or know your repository's settings. It checks structure, names, types, expressions and the logic of your conditions. GitHub also validates a file when you push it. Things that live in the repository's settings (rulesets, environment protection rules, secrets) cannot be tested here, and each step says where they are. The actionlint build in the browser leaves out the optional <code>shellcheck</code> and <code>pyflakes</code> checks of your scripts.</p></div>
+      <div class="callout"><p><strong>What the checker cannot do.</strong> It cannot run your workflow, reach GitHub or AWS, or know your repository's settings. To run an exercise on GitHub itself, follow step 19. It checks structure, names, types, expressions and the logic of your conditions. GitHub also validates a file when you push it. Things that live in the repository's settings (rulesets, environment protection rules, secrets) cannot be tested here, and each step says where they are. The actionlint build in the browser leaves out the optional <code>shellcheck</code> and <code>pyflakes</code> checks of your scripts.</p></div>
       <h3>Your lab progress</h3>
       <div class="ga-progress" id="ga-progress" aria-live="polite"></div>
       <p>This is the route a change takes through GitHub Actions, from <code>git push</code> to a result on the pull request. Play it with the arrows, or let it run:</p>
@@ -1416,6 +1417,99 @@ jobs:
       <p class="goal"><b>Goal:</b> paste any workflow from your own repositories and see what the checker and the run preview say.</p>
       <p>The editor below starts with a small example. Replace it with a file of your own. The checker is the same one used in every lab, and the preview shows which jobs would start for each event. Nothing leaves your browser.</p>
       <div data-free data-task="Paste or write any workflow. Problems show as you type, and the preview shows what would run."></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 19 ============ -->
+    <section class="step" id="real" data-step>
+      <div class="step-head"><span class="num">19</span><h2>Run it for real on GitHub</h2></div>
+      <p class="goal"><b>Goal:</b> take any exercise from this page, run it on GitHub, watch it, and read its logs, from the terminal.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>The lab checks what you write, but it cannot run it. Only a real run shows you a runner starting, a cache hit, a job waiting for approval, a login that works. You need a repository to push to, and a few commands, most of which you already practised in step 14.</p>
+      </div>
+      <h3>1. Pick where to practise</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th>A throwaway <b>public</b> repository</th><th>Your <b>private</b> <code>infra-setup</code></th></tr></thead>
+        <tbody>
+          <tr><td>Cost</td><td>Free: standard GitHub-hosted runners cost nothing in public repositories</td><td>Uses your plan's free minutes (2,000 a month on GitHub Free), then is billed</td></tr>
+          <tr><td>Code to build</td><td>None until you add some</td><td>The real API and UI are already at <code>src/api</code> and <code>src/ui</code></td></tr>
+          <tr><td>CodeQL, dependency review</td><td>Work</td><td>Need GitHub Advanced Security</td></tr>
+          <tr><td>Environment reviewers and wait timers</td><td>Work</td><td>Not on Free, Pro or Team</td></tr>
+          <tr><td>Artifact attestations</td><td>Work</td><td>Need GitHub Enterprise Cloud</td></tr>
+          <tr><td>Risk</td><td>None: nothing real is deployed</td><td>A publish lab really pushes an image, a deploy lab really deploys</td></tr>
+        </tbody>
+      </table></div>
+      <p>Use the public practice repository for learning, and move a workflow into <code>infra-setup</code> when you want it for real. Do not put secrets you care about in a public repository's workflows.</p>
+      <figure class="code"><figcaption>bash: create the practice repository and a small API to build</figcaption><pre><code>gh repo create actions-practice --public --clone
+cd actions-practice
+mkdir -p .github/workflows
+dotnet new web -n Todo.Api -o src/api      # so the build labs have something to build
+git add . &amp;&amp; git commit -m "Start" &amp;&amp; git push -u origin main</code></pre></figure>
+      <div data-cmd="repo-create"></div>
+      <h3>2. Put an exercise in, push, watch</h3>
+      <p>Use the <b>Copy</b> button of a lab and paste into a file in <code>.github/workflows/</code>. The folder must be at the root of the repository, and the file must end in <code>.yml</code> or <code>.yaml</code>. Lint it, push, then follow the run:</p>
+      <figure class="code"><figcaption>bash</figcaption><pre><code>actionlint                              # the same rules as this page; fix anything it prints
+git add .github &amp;&amp; git commit -m "Lab 2: build the API" &amp;&amp; git push
+gh run list --limit 3                   # the newest run and its id
+gh run watch --exit-status              # follow it live (pick the run when asked)
+gh run view --log-failed                # if it went red: only the failed steps</code></pre></figure>
+      <h3>3. Make the right event happen</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>The workflow listens for</th><th>How to trigger it</th></tr></thead>
+        <tbody>
+          <tr><td><code>push</code></td><td><code>git push</code> to a branch the filters match</td></tr>
+          <tr><td><code>pull_request</code></td><td>Push a branch, then <code>gh pr create --fill</code>. Every later push to that branch runs it again</td></tr>
+          <tr><td><code>workflow_dispatch</code></td><td><code>gh workflow run file.yml --ref main -f name=value</code>. The file must be on the default branch first</td></tr>
+          <tr><td>a tag (<code>tags: ['v*']</code>)</td><td><code>git tag v1.2.0 &amp;&amp; git push origin v1.2.0</code></td></tr>
+          <tr><td><code>schedule</code></td><td>Wait for the time, or add <code>workflow_dispatch</code> beside it and start it by hand. It only runs from the default branch</td></tr>
+          <tr><td><code>merge_group</code></td><td>Turn on a merge queue in a ruleset for <code>main</code>, then choose "Merge when ready" on a pull request</td></tr>
+        </tbody>
+      </table></div>
+      <figure class="code"><figcaption>bash: a pull request from the terminal</figcaption><pre><code>git switch -c lab-3
+git add .github &amp;&amp; git commit -m "Lab 3: triggers"
+git push -u origin lab-3
+gh pr create --fill                     # title and body from the commit
+gh pr checks --watch                    # wait for the checks of this pull request</code></pre></figure>
+      <div data-cmd="pr-create"></div>
+      <h3>4. What each lab needs before it can pass on GitHub</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Labs</th><th>Set up first</th></tr></thead>
+        <tbody>
+          <tr><td>1, 3, 4, 9 (structure), 18 and the gate jobs</td><td>Nothing. They only use <code>echo</code></td></tr>
+          <tr><td>2, 5, 14 and "from scratch" 2</td><td>A .NET project in <code>src/api</code> (the <code>dotnet new</code> line above, or your real API)</td></tr>
+          <tr><td>6 and "from scratch" 3</td><td>The Angular app in <code>src/ui</code> with its <code>package-lock.json</code>. Use <code>infra-setup</code>, or copy the folder</td></tr>
+          <tr><td>7</td><td><code>gh secret set NOTIFY_API_KEY</code> and <code>gh variable set NOTIFY_URL --body https://…</code>; the comment step needs a pull request</td></tr>
+          <tr><td>8, 16 and "from scratch" 4</td><td>A Docker Hub access token: <code>gh variable set DOCKERHUB_USERNAME --body &lt;you&gt;</code> and <code>gh secret set DOCKERHUB_TOKEN</code>. A <code>Dockerfile</code> in <code>src/api</code></td></tr>
+          <tr><td>9 (for the gate to hold)</td><td>The environments <code>staging</code> and <code>production</code>, with you as a required reviewer on <code>production</code> (Settings → Environments)</td></tr>
+          <tr><td>10 and "from scratch" 6</td><td>An AWS account with GitHub as an OIDC provider and a role whose trust policy matches your repository's <code>sub</code>. Without it the login step fails, which is the expected result</td></tr>
+          <tr><td>11 and 12</td><td>Both files in the repository: the caller needs <code>.github/workflows/build-image.yml</code> to exist</td></tr>
+          <tr><td>13</td><td>Save it as <code>.github/actions/setup-todo-api/action.yml</code> and use it from a workflow after a checkout step</td></tr>
+          <tr><td>15</td><td>A public repository (or GitHub Advanced Security), with the dependency graph enabled</td></tr>
+          <tr><td>17 and 19</td><td>Save as <code>.github/dependabot.yml</code> and <code>.github/CODEOWNERS</code>. The CODEOWNERS teams must exist and have write access</td></tr>
+        </tbody>
+      </table></div>
+      <figure class="code"><figcaption>bash: create the two environments without opening the browser</figcaption><pre><code>gh api --method PUT repos/{owner}/{repo}/environments/staging
+gh api --method PUT repos/{owner}/{repo}/environments/production
+gh secret set DOCKERHUB_TOKEN --env production     # an environment secret; it asks for the value</code></pre></figure>
+      <p><code>gh api</code> fills in <code>{owner}</code> and <code>{repo}</code> from the repository you are in. Required reviewers are added in <b>Settings → Environments</b>.</p>
+      <h3>5. Read what happened</h3>
+      <ul>
+        <li><b>The run page</b> (the Actions tab, or <code>gh run view --web</code>) shows the job graph you saw in the preview, with real timings.</li>
+        <li><b>A skipped job</b> is grey. Compare it with what the lab's preview said for that event.</li>
+        <li><b>A waiting job</b> with an environment shows "Waiting for review". Approve it there, or with the review button.</li>
+        <li><b>Debug logging</b>: <code>gh run rerun &lt;id&gt; --debug</code> runs it again with step debug logs.</li>
+        <li><b>The cache</b>: the second run of a cached job prints "Cache restored". <code>gh cache list</code> shows what is stored.</li>
+      </ul>
+      <h3>6. Clean up</h3>
+      <figure class="code"><figcaption>bash</figcaption><pre><code>gh run list --limit 20                  # anything still running?
+gh repo delete OWNER/actions-practice --yes     # needs the delete_repo scope: gh auth refresh -s delete_repo</code></pre></figure>
+      <div class="callout warn"><p><strong>Before you push a workflow to <code>infra-setup</code>.</strong> A workflow starts running the moment it reaches GitHub and its trigger matches. A file with <code>on: push</code> runs on that very push. Read its triggers, its <code>permissions</code> and what it publishes or deploys first, exactly as in step 17.</p></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/billing/concepts/product-billing/github-actions">GitHub Actions billing</a>, <a href="https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow">Manually running a workflow</a>, <a href="https://docs.github.com/en/actions/how-tos/monitor-workflows/enable-debug-logging">Enabling debug logging</a>, <a href="https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments">Managing environments</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>The loop is: lint, push, <code>gh run watch</code>, <code>gh run view --log-failed</code>.</li>
+        <li>Each trigger has its own way to fire, and manual and scheduled workflows must be on the default branch.</li>
+        <li>A public practice repository is free and has every feature; a private one needs the right plan for some of them.</li>
+      </ul></div>
       <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
     </section>
 
@@ -5581,6 +5675,174 @@ window.GA = GA; GA.actions = {
    "value": true
   }
  },
+ "gh pr create": {
+  "--assignee": {
+   "short": "-a",
+   "value": true
+  },
+  "--attach": {
+   "short": null,
+   "value": true
+  },
+  "--base": {
+   "short": "-B",
+   "value": true
+  },
+  "--body": {
+   "short": "-b",
+   "value": true
+  },
+  "--body-file": {
+   "short": "-F",
+   "value": true
+  },
+  "--draft": {
+   "short": "-d",
+   "value": false
+  },
+  "--dry-run": {
+   "short": null,
+   "value": false
+  },
+  "--editor": {
+   "short": "-e",
+   "value": false
+  },
+  "--fill": {
+   "short": "-f",
+   "value": false
+  },
+  "--fill-first": {
+   "short": null,
+   "value": false
+  },
+  "--fill-verbose": {
+   "short": null,
+   "value": false
+  },
+  "--head": {
+   "short": "-H",
+   "value": true
+  },
+  "--label": {
+   "short": "-l",
+   "value": true
+  },
+  "--milestone": {
+   "short": "-m",
+   "value": true
+  },
+  "--no-maintainer-edit": {
+   "short": null,
+   "value": false
+  },
+  "--project": {
+   "short": "-p",
+   "value": true
+  },
+  "--recover": {
+   "short": null,
+   "value": true
+  },
+  "--reviewer": {
+   "short": "-r",
+   "value": true
+  },
+  "--template": {
+   "short": "-T",
+   "value": true
+  },
+  "--title": {
+   "short": "-t",
+   "value": true
+  },
+  "--web": {
+   "short": "-w",
+   "value": false
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  },
+  "--repo": {
+   "short": "-R",
+   "value": true
+  }
+ },
+ "gh repo create": {
+  "--add-readme": {
+   "short": null,
+   "value": false
+  },
+  "--clone": {
+   "short": "-c",
+   "value": false
+  },
+  "--description": {
+   "short": "-d",
+   "value": true
+  },
+  "--disable-issues": {
+   "short": null,
+   "value": false
+  },
+  "--disable-wiki": {
+   "short": null,
+   "value": false
+  },
+  "--gitignore": {
+   "short": "-g",
+   "value": true
+  },
+  "--homepage": {
+   "short": "-h",
+   "value": false
+  },
+  "--include-all-branches": {
+   "short": null,
+   "value": false
+  },
+  "--internal": {
+   "short": null,
+   "value": false
+  },
+  "--license": {
+   "short": "-l",
+   "value": true
+  },
+  "--private": {
+   "short": null,
+   "value": false
+  },
+  "--public": {
+   "short": null,
+   "value": false
+  },
+  "--push": {
+   "short": null,
+   "value": false
+  },
+  "--remote": {
+   "short": "-r",
+   "value": true
+  },
+  "--source": {
+   "short": "-s",
+   "value": true
+  },
+  "--team": {
+   "short": "-t",
+   "value": true
+  },
+  "--template": {
+   "short": "-p",
+   "value": true
+  },
+  "--help": {
+   "short": null,
+   "value": false
+  }
+ },
  "gh api": {
   "--allow-escape-sequences": {
    "short": null,
@@ -6821,6 +7083,14 @@ window.GA = GA; GA.actions = {
   drill('pr-checks', '<p>Wait for the checks of pull request <code>7</code> to finish.</p>',
     spec('gh pr checks', { what: 'show the status checks of a pull request', pos: [pos(/^7$/, 'the pull request number', 'which pull request')], need: { '--watch': { value: false, required: true, what: 'keep refreshing until every check has finished' } } }),
     'gh pr checks 7 --watch', ['Look for a flag that means "keep watching".'], 'Add <code>--required</code> to show only the checks that the ruleset requires.');
+
+  drill('repo-create', '<p>Create a new <b>public</b> repository called <code>actions-practice</code> on GitHub and clone it into the current folder, in one command.</p>',
+    spec('gh repo create', { what: 'create a repository on GitHub', pos: [pos(/^([\w.-]+\/)?actions-practice$/, 'the repository name', 'the new repository\'s name')], need: { '--public': { value: false, required: true, what: 'anyone can see it, and standard runners are free' }, '--clone': { value: false, required: true, alias: ['-c'], what: 'also clone it to this folder' }, '--private': { forbidden: 'Make it <code>--public</code>: a public practice repository costs nothing to run and has every feature.' } } }),
+    'gh repo create actions-practice --public --clone', ['The visibility is a flag of its own, and so is cloning.'], 'For a repository you already have locally, use <code>--source . --push</code> instead of <code>--clone</code>.');
+
+  drill('pr-create', '<p>You pushed a branch. Open a pull request for it, taking the title and description from your commits, without answering any questions.</p>',
+    spec('gh pr create', { what: 'open a pull request for the current branch', need: { '--fill': { value: false, required: true, alias: ['-f'], what: 'take the title and body from the commit' } } }),
+    'gh pr create --fill', ['One flag fills in both the title and the body.'], 'The pull request targets the default branch unless you add <code>--base</code>. Then <code>gh pr checks --watch</code> follows its checks.');
 
   GA.cmds['lint-local'] = { prompt: '<p>Check every workflow in your repository with <b>actionlint</b> before you push. Run it from the repository root, with no file names (it finds <code>.github/workflows</code> itself).</p>',
     specs: { cmd: ['actionlint'], what: 'lint workflow files', positionals: [], flags: { '-color': { alias: [], value: false }, '-config-file': { alias: [], value: true }, '-debug': { alias: [], value: false }, '-format': { alias: [], value: true }, '-ignore': { alias: [], value: true }, '-init-config': { alias: [], value: false }, '-no-color': { alias: [], value: false }, '-oneline': { alias: [], value: false }, '-pyflakes': { alias: [], value: true }, '-shellcheck': { alias: [], value: true }, '-stdin-filename': { alias: [], value: true }, '-verbose': { alias: [], value: false }, '-version': { alias: [], value: false } } },

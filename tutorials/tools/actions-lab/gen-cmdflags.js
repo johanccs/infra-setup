@@ -2,7 +2,7 @@
 // Output: vendor/cmd-flags.json  { "gh run view": { "--log-failed": { "short": null, "value": false }, ... }, ... }
 const { spawnSync } = require('child_process');
 const fs = require('fs'), path = require('path');
-const GH = ['workflow run', 'workflow list', 'workflow view', 'workflow enable', 'workflow disable', 'run list', 'run watch', 'run view', 'run rerun', 'run cancel', 'run download', 'secret set', 'secret list', 'secret delete', 'variable set', 'variable list', 'attestation verify', 'cache list', 'cache delete', 'pr checks', 'api'];
+const GH = ['workflow run', 'workflow list', 'workflow view', 'workflow enable', 'workflow disable', 'run list', 'run watch', 'run view', 'run rerun', 'run cancel', 'run download', 'secret set', 'secret list', 'secret delete', 'variable set', 'variable list', 'attestation verify', 'cache list', 'cache delete', 'pr checks', 'pr create', 'repo create', 'api'];
 const GIT = ['tag', 'push', 'commit', 'rev-parse', 'ls-remote'];
 const out = {};
 function parseGh(text) {

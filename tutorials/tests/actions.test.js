@@ -254,7 +254,7 @@ async function main() {
   console.log('\n== command drills');
   {
     const cmds = Object.entries(GA.cmds);
-    check(cmds.length === 18, `18 command drills (${cmds.length})`);
+    check(cmds.length === 20, `20 command drills (${cmds.length})`);
     for (const [id, c] of cmds) { const r = GA.judgeLine(c.answer, c.specs); check(r.ok, `${id}: the answer is accepted`, r.problems.join('\n')); }
     // flags: every one of them is in the real tool's help
     if (gh) {
@@ -320,7 +320,7 @@ async function main() {
   console.log('\n== the page');
   {
     const sections = [...pageText.matchAll(/<section class="step" id="([\w-]+)" data-step>\s*<div class="step-head"><span class="num">([^<]*)<\/span><h2>([^<]*)<\/h2>/g)];
-    check(sections.length === 21, `21 sections (${sections.length})`);
+    check(sections.length === 22, `22 sections (${sections.length})`);
     const ids = sections.map((m) => m[1]);
     check(new Set(ids).size === ids.length, 'section ids are unique');
     const used = { lab: new Set(), cmd: new Set(), drill: new Set() };
@@ -374,7 +374,7 @@ async function main() {
       await pg.goto('http://localhost:' + srv.address().port + '/');
       await pg.waitForTimeout(500);
       const mounted = await pg.evaluate(() => ({ labs: document.querySelectorAll('.lab').length, sets: document.querySelectorAll('[data-set]').length, cmds: document.querySelectorAll('.cmd').length, drills: document.querySelectorAll('.drill-lab').length, pg: document.querySelectorAll('#ga-progress .ga-pg').length }));
-      check(mounted.cmds === 18 && mounted.drills === 9 && mounted.sets === 2 && mounted.pg === 6, `the page mounts 18 command drills, 9 drills, 2 sets and the progress bars (${JSON.stringify(mounted)})`);
+      check(mounted.cmds === 20 && mounted.drills === 9 && mounted.sets === 2 && mounted.pg === 6, `the page mounts 20 command drills, 9 drills, 2 sets and the progress bars (${JSON.stringify(mounted)})`);
       await pg.locator('.lab[data-lab="A1"] textarea.ed-ta').focus();
       await pg.waitForFunction(() => window.GAChecker && GAChecker.state === 'ready', null, { timeout: 30000 }).catch(() => {});
       check(await pg.evaluate(() => GAChecker.state) === 'ready', 'the checker (actionlint in WebAssembly) starts in the browser');
