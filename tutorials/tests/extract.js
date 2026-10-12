@@ -14,7 +14,7 @@ function extract(htmlFile, outDir) {
   while ((m = re.exec(html))) {
     const caption = m[1].replace(/<[^>]+>/g, '').trim();
     if (/^(bash|git bash|powershell)/i.test(caption) || /\(round \d\)/.test(caption)) continue;
-    if (/\(([^)]*changes only|[^)]*pod spec|add to env|inside syncPolicy|inside api:|the api container|the Deployment spec|the connection string|two (more )?additions)\)/.test(caption)) continue;   // an excerpt of a file shown in full elsewhere
+    if (/\(([^)]*changes only|[^)]*pod spec|add to env|inside syncPolicy|inside api:|the api container|the Deployment spec|the connection string|add to paths:|add under jobs:|example for [^)]*|the (AWS|EKS) version[^)]*|two (more )?additions)\)/.test(caption)) continue;   // an excerpt of a file shown in full elsewhere
     const name = caption.replace(/\s*\(.*\)$/, '');
     const append = /\(add at the end\)/.test(caption);   // a block that adds to the end of a file shown earlier
     if (!/^[.\w-]+(\/[.\w-]+)*$/.test(name) || !/[./]/.test(name)) continue;

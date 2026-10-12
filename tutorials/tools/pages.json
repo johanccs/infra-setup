@@ -25,6 +25,11 @@
     "blurb": "Part 5. Size, load-test, autoscale. Free."
   },
   {
+    "file": "terraform-the-lab-tutorial.html",
+    "name": "Terraform the Lab",
+    "blurb": "Part 6. The lab as code. Free."
+  },
+  {
     "file": "todo-on-eks-tutorial.html",
     "name": "Todo on EKS",
     "blurb": "On AWS with EKS. Costs money."
