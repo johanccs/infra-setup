@@ -2,46 +2,64 @@
   {
     "file": "code-to-cluster-tutorial.html",
     "name": "Code to Cluster",
-    "blurb": "Part 1. On your PC with kind. Free."
+    "blurb": "Part 1. On your PC with kind. Free.",
+    "group": "Build the platform · free, on your PC",
+    "tag": "Part 1"
   },
   {
     "file": "eyes-on-the-cluster-tutorial.html",
     "name": "Eyes on the Cluster",
-    "blurb": "Part 2. Metrics, logs and alerts. Free."
+    "blurb": "Part 2. Metrics, logs and alerts. Free.",
+    "group": "Build the platform · free, on your PC",
+    "tag": "Part 2"
   },
   {
     "file": "platform-as-code-tutorial.html",
     "name": "Platform as Code",
-    "blurb": "Part 3. The whole platform in Git. Free."
+    "blurb": "Part 3. The whole platform in Git. Free.",
+    "group": "Build the platform · free, on your PC",
+    "tag": "Part 3"
   },
   {
     "file": "secure-the-road-tutorial.html",
     "name": "Secure the Road",
-    "blurb": "Part 4. Scan, sign, restrict. Free."
+    "blurb": "Part 4. Scan, sign, restrict. Free.",
+    "group": "Build the platform · free, on your PC",
+    "tag": "Part 4"
   },
   {
     "file": "scale-and-capacity-tutorial.html",
     "name": "Scale and Capacity",
-    "blurb": "Part 5. Size, load-test, autoscale. Free."
+    "blurb": "Part 5. Size, load-test, autoscale. Free.",
+    "group": "Build the platform · free, on your PC",
+    "tag": "Part 5"
   },
   {
     "file": "terraform-the-lab-tutorial.html",
     "name": "Terraform the Lab",
-    "blurb": "Part 6. The lab as code. Free."
+    "blurb": "Part 6. The lab as code. Free.",
+    "group": "Build the platform · free, on your PC",
+    "tag": "Part 6"
   },
   {
     "file": "todo-on-eks-tutorial.html",
     "name": "Todo on EKS",
-    "blurb": "On AWS with EKS. Costs money."
+    "blurb": "On AWS with EKS. Costs money.",
+    "group": "On AWS · costs money",
+    "tag": "EKS"
   },
   {
     "file": "github-actions-tutorial.html",
     "name": "GitHub Actions Lab",
-    "blurb": "Interactive. Write and fix pipelines. Free."
+    "blurb": "Interactive. Write and fix pipelines. Free.",
+    "group": "Interactive labs · free",
+    "tag": "Lab"
   },
   {
     "file": "identity-and-access-tutorial.html",
     "name": "Identity and Access Lab",
-    "blurb": "Interactive. TLS, certificates, OAuth, OIDC, JWT, RBAC. Free."
+    "blurb": "Interactive. TLS, certificates, OAuth, OIDC, JWT, RBAC. Free.",
+    "group": "Interactive labs · free",
+    "tag": "Lab"
   }
 ]

@@ -241,12 +241,19 @@ dialog.ask::backdrop { background: rgba(10, 16, 22, .45); }
 .tools .tb-done { font: 500 12px/1 var(--font-mono); color: var(--muted); padding: 0 6px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tmenu { position: relative; }
 .tmenu .short { display: none; }
-.tmenu-list { position: absolute; right: 0; top: calc(100% + 8px); width: 270px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); z-index: 16; }
-.tmenu-list a { display: block; padding: 8px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; font-size: 14.5px; }
+/* tmenu:start */
+.tmenu-list { position: absolute; right: 0; top: calc(100% + 8px); width: 290px; max-height: calc(100vh - 90px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--muted) transparent; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); z-index: 16; }
+.tmenu-list::-webkit-scrollbar { width: 10px; }
+.tmenu-list::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 6px; border: 2px solid var(--surface); }
+.tmenu-group { margin: 8px 10px 2px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.tmenu-group:first-child { margin-top: 4px; }
+.tmenu-list a { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 7px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; font-size: 14.5px; }
 .tmenu-list a b { font-weight: 600; }
-.tmenu-list a span { display: block; font-size: 12.5px; color: var(--muted); }
+.tmenu-list a span { flex-shrink: 0; font-size: 12px; color: var(--muted); }
 .tmenu-list a:hover, .tmenu-list a:focus-visible { background: var(--accent-soft); }
 .tmenu-list a[aria-current="page"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+@media (max-width: 600px) { .tmenu { position: static; } .tmenu-list { position: fixed; left: 12px; right: 12px; top: calc(env(safe-area-inset-top, 0px) + 58px); width: auto; max-height: calc(100vh - 80px); } }
+/* tmenu:end */
 @media (max-width: 600px) { .tmenu .long { display: none; } .tmenu .short { display: inline; } }
 .tb-btn { font: 600 13px/1 var(--font-body); color: var(--ink); background: none; border: 1px solid transparent; border-radius: 5px; padding: 6px 8px; cursor: pointer; white-space: nowrap; min-width: 30px; }
 .tb-btn:hover:not(:disabled) { border-color: var(--line); background: var(--accent-soft); }
@@ -491,15 +498,18 @@ try {
   <div class="tmenu">
     <button type="button" class="tb-btn" id="tmenu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tmenu-list" title="Switch tutorial"><span class="long">Tutorials ▾</span><span class="short" aria-label="Tutorials">☰</span></button>
     <div class="tmenu-list" id="tmenu-list" role="menu" aria-label="Tutorials" hidden>
-      <a role="menuitem" href="code-to-cluster-tutorial.html"><b>Code to Cluster</b><span>Part 1. On your PC with kind. Free.</span></a>
-      <a role="menuitem" href="eyes-on-the-cluster-tutorial.html"><b>Eyes on the Cluster</b><span>Part 2. Metrics, logs and alerts. Free.</span></a>
-      <a role="menuitem" href="platform-as-code-tutorial.html"><b>Platform as Code</b><span>Part 3. The whole platform in Git. Free.</span></a>
-      <a role="menuitem" href="secure-the-road-tutorial.html"><b>Secure the Road</b><span>Part 4. Scan, sign, restrict. Free.</span></a>
-      <a role="menuitem" href="scale-and-capacity-tutorial.html" aria-current="page"><b>Scale and Capacity</b><span>Part 5. Size, load-test, autoscale. Free.</span></a>
-      <a role="menuitem" href="terraform-the-lab-tutorial.html"><b>Terraform the Lab</b><span>Part 6. The lab as code. Free.</span></a>
-      <a role="menuitem" href="todo-on-eks-tutorial.html"><b>Todo on EKS</b><span>On AWS with EKS. Costs money.</span></a>
-      <a role="menuitem" href="github-actions-tutorial.html"><b>GitHub Actions Lab</b><span>Interactive. Write and fix pipelines. Free.</span></a>
-      <a role="menuitem" href="identity-and-access-tutorial.html"><b>Identity and Access Lab</b><span>Interactive. TLS, certificates, OAuth, OIDC, JWT, RBAC. Free.</span></a>
+      <p class="tmenu-group" role="presentation">Build the platform · free, on your PC</p>
+      <a role="menuitem" href="code-to-cluster-tutorial.html" title="Part 1. On your PC with kind. Free."><b>Code to Cluster</b><span>Part 1</span></a>
+      <a role="menuitem" href="eyes-on-the-cluster-tutorial.html" title="Part 2. Metrics, logs and alerts. Free."><b>Eyes on the Cluster</b><span>Part 2</span></a>
+      <a role="menuitem" href="platform-as-code-tutorial.html" title="Part 3. The whole platform in Git. Free."><b>Platform as Code</b><span>Part 3</span></a>
+      <a role="menuitem" href="secure-the-road-tutorial.html" title="Part 4. Scan, sign, restrict. Free."><b>Secure the Road</b><span>Part 4</span></a>
+      <a role="menuitem" href="scale-and-capacity-tutorial.html" title="Part 5. Size, load-test, autoscale. Free." aria-current="page"><b>Scale and Capacity</b><span>Part 5</span></a>
+      <a role="menuitem" href="terraform-the-lab-tutorial.html" title="Part 6. The lab as code. Free."><b>Terraform the Lab</b><span>Part 6</span></a>
+      <p class="tmenu-group" role="presentation">On AWS · costs money</p>
+      <a role="menuitem" href="todo-on-eks-tutorial.html" title="On AWS with EKS. Costs money."><b>Todo on EKS</b><span>EKS</span></a>
+      <p class="tmenu-group" role="presentation">Interactive labs · free</p>
+      <a role="menuitem" href="github-actions-tutorial.html" title="Interactive. Write and fix pipelines. Free."><b>GitHub Actions Lab</b><span>Lab</span></a>
+      <a role="menuitem" href="identity-and-access-tutorial.html" title="Interactive. TLS, certificates, OAuth, OIDC, JWT, RBAC. Free."><b>Identity and Access Lab</b><span>Lab</span></a>
     </div>
   </div>
   <!-- backup-badge:start --><span class="bk-state" id="backup-state" hidden></span><!-- backup-badge:end -->
