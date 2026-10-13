@@ -26,7 +26,7 @@ const ALL_PAGES = [
   { file: 'terraform-the-lab-tutorial.html', name: 'Terraform the Lab', steps: 17, mid: 'module', link: 'gateway' },
   { file: 'todo-on-eks-tutorial.html', name: 'Todo on EKS', steps: 16, mid: 'docker', link: 'cluster' },
   { file: 'github-actions-tutorial.html', name: 'GitHub Actions Lab', steps: 23, mid: 'matrix', link: 'oidc', labTicks: true },
-  { file: 'identity-and-access-tutorial.html', name: 'Identity and Access Lab', steps: 19, mid: 'overview', link: 'overview', labTicks: true, noCode: true },   // noCode: no code blocks yet (the page is built level by level)
+  { file: 'identity-and-access-tutorial.html', name: 'Identity and Access Lab', steps: 25, mid: 'overview', link: 'overview', labTicks: true, noCode: true },   // noCode: no code blocks yet (the page is built level by level)
 ];
 const PAGES = process.env.ONLY ? ALL_PAGES.filter((p) => p.file === process.env.ONLY) : ALL_PAGES;   // ONLY=identity-and-access-tutorial.html runs one page
 
@@ -502,7 +502,10 @@ async function noKeyTest(browser) {
     check(await pg.locator('mark.note-hl').count() >= 1 && await pg.locator('.note-card', { hasText: 'My first note' }).count() === 1, `${spec.name}: saving highlights the word and adds a card`);
     check(await pg.evaluate(() => { const m = document.querySelectorAll('mark.note-hl.note-end'); return m.length === 1 && getComputedStyle(m[0], '::after').content.includes('✎'); }), `${spec.name}: a small note icon sits after the word`);
     check(await pg.locator('#notes-pane').isVisible() && await pg.textContent('#notes-count') === '1', `${spec.name}: the notes panel opens and the Notes button counts 1`);
-    await pg.waitForTimeout(300);
+    // opening the notes panel narrows the text, which can move the word: bring it back to the middle first
+    await pg.evaluate(() => document.querySelector('mark.note-hl').scrollIntoView({ block: 'center', behavior: 'instant' }));
+    await pg.waitForSelector('#notes-lines path', { timeout: 4000 }).catch(() => {});   // the line is drawn on the next animation frame
+    await pg.waitForTimeout(150);
     const line = await pg.evaluate(() => { const p = document.querySelector('#notes-lines path'), c = document.querySelector('.note-card'); const m = document.querySelector('mark.note-hl').getBoundingClientRect(); if (!p || !c || c.hidden) return null; const n = p.getAttribute('d').match(/-?[\d.]+/g).map(Number); return { sx: n[0], sy: n[1], ex: n[n.length - 2], ey: n[n.length - 1], mr: m.right, mb: m.bottom, cl: c.getBoundingClientRect().left, ct: c.getBoundingClientRect().top, ch: c.getBoundingClientRect().height }; });
     check(!!line && Math.abs(line.sy - line.mb) < 6 && line.sx <= line.mr && line.ex <= line.cl + 2 && line.ey >= line.ct && line.ey <= line.ct + line.ch, `${spec.name}: a line joins the word to its note`);
     check(/\d{4}.*\d{1,2}:\d{2}/.test(await pg.textContent('.note-card .note-date')), `${spec.name}: each note shows the date and time it was saved`);

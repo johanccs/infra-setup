@@ -2719,6 +2719,1228 @@ roleRef:
       </ul></div>
       <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
     </section>
+
+    <!-- ============ 19 ============ -->
+    <section class="step" id="keycloak" data-step data-level="Intermediate">
+      <div class="step-head"><span class="num">19</span><h2>Run an identity provider</h2><span class="lvl-chip">Intermediate</span></div>
+      <p class="goal"><b>Goal:</b> run Keycloak, find your way around a realm, and get tokens from it with <code>curl</code>.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Until now the identity provider was a name in a diagram. From here on the Todo API checks real tokens, so you need a real issuer on your own machine. Keycloak is free, open source and speaks standard OpenID Connect, so everything you learn here carries over to any other provider.</p>
+        <p>This lesson builds on steps 09 (JWT), 12 (the code flow) and 14 (OpenID Connect).</p>
+      </div>
+      <div class="what-is"><h4>What is it? An identity provider (IdP)</h4><dl><dt>What it is</dt><dd>The service that knows your users, checks their credentials and issues tokens that other systems trust. In OAuth terms it is the <b>authorization server</b>; in OpenID Connect it is the <b>OpenID Provider</b>.</dd><dt>The problem it solves</dt><dd>Without one, every app stores passwords, builds its own login page, its own MFA and its own account recovery, and each gets some of it wrong. With one, apps hold <em>no</em> passwords and just validate tokens.</dd><dt>Everyday comparison</dt><dd>A passport office. Countries (apps) do not issue their own proof of identity at the border; they trust the passport and check that it is genuine.</dd><dt>What it is not</dt><dd>Not your user database for application data (todos stay in PostgreSQL), and not your API. It answers "who is this and what are they called?", never "what are their todos?".</dd><dt>Where you meet it</dt><dd>Keycloak, Microsoft Entra ID, Okta, Auth0, Google. Keycloak is the one you can run on a laptop.</dd></dl></div>
+      <div class="what-is"><h4>What is it? A realm</h4><dl><dt>What it is</dt><dd>Keycloak's unit of isolation: one set of users, roles, clients and settings. The <code>master</code> realm is for administering Keycloak itself; applications get a realm of their own.</dd><dt>The problem it solves</dt><dd>Two apps (or two customers) must not share users or settings by accident.</dd><dt>Everyday comparison</dt><dd>A separate building with its own front desk and its own guest list.</dd><dt>What it is not</dt><dd>Not a tenant of the whole machine: realms share one server and one database.</dd><dt>Where you meet it</dt><dd>The issuer address: <code>http://localhost:8180/realms/todo</code> contains the realm name.</dd></dl></div>
+      <h3>Start Keycloak with the Todo realm</h3>
+      <p>You will write one file, the <b>realm file</b>, and tell Keycloak to import it on first start. Everything in it is a practice value: the passwords and secrets are not secrets, and the file must never go near production.</p>
+      <figure class="code"><figcaption>infra/keycloak/todo-realm.json</figcaption><pre><code>{
+  "realm": "todo",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      {
+        "name": "todo-user",
+        "description": "Can manage their own todos"
+      },
+      {
+        "name": "todo-admin",
+        "description": "Can read every user's todos"
+      },
+      {
+        "name": "todo-reporter",
+        "description": "A machine that reads the statistics"
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.test",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Example",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice-practice-only",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "todo-user"
+      ]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@example.test",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Example",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bob-practice-only",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "todo-user",
+        "todo-admin"
+      ]
+    },
+    {
+      "username": "service-account-todo-reporter",
+      "enabled": true,
+      "serviceAccountClientId": "todo-reporter",
+      "realmRoles": [
+        "todo-reporter"
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "todo-api",
+      "enabled": true,
+      "bearerOnly": true
+    },
+    {
+      "clientId": "todo-web",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "todo-web-practice-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:4200/api/auth/callback",
+        "http://localhost:5000/api/auth/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:4200/*##http://localhost:5000/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "roles",
+            "multivalued": "true",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "false"
+          }
+        },
+        {
+          "name": "audience-todo-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "todo-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "todo-reporter",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "todo-reporter-practice-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "protocolMappers": [
+        {
+          "name": "roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "roles",
+            "multivalued": "true",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "audience-todo-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "todo-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ]
+}</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the realm file</summary><div><dl><dt><code>sslRequired: "external"</code></dt><dd>Plain HTTP is allowed from <code>localhost</code> and private addresses only. Anything else must use HTTPS. This is Keycloak's default and the reason practice on localhost works.</dd><dt><code>accessTokenLifespan: 300</code></dt><dd>Access tokens live five minutes. Short lifetimes limit what a stolen token is worth (step 26).</dd><dt><code>roles.realm</code></dt><dd>Three realm roles. A role is only a name until the API gives it a meaning (step 21).</dd><dt><code>users</code></dt><dd>Alice has <code>todo-user</code>. Bob has <code>todo-user</code> and <code>todo-admin</code>. The user <code>service-account-todo-reporter</code> is the identity Keycloak creates for the machine client; it is listed so the import can give it the <code>todo-reporter</code> role.</dd><dt><code>todo-api</code> with <code>bearerOnly</code></dt><dd>A client that exists only so tokens can name it as their audience. It never signs anyone in.</dd><dt><code>todo-web</code></dt><dd>A <b>confidential</b> client (it has a secret) for the Todo app's own backend. Only the authorization code flow is on, <code>directAccessGrantsEnabled</code> (the password grant) is off, and <code>pkce.code.challenge.method: S256</code> makes Keycloak refuse a code request without a PKCE challenge.</dd><dt><code>redirectUris</code></dt><dd>The exact addresses Keycloak may send the browser back to (RFC 9700: exact matching). Port 4200 is the Angular dev server, which forwards <code>/api</code> to the API.</dd><dt><code>protocolMappers</code></dt><dd>Two mappers per client. <code>oidc-usermodel-realm-role-mapper</code> writes the realm roles into a top-level <code>roles</code> claim. <code>oidc-audience-mapper</code> adds <code>todo-api</code> to <code>aud</code>. Without the second one, the API would correctly refuse the token.</dd><dt><code>todo-reporter</code> with <code>serviceAccountsEnabled</code></dt><dd>The machine client: client credentials grant, no browser flow.</dd></dl></div></details>
+      <figure class="code"><figcaption>bash: start Keycloak (needs Docker)</figcaption><pre><code>docker run -d --name keycloak -p 127.0.0.1:8180:8080 \
+  -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+  -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin-practice-only \
+  -v "$PWD/infra/keycloak:/opt/keycloak/data/import:ro" \
+  quay.io/keycloak/keycloak:26.8.1 start-dev --import-realm</code></pre></figure>
+      <p>Port 8180 is free in the series (8080 is the Todo app). <code>start-dev</code> is the development mode: HTTP allowed, an embedded H2 database inside the container, and nothing persisted once the container is removed. Its documentation lists what to do before production: a real database, your own certificates and a stronger admin password. The container reads every <code>.json</code> file in <code>/opt/keycloak/data/import</code> and skips a realm that already exists, so to change the file you remove the container and start again.</p>
+      <div class="callout"><p><strong>Version note.</strong> Keycloak 26.8.1 was published on the day this lesson was checked and fixes several security issues in 26.8.0, including some in OpenID Connect brokering. Use the newest patch release of the minor version you run, and read its release notes before you upgrade.</p></div>
+      <h3>Ask the server what it is</h3>
+      <p>Every OpenID Connect provider publishes a discovery document (step 14) and its keys (step 09). The first one tells a client everything it needs; the second is how an API checks signatures without calling Keycloak for each request.</p>
+      <div data-cmd="a19-discovery"></div>
+      <div data-cmd="a19-jwks"></div>
+      <div class="callout"><p><strong>The issuer is the address you used.</strong> Keycloak builds the <code>issuer</code> from the host name in the request. Open the realm at <code>localhost:8180</code> and tokens say <code>http://localhost:8180/realms/todo</code>; open it at <code>127.0.0.1:8180</code> and they say <code>http://127.0.0.1:8180/realms/todo</code>. An API that expects one and receives the other refuses the token with an issuer error. Use one name everywhere. In production you pin it with the <code>hostname</code> option.</p></div>
+      <h3>Get a token</h3>
+      <p>The machine client can ask for a token on its own: no browser needed. The secret comes from a shell variable so that it never lands in your shell history.</p>
+      <div data-cmd="a19-gettoken"></div>
+      <p>Paste the access token into the workbench to read it. Three things matter for the next lessons:</p>
+      <ul>
+        <li><code>iss</code> is the realm address, and <code>aud</code> contains <code>todo-api</code>: that is what the API will check.</li>
+        <li><code>roles</code> is a top-level array. Keycloak also writes <code>realm_access.roles</code>; both carry the same roles, and the API will read <code>roles</code>.</li>
+        <li><code>azp</code> (authorized party) and <code>client_id</code> name the client that asked, <code>sub</code> names the user or, here, the service account.</li>
+      </ul>
+      <div data-tool="jwt"></div>
+      <figure class="anim" aria-label="Animated diagram: the Todo realm, its users, roles and clients">
+        <div class="anim-stage"><svg viewBox="0 0 760 320" role="img" aria-label="The realm todo holds two users, three roles and three clients. Alice has the role todo-user. Bob has todo-user and todo-admin. The client todo-web signs people in, the client todo-reporter is a machine, and todo-api is the audience that tokens are made for.">
+<rect class="a-zone" x="8" y="8" width="744" height="304" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 70 H300"/><path class="a-route" data-k="r2" d="M200 150 H300"/><path class="a-route" data-k="r3" d="M450 70 H560"/><path class="a-route" data-k="r4" d="M450 230 H560"/><path class="a-route" data-k="r5" d="M635 130 V190"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="alice"><rect x="24" y="36" width="176" height="70" rx="8"/><text class="a-t" x="112" y="61">alice</text><text class="a-s" x="112" y="81">todo-user</text></g>
+<g class="a-node" data-k="bob"><rect x="24" y="116" width="176" height="70" rx="8"/><text class="a-t" x="112" y="141">bob</text><text class="a-s" x="112" y="161">todo-user, todo-admin</text></g>
+<g class="a-node" data-k="web"><rect x="300" y="36" width="150" height="70" rx="8"/><text class="a-t" x="375" y="61">todo-web</text><text class="a-s" x="375" y="81">people sign in here</text></g>
+<g class="a-node" data-k="rep"><rect x="300" y="196" width="150" height="70" rx="8"/><text class="a-t" x="375" y="221">todo-reporter</text><text class="a-s" x="375" y="241">a machine</text></g>
+<g class="a-node" data-k="api"><rect x="560" y="36" width="176" height="70" rx="8"/><text class="a-t" x="648" y="61">todo-api</text><text class="a-s" x="648" y="81">the audience</text></g>
+<g class="a-node" data-k="claim"><rect x="560" y="196" width="176" height="70" rx="8"/><text class="a-t" x="648" y="221">roles claim</text><text class="a-s" x="648" y="241">in every token</text></g>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "alice bob", "off": "r1 r2 r3 r4 r5 web rep api claim", "text": "<b>Users and roles.</b> Alice is a <code>todo-user</code>. Bob is a <code>todo-user</code> and a <code>todo-admin</code>. A role says what a person is allowed to be in this app."},
+          {"on": "alice bob r1 r2 web", "off": "r3 r4 r5 rep api claim", "path": [[206, 70], [294, 70]], "text": "<b>People sign in through one client.</b> <code>todo-web</code> is the confidential client of the Todo app. It never sees the password: Keycloak does."},
+          {"on": "web r3 api", "off": "r1 r2 r4 r5 alice bob rep claim", "path": [[456, 70], [554, 70]], "text": "<b>Tokens are made for the API.</b> A mapper puts <code>todo-api</code> in the audience, so the API can refuse tokens meant for anyone else."},
+          {"on": "api r5 claim", "off": "r1 r2 r3 r4 alice bob web rep", "path": [[635, 112], [635, 190]], "text": "<b>Roles travel in the token.</b> A second mapper writes the realm roles into a top-level <code>roles</code> claim, which the API reads."},
+          {"on": "rep r4 claim", "off": "r1 r2 r3 r5 alice bob web api", "path": [[456, 230], [554, 230]], "text": "<b>A machine has its own client.</b> <code>todo-reporter</code> signs in with its own secret and holds only <code>todo-reporter</code>. It has no person behind it."}
+        ]</script>
+      </figure>
+      <h3>Practice</h3>
+      <div data-ex="a19-realm"></div>
+      <div data-ex="a19-token"></div>
+      <div data-ex="a19-issuer"></div>
+      <div data-ex="a19-order"></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>An identity provider holds the users and issues the tokens; your apps hold no passwords. Keycloak runs on a laptop and speaks standard OpenID Connect.</li>
+        <li>A realm file describes users, roles and clients, and Keycloak imports it on first start. Mappers decide what lands in the tokens: here a top-level <code>roles</code> claim and the <code>todo-api</code> audience.</li>
+        <li>The issuer is built from the address you used, so use one name. The discovery document and the JWKS tell any client what to trust.</li>
+        <li>A machine client gets a token with the client credentials grant, with its secret kept out of the command line.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 20 ============ -->
+    <section class="step" id="jwt-api" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">20</span><h2>Protect the API with JWT bearer tokens</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> make <code>GET /api/todos</code> answer <code>401</code> without a valid token, and explain every <code>401</code> the API can send.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>The API from Part 1 answers anyone. Step 10 showed that validating a token is where most mistakes are made, so this step configures a library and does not write the checks. It builds on steps 09, 10 and 19.</p>
+      </div>
+      <h3>Add the package and the settings</h3>
+      <p>Both files below are yours to change in <code>src/api</code>. The package version is the newest at the time of writing; check <code>dotnet add package</code> for yours.</p>
+      <figure class="code"><figcaption>bash: in src/api/</figcaption><pre><code>dotnet add package Microsoft.AspNetCore.Authentication.JwtBearer --version 10.0.13</code></pre></figure>
+      <figure class="code"><figcaption>src/api/appsettings.Development.json</figcaption><pre><code>{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "ConnectionStrings":
+  {
+    "Todos": "Host=localhost;Database=todo;Username=todo;Password=dev"
+  },
+  "Auth": {
+    "Authority": "http://localhost:8180/realms/todo"
+  }
+}</code></pre></figure>
+      <p>In the cluster the same setting arrives as the environment variable <code>Auth__Authority</code>, exactly like <code>ConnectionStrings__Todos</code>. Step 22 explains why its value must be an address the <em>API</em> can reach.</p>
+      <h3>The new Program.cs</h3>
+      <figure class="code"><figcaption>src/api/Program.cs (step 20)</figcaption><pre><code>using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Npgsql;
+using Todo.Api.Classes;
+using Todo.Api.Services;
+
+
+var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration.GetConnectionString("Todos") 
+    ?? throw new InvalidOperationException(
+        "Set the connection string 'Todos' (environment variable ConnectionStrings__Todos).");
+
+var authority = builder.Configuration["Auth:Authority"]
+    ?? throw new InvalidOperationException(
+        "Set 'Auth:Authority' to the issuer address (environment variable Auth__Authority).");
+
+builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
+builder.Services.AddSingleton&lt;TodoStore&gt;();
+builder.Services.AddHealthChecks();
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(o =&gt;
+    {
+        o.Authority = authority;                  // where the keys and the issuer name come from
+        o.Audience = "todo-api";                  // tokens meant for another API are refused
+        o.MapInboundClaims = false;               // keep the claim names exactly as the token has them
+        o.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        o.TokenValidationParameters.ClockSkew = TimeSpan.FromSeconds(30);   // the default is 5 minutes
+        o.TokenValidationParameters.NameClaimType = "preferred_username";
+        o.TokenValidationParameters.RoleClaimType = "roles";
+    });
+
+builder.Services.AddAuthorizationBuilder()
+    // Every endpoint needs a signed-in caller unless it says AllowAnonymous.
+    .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+
+var app = builder.Build();
+
+var store = app.Services.GetRequiredService&lt;TodoStore&gt;();
+_ = store.ConnectAsync(app.Lifetime.ApplicationStopping);
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapGet("/api/info", () =&gt; new
+{
+    Version = Environment.GetEnvironmentVariable("APP_Version") ?? "dev",
+    Host = Environment.MachineName
+}).AllowAnonymous();
+
+var todos = app.MapGroup("/api/todos");
+
+todos.MapGet("/", (TodoStore store) =&gt; store.AllAsync());
+
+todos.MapPost("/", async(NewTodo input, TodoStore store) =&gt; 
+    string.IsNullOrWhiteSpace(input.Title) 
+    ? Results.BadRequest(new { error = "Title is required." })
+    : Results.Created("/api/todos", await store.AddAsync(input.Title.Trim()))
+);
+
+todos.MapPut("/{id:int}/toggle", async (int id, TodoStore store) =&gt; 
+    await store.ToggleAsync(id) is {} todo ? Results.Ok(todo): Results.NotFound());
+
+todos.MapDelete("/{id:int}", async (int id, TodoStore store) =&gt; 
+    await store.RemoveAsync(id) ? Results.NoContent() : Results.NotFound());
+
+app.MapHealthChecks("/healthz").AllowAnonymous();
+
+app.MapGet("/readyz", (TodoStore store) =&gt; store.Ready ? Results.Text("Ready") : Results.StatusCode(503)).AllowAnonymous();
+
+app.Run();</code></pre></figure>
+      <details class="lbl"><summary>Explained: what each new line does</summary><div><dl><dt><code>AddJwtBearer</code> with <code>Authority</code></dt><dd>At first use the handler downloads <code>{Authority}/.well-known/openid-configuration</code> and the keys it points to, caches them, and refreshes them when a token names an unknown <code>kid</code> (step 09). The issuer to expect comes from the same document.</dd><dt><code>Audience = "todo-api"</code></dt><dd>A valid token meant for another API is refused (step 10: the "no audience check" attack).</dd><dt><code>MapInboundClaims = false</code></dt><dd>By default .NET renames incoming claims (<code>sub</code> becomes a long <code>nameidentifier</code> URI, <code>roles</code> becomes another). Switching it off keeps the names exactly as the token has them, so the code reads <code>"sub"</code> and <code>"roles"</code>.</dd><dt><code>RequireHttpsMetadata</code></dt><dd>The handler refuses to fetch the discovery document over plain HTTP unless this is off. It is off only in Development, so a mistake in production fails closed.</dd><dt><code>ClockSkew</code></dt><dd>The default is <b>five minutes</b>: an expired token is still accepted for five minutes after <code>exp</code>. That is a lot when tokens live for five. Thirty seconds covers real clock drift.</dd><dt><code>NameClaimType</code> and <code>RoleClaimType</code></dt><dd>Tell the handler which claims are the user's name and roles. Keycloak writes <code>preferred_username</code> and <code>roles</code>.</dd><dt><code>SetFallbackPolicy</code></dt><dd>The policy used by every endpoint that has none. Requiring an authenticated user makes <b>deny by default</b> the rule: a new endpoint you forget about is protected, not open.</dd><dt><code>AllowAnonymous</code> on three endpoints</dt><dd>The health, readiness and info endpoints stay open so that Kubernetes probes and the platform keep working.</dd><dt><code>UseAuthentication</code> before <code>UseAuthorization</code></dt><dd>Order matters: the user must be built before a rule can ask about it.</dd></dl></div></details>
+      <h3>Try it</h3>
+      <p>Start the API, get an access token for Alice with the code flow against your Keycloak (the by-hand flow of step 15 works with this realm: use client <code>todo-web</code>), then call it five ways. Every answer below was observed against a real Keycloak 26.8.1:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Request</th><th>Answer</th><th><code>WWW-Authenticate</code></th></tr></thead>
+        <tbody>
+          <tr><td>No token</td><td><code>401</code></td><td><code>Bearer</code></td></tr>
+          <tr><td>A good token</td><td><code>200</code></td><td></td></tr>
+          <tr><td>A token for another audience</td><td><code>401</code></td><td><code>Bearer error="invalid_token", error_description="The audience 'empty' is invalid"</code></td></tr>
+          <tr><td>A token that has expired</td><td><code>401</code></td><td><code>Bearer error="invalid_token", error_description="The token expired at '…'"</code></td></tr>
+          <tr><td>A token with one changed character</td><td><code>401</code></td><td><code>Bearer error="invalid_token", error_description="The signature is invalid"</code></td></tr>
+          <tr><td><code>/healthz</code> with no token</td><td><code>200</code></td><td></td></tr>
+        </tbody>
+      </table></div>
+      <p>The <code>error</code> value is defined by RFC 6750 (section 3.1): a request with no credentials gets a bare <code>Bearer</code> challenge, and a request with a bad token gets <code>invalid_token</code>. The description helps you during development. Do not show it to a stranger in production as part of the page: it tells an attacker which check failed.</p>
+      <div class="callout"><p><strong>Why "audience 'empty'"?</strong> The token had no <code>aud</code> claim at all, because that client has no audience mapper. The message prints the audiences it found, and "empty" means none. A token with another audience prints that value.</p></div>
+      <figure class="anim" aria-label="Animated diagram: a request passing authentication and authorization before the endpoint">
+        <div class="anim-stage"><svg viewBox="0 0 760 280" role="img" aria-label="A request carrying a bearer token reaches the API. The JwtBearer handler checks the signature, issuer, audience and expiry, and builds the user. The authorization middleware applies the fallback policy and the endpoint policy. Only then does the endpoint run. A failure at the first stop answers 401, at the second 403.">
+<rect class="a-zone" x="8" y="8" width="744" height="264" rx="12"/>
+<path class="a-route" data-k="r1" d="M180 100 H260"/><path class="a-route" data-k="r2" d="M440 100 H520"/><path class="a-route" data-k="r3" d="M700 100 H724"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="req"><rect x="24" y="60" width="156" height="80" rx="8"/><text class="a-t" x="102" y="90">Request</text><text class="a-s" x="102" y="110">Bearer eyJ…</text></g>
+<g class="a-node" data-k="authn"><rect x="260" y="50" width="180" height="100" rx="8"/><text class="a-t" x="350" y="80">Authentication</text><text class="a-s" x="350" y="100">signature, issuer</text><text class="a-s" x="350" y="118">audience, expiry</text></g>
+<g class="a-node" data-k="authz"><rect x="520" y="50" width="180" height="100" rx="8"/><text class="a-t" x="610" y="90">Authorization</text><text class="a-s" x="610" y="110">fallback + policy</text></g>
+<g class="a-node" data-k="ep"><rect x="380" y="190" width="200" height="60" rx="8"/><text class="a-t" x="480" y="225">Endpoint runs</text></g>
+<text class="a-badge bad" data-k="e401" x="350" y="190">401: who are you?</text><text class="a-badge bad" data-k="e403" x="610" y="190">403: not you</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "req", "off": "r1 r2 r3 authn authz ep e401 e403", "text": "<b>A request.</b> The caller sends the access token in the <code>Authorization</code> header."},
+          {"on": "req r1 authn", "off": "r2 r3 authz ep e401 e403", "path": [[186, 100], [254, 100]], "text": "<b>Authentication.</b> The handler reads the signing keys from the issuer, then checks the signature, the issuer, the audience and the expiry. If all hold, it builds the user from the claims."},
+          {"on": "authn e401", "bad": "authn e401", "off": "r1 r2 r3 req authz ep e403", "text": "<b>Not valid.</b> Bad signature, wrong audience, expired: the request stops here with <code>401</code> and a <code>WWW-Authenticate</code> header that says why."},
+          {"on": "authn r2 authz", "off": "r1 r3 req ep e401 e403", "path": [[446, 100], [514, 100]], "text": "<b>Authorization.</b> Now that the API knows who is calling, it checks the rule for this endpoint: signed in, and the right role."},
+          {"on": "authz e403", "bad": "authz e403", "off": "r1 r2 r3 req authn ep e401", "text": "<b>Known, but not allowed.</b> A valid token without the role stops here with <code>403</code>."},
+          {"on": "authz r3 ep", "good": "ep", "off": "r1 r2 req authn e401 e403", "path": [[706, 100], [724, 100]], "text": "<b>The endpoint.</b> Only a caller that passed both stops reaches the code that reads and writes todos."}
+        ]</script>
+      </figure>
+      <h3>Practice</h3>
+      <div data-ex="a20-status"></div>
+      <div data-ex="a20-probe"></div>
+      <div data-ex="a20-skew"></div>
+      <div data-ex="a20-claims"></div>
+      <div data-ex="a20-log"></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Configure the JwtBearer handler with an authority and an audience; it fetches and caches the keys and checks signature, issuer, audience and expiry for you.</li>
+        <li>Set a fallback policy so that every endpoint is closed unless it says otherwise, and keep health endpoints open for the platform.</li>
+        <li>The default clock skew is five minutes. Set it small, and keep claim names as the token has them.</li>
+        <li><code>401</code> means the API does not know who is calling, and <code>WWW-Authenticate</code> says why. Do not echo that detail to strangers.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 21 ============ -->
+    <section class="step" id="todo-authz" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">21</span><h2>Roles, policies and "only your own todos"</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> turn roles into policies, store an owner on every todo, and make a user see and change only their own.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Step 17 showed that checking "signed in" is not authorization. This step fixes the Todo API the way that lesson taught: an ownership rule in the query, plus role policies for the endpoints that are only for some people. It builds on steps 16, 17 and 20.</p>
+      </div>
+      <h3>The rules, as a table</h3>
+      <p>Write the rules down before the code. This is the table the tests of this lesson check, cell by cell, against a real Keycloak and a real PostgreSQL:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Request</th><th>Nobody</th><th>Alice (user)</th><th>Bob (user + admin)</th><th>Reporter (machine)</th></tr></thead>
+        <tbody>
+          <tr><td><code>/healthz</code>, <code>/readyz</code>, <code>/api/info</code></td><td>200</td><td>200</td><td>200</td><td>200</td></tr>
+          <tr><td><code>GET /api/todos</code></td><td>401</td><td>200, her own</td><td>200, his own</td><td>403</td></tr>
+          <tr><td><code>POST /api/todos</code></td><td>401</td><td>201</td><td>201</td><td>403</td></tr>
+          <tr><td>Toggle or delete her <em>own</em> todo</td><td>401</td><td>200 or 204</td><td>(his own: 200 or 204)</td><td>403</td></tr>
+          <tr><td>Toggle or delete <em>someone else's</em> todo</td><td>401</td><td>404</td><td>404</td><td>403</td></tr>
+          <tr><td><code>GET /api/admin/todos</code></td><td>401</td><td>403</td><td>200, everyone's</td><td>403</td></tr>
+          <tr><td><code>GET /api/admin/stats</code></td><td>401</td><td>403</td><td>200</td><td>200</td></tr>
+        </tbody>
+      </table></div>
+      <ul>
+        <li><b>404, not 403, for someone else's todo.</b> The answer for "yours, but not allowed" and "does not exist" is the same, so nobody learns which ids exist (step 17).</li>
+        <li><b>Admin is not "owner of everything".</b> An admin can <em>read</em> everyone's todos on the admin route. They still cannot toggle or delete another person's todo. Giving a role more power than its job is how roles explode.</li>
+        <li><b>Reporter reads statistics only.</b> It has no business with anyone's list.</li>
+      </ul>
+      <h3>The code</h3>
+      <p>Two new records, a new column, and every store method takes the owner. The owner is the token's <code>sub</code>: the one value the user cannot choose.</p>
+      <figure class="code"><figcaption>src/api/Classes/AdminTodo.cs</figcaption><pre><code>namespace Todo.Api.Classes;
+
+public record AdminTodo(int Id, string Owner, string Title, bool Done);</code></pre></figure>
+      <figure class="code"><figcaption>src/api/Classes/Stats.cs</figcaption><pre><code>namespace Todo.Api.Classes;
+
+public record Stats(int Todos, int Done, int Owners);</code></pre></figure>
+      <figure class="code"><figcaption>src/api/Services/TodoStore.cs</figcaption><pre><code>using System.Data.Common;
+using Microsoft.VisualBasic;
+using Npgsql;
+
+namespace Todo.Api.Services;
+
+public class TodoStore(NpgsqlDataSource db, ILogger&lt;TodoStore&gt;log)
+{
+    public bool Ready { get; private set; }
+
+    public async Task ConnectAsync(CancellationToken stop)
+    {
+        while (!stop.IsCancellationRequested)
+        {
+            try
+            {
+                await using var cmd = db.CreateCommand(
+                "Create table if not exists todos (id serial Primary Key, title text NOT NULL, done boolean NOT NULL Default false)");
+
+                await cmd.ExecuteNonQueryAsync(stop);
+
+                await using var owner = db.CreateCommand(
+                "Alter table todos add column if not exists owner text NOT NULL Default ''");
+                await owner.ExecuteNonQueryAsync(stop);
+
+                Ready = true;
+                log.LogInformation("Connected to the database");
+                return;
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                log.LogWarning("Database not reachable yet ({Message}). Retrying in 2 seconds.", e.Message);
+                await Task.Delay(TimeSpan.FromSeconds(2),stop);
+            }
+        
+        }
+    }
+
+    public async Task&lt;List&lt;Classes.Todo&gt;&gt;AllAsync(string owner)
+    {
+        await using var cmd = db.CreateCommand("Select id, title, done from todos where owner = $1 ORDER BY id");
+        cmd.Parameters.AddWithValue(owner);
+        await using var rdr = await cmd.ExecuteReaderAsync();
+
+        var list = new List&lt;Classes.Todo&gt;();
+
+        while(await rdr.ReadAsync())
+        {
+            list.Add(new Classes.Todo(rdr.GetInt32(0), rdr.GetString(1), rdr.GetBoolean(2)));
+        }
+
+        return list;
+    }
+
+    public async Task&lt;Classes.Todo&gt;AddAsync(string owner, string title)
+    {
+        await using var cmd = db.CreateCommand("Insert into todos (owner, title) VALUES ($1, $2) RETURNING id");
+        cmd.Parameters.AddWithValue(owner);
+        cmd.Parameters.AddWithValue(title);
+
+        return new Classes.Todo((int) (await cmd.ExecuteScalarAsync())!, title, false);
+    }
+
+    public async Task&lt;Classes.Todo?&gt;ToggleAsync(string owner, int id)
+    {
+        await using var cmd = db
+                .CreateCommand(
+                    "UPDATE todos SET done = NOT done where Id = $1 and owner = $2 Returning id, title, done");
+        cmd.Parameters.AddWithValue(id);
+        cmd.Parameters.AddWithValue(owner);
+
+        await using var rdr = await cmd.ExecuteReaderAsync();
+        
+        return await rdr.ReadAsync() 
+            ? new Classes.Todo(rdr.GetInt32(0), rdr.GetString(1), rdr.GetBoolean(2))
+            : null;
+    }
+
+    public async Task&lt;bool&gt; RemoveAsync(string owner, int id)
+    {
+        await using var cmd = db.CreateCommand("Delete from todos where Id = $1 and owner = $2");
+        cmd.Parameters.AddWithValue(id);
+        cmd.Parameters.AddWithValue(owner);
+
+        return await cmd.ExecuteNonQueryAsync() &gt; 0;
+    }
+
+    public async Task&lt;List&lt;Classes.AdminTodo&gt;&gt; EveryoneAsync()
+    {
+        await using var cmd = db.CreateCommand("Select id, owner, title, done from todos ORDER BY id");
+        await using var rdr = await cmd.ExecuteReaderAsync();
+
+        var list = new List&lt;Classes.AdminTodo&gt;();
+
+        while (await rdr.ReadAsync())
+        {
+            list.Add(new Classes.AdminTodo(rdr.GetInt32(0), rdr.GetString(1), rdr.GetString(2), rdr.GetBoolean(3)));
+        }
+
+        return list;
+    }
+
+    public async Task&lt;Classes.Stats&gt; StatsAsync()
+    {
+        await using var cmd = db.CreateCommand(
+            "Select count(*), count(*) filter (where done), count(distinct owner) from todos");
+        await using var rdr = await cmd.ExecuteReaderAsync();
+        await rdr.ReadAsync();
+
+        return new Classes.Stats(rdr.GetInt32(0), rdr.GetInt32(1), rdr.GetInt32(2));
+    }
+}</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the store</summary><div><dl><dt><code>add column if not exists owner</code></dt><dd>Existing rows get an empty owner, so after the upgrade nobody sees the old todos. That is the safe failure. Decide deliberately what to do with them (assign them, or delete them); do not default them to an admin.</dd><dt><code>where owner = $1</code></dt><dd>The owner is part of the query, not a check after it. A todo that is not yours is not found. This is the fix for the object-level flaw in step 17.</dd><dt><code>where Id = $1 and owner = $2</code></dt><dd>The same for toggle and delete: one statement, so there is no gap between "check" and "change" for someone to slip through.</dd><dt><code>EveryoneAsync</code> and <code>StatsAsync</code></dt><dd>Only called from endpoints guarded by an admin or statistics policy. They are the only methods that do not filter by owner, and the names say so.</dd></dl></div></details>
+      <figure class="code"><figcaption>src/api/Program.cs (step 21)</figcaption><pre><code>using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Npgsql;
+using Todo.Api.Classes;
+using Todo.Api.Services;
+
+var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration.GetConnectionString("Todos")
+    ?? throw new InvalidOperationException(
+        "Set the connection string 'Todos' (environment variable ConnectionStrings__Todos).");
+
+var authority = builder.Configuration["Auth:Authority"]
+    ?? throw new InvalidOperationException(
+        "Set 'Auth:Authority' to the issuer address (environment variable Auth__Authority).");
+
+builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
+builder.Services.AddSingleton&lt;TodoStore&gt;();
+builder.Services.AddHealthChecks();
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(o =&gt;
+    {
+        o.Authority = authority;                  // where the keys and the issuer name come from
+        o.Audience = "todo-api";                  // tokens meant for another API are refused
+        o.MapInboundClaims = false;               // keep the claim names exactly as the token has them
+        o.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        o.TokenValidationParameters.ClockSkew = TimeSpan.FromSeconds(30);   // the default is 5 minutes
+        o.TokenValidationParameters.NameClaimType = "preferred_username";
+        o.TokenValidationParameters.RoleClaimType = "roles";
+    });
+
+builder.Services.AddAuthorizationBuilder()
+    // Every endpoint needs a signed-in caller unless it says AllowAnonymous.
+    .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
+    .AddPolicy("TodoUser", p =&gt; p.RequireRole("todo-user"))
+    .AddPolicy("TodoAdmin", p =&gt; p.RequireRole("todo-admin"))
+    .AddPolicy("Statistics", p =&gt; p.RequireRole("todo-admin", "todo-reporter"));
+
+var app = builder.Build();
+
+var store = app.Services.GetRequiredService&lt;TodoStore&gt;();
+_ = store.ConnectAsync(app.Lifetime.ApplicationStopping);
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapGet("/api/info", () =&gt; new
+{
+    Version = Environment.GetEnvironmentVariable("APP_Version") ?? "dev",
+    Host = Environment.MachineName
+}).AllowAnonymous();
+
+static string Owner(ClaimsPrincipal user) =&gt; user.FindFirstValue("sub")!;
+
+var todos = app.MapGroup("/api/todos").RequireAuthorization("TodoUser");
+
+todos.MapGet("/", (ClaimsPrincipal user, TodoStore store) =&gt; store.AllAsync(Owner(user)));
+
+todos.MapPost("/", async (NewTodo input, ClaimsPrincipal user, TodoStore store) =&gt;
+    string.IsNullOrWhiteSpace(input.Title)
+    ? Results.BadRequest(new { error = "Title is required." })
+    : Results.Created("/api/todos", await store.AddAsync(Owner(user), input.Title.Trim()))
+);
+
+todos.MapPut("/{id:int}/toggle", async (int id, ClaimsPrincipal user, TodoStore store) =&gt;
+    await store.ToggleAsync(Owner(user), id) is { } todo ? Results.Ok(todo) : Results.NotFound());
+
+todos.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, TodoStore store) =&gt;
+    await store.RemoveAsync(Owner(user), id) ? Results.NoContent() : Results.NotFound());
+
+var admin = app.MapGroup("/api/admin");
+
+admin.MapGet("/todos", (TodoStore store) =&gt; store.EveryoneAsync()).RequireAuthorization("TodoAdmin");
+admin.MapGet("/stats", (TodoStore store) =&gt; store.StatsAsync()).RequireAuthorization("Statistics");
+
+app.MapHealthChecks("/healthz").AllowAnonymous();
+
+app.MapGet("/readyz", (TodoStore store) =&gt; store.Ready ? Results.Text("Ready") : Results.StatusCode(503)).AllowAnonymous();
+
+app.Run();</code></pre></figure>
+      <details class="lbl"><summary>Explained: policies and the owner</summary><div><dl><dt><code>AddPolicy("TodoUser", …RequireRole("todo-user"))</code></dt><dd>A named rule. <code>RequireRole</code> reads the roles from the claim type you set in step 20. A signed-in caller without the role gets <code>403</code>.</dd><dt><code>MapGroup(...).RequireAuthorization("TodoUser")</code></dt><dd>One line protects the whole group, including endpoints you add later.</dd><dt><code>Owner(user)</code></dt><dd>Reads <code>sub</code> from the <em>validated</em> principal. Never from the body, a header or the URL (step 17).</dd><dt><code>"Statistics"</code> with two roles</dt><dd><code>RequireRole("a", "b")</code> means <em>either</em>. Admins and the reporter machine may read the numbers.</dd><dt>The reporter and <code>/api/todos</code></dt><dd>The reporter has the role <code>todo-reporter</code>, not <code>todo-user</code>, so the group policy answers <code>403</code>. One more reason to give each caller its own role.</dd></dl></div></details>
+      <div class="callout"><p><strong>Roles are as old as the token.</strong> If Bob's admin role is removed in Keycloak, tokens already issued still carry it until they expire. A five-minute lifetime keeps that window short; step 26 covers the options when five minutes is too long.</p></div>
+      <h3>Try it</h3>
+      <p>Get tokens for Alice and Bob, post a todo as each, and walk the table. The most instructive row is the third:</p>
+      <figure class="code"><figcaption>bash: Alice tries to toggle Bob's todo</figcaption><pre><code>curl -s -o /dev/null -w "%{http_code}\n" -X PUT \
+  -H "Authorization: Bearer $ALICE" http://localhost:5000/api/todos/2/toggle
+# 404</code></pre></figure>
+      <figure class="anim" aria-label="Animated diagram: the same request from Alice, Bob and nobody">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="The same call to list todos is made by Alice, by Bob and by an anonymous caller. Anonymous gets 401. Alice sees only her own todos. Bob, who is also an admin, sees only his own on the todos route and everyone on the admin route.">
+<rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 70 H320"/><path class="a-route" data-k="r2" d="M200 150 H320"/><path class="a-route" data-k="r3" d="M200 230 H320"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="anon"><rect x="24" y="36" width="176" height="70" rx="8"/><text class="a-t" x="112" y="61">Nobody</text><text class="a-s" x="112" y="81">no token</text></g>
+<g class="a-node" data-k="alice"><rect x="24" y="116" width="176" height="70" rx="8"/><text class="a-t" x="112" y="141">Alice</text><text class="a-s" x="112" y="161">todo-user</text></g>
+<g class="a-node" data-k="bob"><rect x="24" y="196" width="176" height="70" rx="8"/><text class="a-t" x="112" y="221">Bob</text><text class="a-s" x="112" y="241">todo-user + todo-admin</text></g>
+<g class="a-node" data-k="api"><rect x="320" y="60" width="160" height="180" rx="8"/><text class="a-t" x="400" y="130">API</text><text class="a-s" x="400" y="150">GET /api/todos</text><text class="a-s" x="400" y="168">owner = sub</text></g>
+<text class="a-badge bad" data-k="a1" x="620" y="76">401: no token</text><text class="a-badge good" data-k="a2" x="620" y="156">200: her own todos</text><text class="a-badge good" data-k="a3" x="620" y="236">200: his own todos</text><text class="a-badge good" data-k="a4" x="620" y="276">/api/admin/todos: everyone's</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "anon r1 api a1", "bad": "anon a1", "off": "alice bob r2 r3 a2 a3 a4", "path": [[206, 70], [314, 70]], "text": "<b>Nobody.</b> No token, so the fallback policy answers <code>401</code> before any code runs."},
+          {"on": "alice r2 api a2", "good": "alice a2", "off": "anon bob r1 r3 a1 a3 a4", "path": [[206, 150], [314, 150]], "text": "<b>Alice.</b> The query adds <code>where owner = sub</code>, with <code>sub</code> from her validated token. She sees her own todos and nothing else."},
+          {"on": "bob r3 api a3", "good": "bob a3", "off": "anon alice r1 r2 a1 a2 a4", "path": [[206, 230], [314, 230]], "text": "<b>Bob on the same route.</b> Being an admin does not change <code>/api/todos</code>: it still returns only his own."},
+          {"on": "bob api a4", "good": "bob a4", "off": "anon alice r1 r2 r3 a1 a2 a3", "text": "<b>Bob as admin.</b> The admin route has its own policy, <code>todo-admin</code>. It is a different endpoint, and the only place where everyone's todos are returned."}
+        ]</script>
+      </figure>
+      <h3>Practice</h3>
+      <div data-ex="a21-table"></div>
+      <div data-ex="a21-owner"></div>
+      <div data-ex="a21-role"></div>
+      <div data-ex="a21-admin"></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Write the access table first; then name the policies and put the ownership rule in the query.</li>
+        <li>The owner is the token's <code>sub</code>, taken from the validated principal and written into every select, update and delete.</li>
+        <li>Someone else's object answers 404, an unauthorized role answers 403 and no token answers 401.</li>
+        <li>A role in a token is as old as the token. An admin role should open admin endpoints, not every object.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 22 ============ -->
+    <section class="step" id="bff" data-step data-level="Expert">
+      <div class="step-head"><span class="num">22</span><h2>Sign in from the Angular UI (BFF)</h2><span class="lvl-chip">Expert</span></div>
+      <p class="goal"><b>Goal:</b> sign in from the browser without a token ever reaching it, and explain the three patterns for a browser app.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>So far the callers were <code>curl</code> and a machine. People use a browser, and a browser is the most hostile place to keep a token. This step builds the pattern that RFC 10017 puts first for browser-based apps. It builds on steps 03 (cookies, CSRF), 12 (the code flow) and 20.</p>
+      </div>
+      <div class="what-is"><h4>What is it? A backend for frontend (BFF)</h4><dl><dt>What it is</dt><dd>A small server that sits beside the browser app and does the OAuth work on its behalf. It runs the code flow, keeps the tokens, and gives the browser a session cookie. In this lesson it is the Todo API itself.</dd><dt>The problem it solves</dt><dd>A page that holds a token can lose it to any script that runs in the page (XSS, a compromised dependency). A page that holds only an HttpOnly cookie has nothing to lose that script can carry away.</dd><dt>Everyday comparison</dt><dd>A concierge. You do not carry the hotel master key around; you ask the concierge, who holds it and recognises you.</dd><dt>What it is not</dt><dd>Not a way to skip authorization: the API still checks roles and owners. And not a stronger cookie: the cookie is still a bearer credential for this site, which is why SameSite and the CSRF header exist.</dd><dt>Where you meet it</dt><dd>Microsoft calls it a web app with a cookie session, Duende ships a BFF library, and RFC 10017 names it the first-choice pattern.</dd></dl></div>
+      <h3>Three patterns</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Pattern (RFC 10017)</th><th>Tokens live</th><th>What XSS can do</th><th>Use it when</th></tr></thead>
+        <tbody>
+          <tr><td><b>1. BFF</b> (a backend that is the OAuth client)</td><td>On the server</td><td>Make requests while the page is open. Nothing to carry away.</td><td>The default. Required for anything with personal data.</td></tr>
+          <tr><td><b>2. Token-mediating backend</b></td><td>Access token in the browser, refresh token on the server</td><td>Steal the short-lived access token.</td><td>The browser must call other APIs directly.</td></tr>
+          <tr><td><b>3. Browser-based OAuth client</b></td><td>In the browser</td><td>Steal tokens, including refresh tokens, and use them from elsewhere.</td><td>Only where a server is truly impossible, and with the extra care of the RFC.</td></tr>
+        </tbody>
+      </table></div>
+      <figure class="anim" aria-label="Animated diagram: where the tokens live in each browser pattern and what stolen script can reach">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="In a browser app that holds its own tokens, malicious script on the page can read the access token and use it from anywhere. In a backend for frontend, the tokens stay on the server and the browser holds only an HttpOnly session cookie that script cannot read.">
+<rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 80 H340"/><path class="a-route" data-k="r2" d="M200 220 H340"/><path class="a-route" data-k="r3" d="M540 220 H590"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="spa"><rect x="24" y="40" width="176" height="80" rx="8"/><text class="a-t" x="112" y="70">Tokens in the browser</text><text class="a-s" x="112" y="90">access token in memory</text></g>
+<g class="a-node" data-k="bff"><rect x="24" y="180" width="176" height="80" rx="8"/><text class="a-t" x="112" y="210">Backend for frontend</text><text class="a-s" x="112" y="230">HttpOnly cookie only</text></g>
+<g class="a-node" data-k="evil"><rect x="340" y="40" width="200" height="80" rx="8"/><text class="a-t" x="440" y="70">Script on the page</text><text class="a-s" x="440" y="90">XSS: injected code</text></g>
+<g class="a-node" data-k="api"><rect x="340" y="180" width="200" height="80" rx="8"/><text class="a-t" x="440" y="210">BFF holds tokens</text><text class="a-s" x="440" y="230">server side</text></g>
+<g class="a-node" data-k="idp"><rect x="590" y="180" width="146" height="80" rx="8"/><text class="a-t" x="663" y="225">Keycloak</text></g>
+<text class="a-badge bad" data-k="steal" x="440" y="150">reads and sends the token away</text><text class="a-badge good" data-k="safe" x="440" y="296">cannot read the cookie or the tokens</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "spa", "off": "r1 r2 r3 bff evil api idp steal safe", "text": "<b>Pattern 3, tokens in the browser.</b> The app gets tokens itself and keeps them in memory or storage. Simple, and the least safe."},
+          {"on": "spa r1 evil steal", "bad": "spa evil steal", "off": "r2 r3 bff api idp safe", "path": [[206, 80], [334, 80]], "text": "<b>One injected script is enough.</b> Anything running in the page can read the token, send it to another server and use it from there until it expires."},
+          {"on": "bff", "off": "r1 r2 r3 spa evil api idp steal safe", "text": "<b>Pattern 1, backend for frontend.</b> The browser holds only a session cookie. The tokens never reach it."},
+          {"on": "bff r2 api r3 idp", "off": "r1 spa evil steal safe", "path": [[206, 220], [334, 220]], "text": "<b>The server does the OAuth work.</b> It runs the code flow with Keycloak, keeps the tokens, and answers the browser's calls with the cookie."},
+          {"on": "bff evil safe", "good": "bff safe", "off": "r1 r2 r3 spa api idp steal", "text": "<b>The same injected script.</b> It cannot read an HttpOnly cookie, and there is no token in the page. It can still make requests while the page is open, so it must still be kept out, but there is nothing to carry away."}
+        ]</script>
+      </figure>
+      <h3>The API becomes the OAuth client</h3>
+      <p>One new package, one client secret kept out of the repository, and three kinds of change in <code>Program.cs</code>: two sign-in schemes (a cookie and OpenID Connect) behind a selector so the same endpoints accept a browser cookie <em>or</em> a machine's bearer token, a header check for cookie requests that change data, and the four <code>/api/auth</code> endpoints.</p>
+      <figure class="code"><figcaption>bash: in src/api/</figcaption><pre><code>dotnet add package Microsoft.AspNetCore.Authentication.OpenIdConnect --version 10.0.13
+dotnet user-secrets init
+dotnet user-secrets set "Auth:ClientSecret" "todo-web-practice-secret"</code></pre></figure>
+      <figure class="code"><figcaption>src/api/Todo.Api.csproj (step 22)</figcaption><pre><code>&lt;Project Sdk="Microsoft.NET.Sdk.Web"&gt;
+
+  &lt;PropertyGroup&gt;
+    &lt;TargetFramework&gt;net10.0&lt;/TargetFramework&gt;
+    &lt;Nullable&gt;enable&lt;/Nullable&gt;
+    &lt;ImplicitUsings&gt;enable&lt;/ImplicitUsings&gt;
+  &lt;/PropertyGroup&gt;
+
+  &lt;ItemGroup&gt;
+    &lt;PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.13" /&gt;
+    &lt;PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.13" /&gt;
+    &lt;PackageReference Include="Npgsql" Version="10.0.3" /&gt;
+  &lt;/ItemGroup&gt;
+
+&lt;/Project&gt;</code></pre></figure>
+      <figure class="code"><figcaption>src/api/Program.cs (step 22)</figcaption><pre><code>using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
+using Npgsql;
+using Todo.Api.Classes;
+using Todo.Api.Services;
+
+var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration.GetConnectionString("Todos")
+    ?? throw new InvalidOperationException(
+        "Set the connection string 'Todos' (environment variable ConnectionStrings__Todos).");
+
+var authority = builder.Configuration["Auth:Authority"]
+    ?? throw new InvalidOperationException(
+        "Set 'Auth:Authority' to the issuer address (environment variable Auth__Authority).");
+
+builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
+builder.Services.AddSingleton&lt;TodoStore&gt;();
+builder.Services.AddHealthChecks();
+
+builder.Services
+    .AddAuthentication(o =&gt;
+    {
+        o.DefaultScheme = "smart";
+        o.DefaultChallengeScheme = "smart";
+    })
+    // One front door: a request with a bearer token goes to JwtBearer, anything else to the session cookie.
+    .AddPolicyScheme("smart", null, o =&gt; o.ForwardDefaultSelector = ctx =&gt;
+        ctx.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+            ? JwtBearerDefaults.AuthenticationScheme
+            : CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddJwtBearer(o =&gt;
+    {
+        o.Authority = authority;                  // where the keys and the issuer name come from
+        o.Audience = "todo-api";                  // tokens meant for another API are refused
+        o.MapInboundClaims = false;               // keep the claim names exactly as the token has them
+        o.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        o.TokenValidationParameters.ClockSkew = TimeSpan.FromSeconds(30);   // the default is 5 minutes
+        o.TokenValidationParameters.NameClaimType = "preferred_username";
+        o.TokenValidationParameters.RoleClaimType = "roles";
+    })
+    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, o =&gt;
+    {
+        o.Cookie.Name = "__Host-todo";            // the __Host- prefix: Secure, Path=/, no Domain
+        o.Cookie.HttpOnly = true;                 // scripts cannot read it
+        o.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        o.Cookie.SameSite = SameSiteMode.Strict;  // never sent from another site
+        o.ExpireTimeSpan = TimeSpan.FromHours(8);
+        // An API answers 401 and 403. A redirect to a sign-in page is for browsers navigating, not for fetch.
+        o.Events.OnRedirectToLogin = ctx =&gt; { ctx.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
+        o.Events.OnRedirectToAccessDenied = ctx =&gt; { ctx.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
+    })
+    .AddOpenIdConnect("oidc", o =&gt;
+    {
+        o.Authority = authority;
+        o.ClientId = "todo-web";
+        o.ClientSecret = builder.Configuration["Auth:ClientSecret"];   // user-secrets, never the repository
+        o.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        o.ResponseType = "code";
+        o.ResponseMode = "query";
+        o.UsePkce = true;
+        o.Scope.Clear();
+        o.Scope.Add("openid");
+        o.Scope.Add("profile");
+        o.SaveTokens = false;                     // the browser's session needs the person, not the tokens
+        o.MapInboundClaims = false;
+        o.CallbackPath = "/api/auth/callback";
+        o.SignedOutCallbackPath = "/api/auth/signed-out";
+        o.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        o.TokenValidationParameters.NameClaimType = "preferred_username";
+        o.TokenValidationParameters.RoleClaimType = "roles";
+    });
+
+builder.Services.AddAuthorizationBuilder()
+    // Every endpoint needs a signed-in caller unless it says AllowAnonymous.
+    .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
+    .AddPolicy("TodoUser", p =&gt; p.RequireRole("todo-user"))
+    .AddPolicy("TodoAdmin", p =&gt; p.RequireRole("todo-admin"))
+    .AddPolicy("Statistics", p =&gt; p.RequireRole("todo-admin", "todo-reporter"));
+
+var app = builder.Build();
+
+var store = app.Services.GetRequiredService&lt;TodoStore&gt;();
+_ = store.ConnectAsync(app.Lifetime.ApplicationStopping);
+
+// A page on another site can make the browser send the cookie, but it cannot add this header.
+app.Use(async (ctx, next) =&gt;
+{
+    var changes = !HttpMethods.IsGet(ctx.Request.Method) &amp;&amp; !HttpMethods.IsHead(ctx.Request.Method)
+                  &amp;&amp; !HttpMethods.IsOptions(ctx.Request.Method);
+    var viaCookie = ctx.Request.Cookies.ContainsKey("__Host-todo");
+    if (changes &amp;&amp; viaCookie &amp;&amp; ctx.Request.Path != "/api/auth/logout" &amp;&amp; !ctx.Request.Headers.ContainsKey("X-Todo-Csrf"))
+    {
+        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+    await next();
+});
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+var auth = app.MapGroup("/api/auth");
+
+auth.MapGet("/login", (string? returnUrl) =&gt;
+    Results.Challenge(
+        new AuthenticationProperties { RedirectUri = Uri.IsWellFormedUriString(returnUrl, UriKind.Relative) &amp;&amp; returnUrl!.StartsWith('/') &amp;&amp; !returnUrl.StartsWith("//") ? returnUrl : "/" },
+        ["oidc"])).AllowAnonymous();
+
+auth.MapGet("/me", (ClaimsPrincipal user) =&gt; new
+{
+    Name = user.Identity!.Name,
+    Sub = user.FindFirstValue("sub"),
+    Roles = user.FindAll("roles").Select(c =&gt; c.Value)
+});
+
+auth.MapPost("/logout", () =&gt; Results.SignOut(
+    new AuthenticationProperties { RedirectUri = "/" },
+    [CookieAuthenticationDefaults.AuthenticationScheme, "oidc"])).AllowAnonymous();
+
+app.MapGet("/api/info", () =&gt; new
+{
+    Version = Environment.GetEnvironmentVariable("APP_Version") ?? "dev",
+    Host = Environment.MachineName
+}).AllowAnonymous();
+
+static string Owner(ClaimsPrincipal user) =&gt; user.FindFirstValue("sub")!;
+
+var todos = app.MapGroup("/api/todos").RequireAuthorization("TodoUser");
+
+todos.MapGet("/", (ClaimsPrincipal user, TodoStore store) =&gt; store.AllAsync(Owner(user)));
+
+todos.MapPost("/", async (NewTodo input, ClaimsPrincipal user, TodoStore store) =&gt;
+    string.IsNullOrWhiteSpace(input.Title)
+    ? Results.BadRequest(new { error = "Title is required." })
+    : Results.Created("/api/todos", await store.AddAsync(Owner(user), input.Title.Trim()))
+);
+
+todos.MapPut("/{id:int}/toggle", async (int id, ClaimsPrincipal user, TodoStore store) =&gt;
+    await store.ToggleAsync(Owner(user), id) is { } todo ? Results.Ok(todo) : Results.NotFound());
+
+todos.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, TodoStore store) =&gt;
+    await store.RemoveAsync(Owner(user), id) ? Results.NoContent() : Results.NotFound());
+
+var admin = app.MapGroup("/api/admin");
+
+admin.MapGet("/todos", (TodoStore store) =&gt; store.EveryoneAsync()).RequireAuthorization("TodoAdmin");
+admin.MapGet("/stats", (TodoStore store) =&gt; store.StatsAsync()).RequireAuthorization("Statistics");
+
+app.MapHealthChecks("/healthz").AllowAnonymous();
+
+app.MapGet("/readyz", (TodoStore store) =&gt; store.Ready ? Results.Text("Ready") : Results.StatusCode(503)).AllowAnonymous();
+
+app.Run();</code></pre></figure>
+      <details class="lbl"><summary>Explained: the sign-in parts</summary><div><dl><dt><code>AddPolicyScheme("smart", …)</code></dt><dd>One name for "authenticate this request". If the <code>Authorization</code> header starts with <code>Bearer</code> it uses JwtBearer, otherwise the cookie. Machines and browsers share the same endpoints and the same policies.</dd><dt><code>Cookie.Name = "__Host-todo"</code></dt><dd>The <code>__Host-</code> prefix makes the browser accept the cookie only if it is <code>Secure</code>, has <code>Path=/</code> and no <code>Domain</code>, so a sibling sub-domain cannot overwrite it (step 03).</dd><dt><code>HttpOnly</code>, <code>SameSite = Strict</code></dt><dd>Script cannot read it, and the browser does not send it on requests that start from another site. RFC 10017 recommends <code>Strict</code> for a BFF.</dd><dt><code>OnRedirectToLogin</code> returns 401</dt><dd>For a fetch, a redirect to a login page is useless: the script would receive HTML. The API answers <code>401</code> and the page decides what to show.</dd><dt><code>AddOpenIdConnect</code></dt><dd><code>ResponseType = "code"</code> with <code>UsePkce = true</code>: the code flow with PKCE (step 12), using the client secret as well. <code>ResponseMode = "query"</code> returns the code in the address; <code>CallbackPath</code> is where Keycloak sends the browser back, and it must match <code>redirectUris</code> in the realm.</dd><dt><code>SaveTokens = false</code></dt><dd>The cookie holds the person (name, <code>sub</code>, roles), not the tokens. The API does not call other APIs as the user, so it has no use for them, and the cookie stays small.</dd><dt>The <code>X-Todo-Csrf</code> check</dt><dd>A cookie-authenticated request that changes data must carry this header. A page on another site can make the browser <em>send</em> the cookie, but it cannot add a custom header without a CORS preflight that this API does not allow.</dd><dt><code>/api/auth/login</code></dt><dd>A GET that challenges the OpenID Connect scheme. The <code>returnUrl</code> is accepted only if it is a relative path on this site, so the endpoint cannot be used as an open redirect.</dd><dt><code>/api/auth/me</code></dt><dd>Returns who is signed in, from the cookie. The Angular app calls it at start-up: <code>200</code> means signed in, <code>401</code> means show the sign-in link.</dd><dt><code>/api/auth/logout</code></dt><dd>POST, signs out of the cookie scheme and of Keycloak. It is exempt from the header check because a browser form cannot add one; <code>SameSite=Strict</code> already keeps another site from triggering it.</dd></dl></div></details>
+      <h3>The Angular side</h3>
+      <p>Four small changes in <code>src/ui</code>. There is no OAuth library and no token anywhere in the UI code: signing in is a link, signing out is a form post, and everything else is the <code>HttpClient</code> you already have.</p>
+      <figure class="code"><figcaption>src/ui/src/app/csrf.interceptor.ts</figcaption><pre><code>import { HttpInterceptorFn } from '@angular/common/http';
+
+// The API refuses a cookie-authenticated change that lacks this header. A page on another site
+// can make the browser send the cookie, but it cannot add a header like this one.
+export const csrfInterceptor: HttpInterceptorFn = (req, next) =&gt;
+  next(req.url.startsWith('/api/') &amp;&amp; req.method !== 'GET'
+    ? req.clone({ setHeaders: { 'X-Todo-Csrf': '1' } })
+    : req);</code></pre></figure>
+      <figure class="code"><figcaption>src/ui/src/app/app.config.ts</figcaption><pre><code>import { ApplicationConfig, provideZonelessChangeDetection } from '@angular/core';
+import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
+import { csrfInterceptor } from './csrf.interceptor';
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideZonelessChangeDetection(),
+    provideHttpClient(withFetch(), withInterceptors([csrfInterceptor])),
+  ],
+};</code></pre></figure>
+      <figure class="code"><figcaption>src/ui/src/app/app.ts</figcaption><pre><code>import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { FormsModule } from '@angular/forms';
+
+interface Todo { id: number; title: string; done: boolean; }
+interface Info { version: string; host: string; }
+interface Me { name: string; sub: string; roles: string[]; }
+
+@Component({
+  selector: 'app-root',
+  imports: [FormsModule],
+  templateUrl: './app.html',
+  styleUrl: './app.css',
+})
+export class App implements OnInit {
+  private readonly http = inject(HttpClient);
+
+  readonly todos = signal&lt;Todo[]&gt;([]);
+  readonly info = signal&lt;Info | null&gt;(null);
+  readonly newTitle = signal('');
+  readonly me = signal&lt;Me | null&gt;(null);
+  // Only decides what to show. The server decides what is allowed.
+  readonly isAdmin = computed(() =&gt; this.me()?.roles.includes('todo-admin') ?? false);
+
+  ngOnInit(): void {
+    this.http.get&lt;Info&gt;('/api/info').subscribe(i =&gt; this.info.set(i));
+    // 401 here just means "not signed in". The session cookie is invisible to this code.
+    this.http.get&lt;Me&gt;('/api/auth/me').subscribe({
+      next: m =&gt; { this.me.set(m); this.load(); },
+      error: () =&gt; this.me.set(null),
+    });
+  }
+
+  load(): void {
+    this.http.get&lt;Todo[]&gt;('/api/todos').subscribe(t =&gt; this.todos.set(t));
+  }
+
+  add(): void {
+    const title = this.newTitle().trim();
+    if (!title) return;
+    this.http.post&lt;Todo&gt;('/api/todos', { title }).subscribe(() =&gt; {
+      this.newTitle.set('');
+      this.load();
+    });
+  }
+
+  toggle(todo: Todo): void {
+    this.http.put(`/api/todos/${todo.id}/toggle`, {}).subscribe(() =&gt; this.load());
+  }
+
+  remove(todo: Todo): void {
+    this.http.delete(`/api/todos/${todo.id}`).subscribe(() =&gt; this.load());
+  }
+}</code></pre></figure>
+      <figure class="code"><figcaption>src/ui/src/app/app.html</figcaption><pre><code>&lt;main&gt;
+  &lt;h1&gt;Todo&lt;/h1&gt;
+
+  @if (info(); as i) {
+    &lt;p class="info"&gt;Version &lt;b&gt;{{ i.version }}&lt;/b&gt; · answered by &lt;code&gt;{{ i.host }}&lt;/code&gt;&lt;/p&gt;
+  }
+
+  @if (me(); as m) {
+    &lt;div class="who"&gt;
+      Signed in as &lt;b&gt;{{ m.name }}&lt;/b&gt;@if (isAdmin()) { &lt;span class="badge"&gt;admin&lt;/span&gt; }
+      &lt;!-- A real form post: the browser follows the redirect to the identity provider. --&gt;
+      &lt;form method="post" action="/api/auth/logout" class="signout"&gt;&lt;button type="submit"&gt;Sign out&lt;/button&gt;&lt;/form&gt;
+    &lt;/div&gt;
+  } @else {
+    &lt;p class="who"&gt;Please &lt;a href="/api/auth/login?returnUrl=/"&gt;sign in&lt;/a&gt; to see your todos.&lt;/p&gt;
+  }
+
+  @if (me()) {
+    &lt;form (ngSubmit)="add()"&gt;
+      &lt;input name="title" [ngModel]="newTitle()" (ngModelChange)="newTitle.set($event)"
+             placeholder="What needs doing?" aria-label="New todo" /&gt;
+      &lt;button type="submit"&gt;Add&lt;/button&gt;
+    &lt;/form&gt;
+
+    &lt;ul&gt;
+      @for (t of todos(); track t.id) {
+        &lt;li [class.done]="t.done"&gt;
+          &lt;label&gt;&lt;input type="checkbox" [checked]="t.done" (change)="toggle(t)" /&gt; {{ t.title }}&lt;/label&gt;
+          &lt;button (click)="remove(t)" aria-label="Delete"&gt;✕&lt;/button&gt;
+        &lt;/li&gt;
+      } @empty {
+        &lt;li class="empty"&gt;Nothing to do yet.&lt;/li&gt;
+      }
+    &lt;/ul&gt;
+  }
+&lt;/main&gt;</code></pre></figure>
+      <ul>
+        <li><b>Sign in is a link.</b> <code>&lt;a href="/api/auth/login"&gt;</code> makes the browser <em>navigate</em>, so it can follow the redirects to Keycloak and back. A background <code>fetch</code> cannot: the identity provider's pages are not meant to be read by script, and a cross-origin redirect fails.</li>
+        <li><b>Sign out is a form post</b>, for the same reason.</li>
+        <li><b><code>isAdmin()</code> only decides what to show.</b> Hiding a button is convenience. The server refuses the call anyway (step 17).</li>
+        <li><b>The dev server forwards <code>/api</code> to the API</b> (<code>proxy.conf.json</code> already does), so the browser sees one origin, <code>localhost:4200</code>, and the cookie is first-party. The callback address in the realm file is on that origin.</li>
+      </ul>
+      <div class="callout"><p><strong>Observed in Chromium on <code>http://localhost</code>.</strong> The <code>__Host-todo</code> cookie with <code>Secure</code> is accepted over plain HTTP on <code>localhost</code>, because browsers treat it as a secure context. On any other host name the cookie would be dropped over HTTP, which is the point of the prefix. Signing out ends at Keycloak's own page asking to confirm, because the cookie does not hold an ID token to prove who is leaving; storing it (<code>SaveTokens</code>) would make the logout seamless at the cost of a bigger cookie.</p></div>
+      <h3>The sign-in, message by message</h3>
+
+      <figure class="anim" aria-label="Animated diagram: signing in through the backend for frontend">
+        <div class="anim-stage"><svg viewBox="0 0 760 330" role="img" aria-label="The browser asks the API to log in. The API redirects to Keycloak with a state and a PKCE challenge. The person signs in at Keycloak. Keycloak redirects back to the API callback with a code. The API exchanges the code for tokens, creates the session cookie and redirects to the app.">
+<rect class="a-zone" x="8" y="8" width="744" height="314" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 90 H300"/><path class="a-route" data-k="r2" d="M450 90 H560"/><path class="a-route" data-k="r3" d="M635 150 V200"/><path class="a-route" data-k="r4" d="M300 240 H200"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="br"><rect x="24" y="50" width="176" height="110" rx="8"/><text class="a-t" x="112" y="85">Browser</text><text class="a-s" x="112" y="105">Angular app</text><text class="a-s" x="112" y="123">cookie after step 5</text></g>
+<g class="a-node" data-k="api"><rect x="300" y="50" width="150" height="110" rx="8"/><text class="a-t" x="375" y="95">API (BFF)</text><text class="a-s" x="375" y="115">/api/auth/*</text></g>
+<g class="a-node" data-k="kc"><rect x="560" y="50" width="176" height="100" rx="8"/><text class="a-t" x="648" y="90">Keycloak</text><text class="a-s" x="648" y="110">login page</text></g>
+<g class="a-node" data-k="tok"><rect x="460" y="200" width="276" height="70" rx="8"/><text class="a-t" x="598" y="225">Token request</text><text class="a-s" x="598" y="245">code + verifier + secret</text></g>
+<g class="a-node" data-k="ck"><rect x="24" y="200" width="176" height="70" rx="8"/><text class="a-t" x="112" y="225">Set-Cookie</text><text class="a-s" x="112" y="245">__Host-todo</text></g>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "br r1 api", "off": "r2 r3 r4 kc tok ck", "path": [[206, 90], [294, 90]], "text": "<b>1. Sign in.</b> The page links to <code>/api/auth/login</code>. It is a navigation, not a background request."},
+          {"on": "api r2 kc", "off": "r1 r3 r4 br tok ck", "path": [[456, 90], [554, 90]], "text": "<b>2. Redirect to Keycloak.</b> The API makes <code>state</code>, <code>nonce</code> and a PKCE challenge, keeps the secret parts in short-lived cookies, and sends the browser to the authorization endpoint."},
+          {"on": "kc", "off": "r1 r2 r3 r4 br api tok ck", "text": "<b>3. The person signs in.</b> Password, passkey or Google. The app never sees any of it."},
+          {"on": "kc api r2", "off": "r1 r3 r4 br tok ck", "path": [[554, 90], [456, 90]], "text": "<b>4. Back with a code.</b> Keycloak redirects the browser to <code>/api/auth/callback?code=…&amp;state=…</code>. The code is one-time and short-lived."},
+          {"on": "api r3 tok", "off": "r1 r2 r4 br kc ck", "path": [[635, 150], [635, 196]], "text": "<b>5. The API redeems it.</b> It posts the code, the PKCE verifier and its client secret to the token endpoint, and checks the ID token."},
+          {"on": "api r4 ck br", "good": "ck", "off": "r1 r2 r3 kc tok", "path": [[294, 240], [206, 240]], "text": "<b>6. A session.</b> The API sets an HttpOnly, Secure, SameSite=Strict cookie and redirects to the app. The tokens stay on the server side."}
+        ]</script>
+      </figure>
+      <h3>Behind a proxy or a gateway</h3>
+      <p>The callback address is built from the request's scheme and host. Behind the dev server's proxy the host header is kept, so it is right. Behind a gateway or load balancer, forward the original host and scheme (<code>X-Forwarded-Host</code>, <code>X-Forwarded-Proto</code>) and call <code>UseForwardedHeaders</code>, or the callback address will be the internal one and Keycloak will refuse it. In the cluster the issuer address also has to be one that works from <em>inside</em> a pod and from the browser, and two API pods must share the key that protects the cookie (ASP.NET Core data protection).</p>
+      <h3>Practice</h3>
+      <div data-ex="a22-patterns"></div>
+      <div data-ex="a22-xss"></div>
+      <div data-ex="a22-csrf"></div>
+      <div data-ex="a22-login"></div>
+      <div data-ex="a22-cookie"></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A browser app can run the code flow itself, use a token-mediating backend, or let a BFF hold the tokens. RFC 10017 puts the BFF first.</li>
+        <li>The BFF is the OAuth client: it keeps the tokens and gives the browser an HttpOnly, Secure, SameSite=Strict, <code>__Host-</code> cookie.</li>
+        <li>Cookie requests that change data need a custom header, so another site cannot forge them. Sign-in and sign-out are navigations, not <code>fetch</code> calls.</li>
+        <li>The UI code only decides what to show. The server enforces. Behind a gateway, forward the host and scheme.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 23 ============ -->
+    <section class="step" id="google-keycloak" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">23</span><h2>Add "Log in with Google" to the app</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> let people sign in with Google without changing a line of application code.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Step 15 did the Google flow by hand. In a real app you rarely let every service talk to Google: you add Google to the identity provider, and the apps keep trusting one issuer. It builds on steps 14, 15 and 19. It needs a Google account and the OAuth client you made in step 15.</p>
+      </div>
+      <div class="what-is"><h4>What is it? Identity brokering</h4><dl><dt>What it is</dt><dd>An identity provider that lets people sign in with <em>another</em> identity provider (Google, a company directory, GitHub) and then issues <b>its own</b> tokens to your apps.</dd><dt>The problem it solves</dt><dd>Each app would otherwise implement Google, then Microsoft, then the customer's SSO. With a broker, apps implement one thing, and adding a provider is configuration.</dd><dt>Everyday comparison</dt><dd>A currency exchange desk: you hand in foreign money and receive local notes that every shop accepts.</dd><dt>What it is not</dt><dd>Not the same as "just use Google in the app". The app would then hold Google's tokens, Google's claims and Google's idea of roles. Here the app sees Keycloak's token and Keycloak's roles.</dd><dt>Where you meet it</dt><dd>Keycloak identity providers, Entra External ID, Auth0 connections.</dd></dl></div>
+      <h3>Add Google to the realm</h3>
+      <ol>
+        <li>In the Keycloak admin console choose the <code>todo</code> realm, <b>Identity providers</b>, <b>Add provider</b>, <b>Google</b>.</li>
+        <li>Copy the <b>Redirect URI</b> it shows. For this realm it is <code>http://localhost:8180/realms/todo/broker/google/endpoint</code>.</li>
+        <li>In the Google Auth Platform console (step 15), open your web client and add that address to its <b>Authorized redirect URIs</b>.</li>
+        <li>Back in Keycloak, paste the client ID and secret of step 15, and save.</li>
+      </ol>
+      <p>The same provider as it is stored in the realm, if you prefer to keep it in the file:</p>
+      <figure class="code"><figcaption>infra/keycloak/google-idp.json (add to "identityProviders" in todo-realm.json)</figcaption><pre><code>{
+  "alias": "google",
+  "providerId": "google",
+  "enabled": true,
+  "trustEmail": false,
+  "firstBrokerLoginFlowAlias": "first broker login",
+  "config": {
+    "clientId": "123456789-example.apps.googleusercontent.com",
+    "clientSecret": "GOCSPX-your-own-secret",
+    "defaultScope": "openid profile email",
+    "syncMode": "IMPORT"
+  }
+}</code></pre></figure>
+      <p>The Keycloak login page then shows a <b>Google</b> button under the password form. When Keycloak sends the person to Google, the authorize request goes to <code>https://accounts.google.com/o/oauth2/v2/auth</code> with <code>redirect_uri</code> set to the address above and <code>scope=openid profile email</code>; that is the request you built by hand in step 15, made by Keycloak.</p>
+      <h3>Decisions that are yours</h3>
+      <ul>
+        <li><b>What role does a new Google user get?</b> A person who signs in with Google for the first time becomes a Keycloak user with <em>no</em> role you gave them. Decide it: give <code>todo-user</code> as a default role, or leave them without and let an admin approve. Granting by email domain is a policy, and it must use the verified email, never a name.</li>
+        <li><b>Trust Email.</b> Off by default, and for a reason: if on, Keycloak treats the email address from Google as verified. Turn it on only for a provider whose email you trust.</li>
+        <li><b>Account linking by email.</b> The default first login flow can link a Google sign-in to an existing local user with the same email. Done carelessly this is an account takeover: if the other provider does not verify email addresses, anyone can claim any address. Keycloak 26.8.1 fixed a wrong-account linking flaw in the brokering code, which is a good reason to stay current.</li>
+        <li><b>What to key on.</b> The stable identity is the issuer plus <code>sub</code> (step 15). Keycloak does this internally with a "federated identity" link; your app uses <em>Keycloak's</em> <code>sub</code>.</li>
+      </ul>
+      <div class="callout"><p><strong>Not machine-tested.</strong> The tests import the provider into a real Keycloak and check the login page offers Google and sends the browser to Google with the redirect address above. They cannot sign in to Google: that needs your account. Tick this step by hand when it works for you.</p></div>
+      <figure class="anim" aria-label="Animated diagram: the chain of redirects when Google sign-in goes through Keycloak">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="The app sends the browser to Keycloak. The person picks Google on the Keycloak login page. Keycloak sends the browser to Google. Google asks the person to sign in and returns a code to Keycloak. Keycloak issues its own token to the app. The app only ever talks to Keycloak.">
+<rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 90 H300"/><path class="a-route" data-k="r2" d="M450 90 H560"/><path class="a-route" data-k="r3" d="M560 130 H450"/><path class="a-route" data-k="r4" d="M300 130 H200"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="app"><rect x="24" y="50" width="176" height="110" rx="8"/><text class="a-t" x="112" y="85">Todo app</text><text class="a-s" x="112" y="105">trusts one issuer</text><text class="a-s" x="112" y="123">Keycloak</text></g>
+<g class="a-node" data-k="kc"><rect x="300" y="50" width="150" height="110" rx="8"/><text class="a-t" x="375" y="95">Keycloak</text><text class="a-s" x="375" y="115">the broker</text></g>
+<g class="a-node" data-k="g"><rect x="560" y="50" width="176" height="110" rx="8"/><text class="a-t" x="648" y="95">Google</text><text class="a-s" x="648" y="115">accounts.google.com</text></g>
+<text class="a-lbl" data-k="r1" x="250" y="78">1</text><text class="a-lbl" data-k="r2" x="505" y="78">2</text><text class="a-lbl" data-k="r3" x="505" y="156">3</text><text class="a-lbl" data-k="r4" x="250" y="156">4</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "app r1 kc", "off": "r2 r3 r4 g", "path": [[206, 90], [294, 90]], "text": "<b>1. The usual start.</b> The app sends the browser to Keycloak, exactly as for a password sign-in."},
+          {"on": "kc r2 g", "off": "r1 r3 r4 app", "path": [[456, 90], [554, 90]], "text": "<b>2. The person picks Google.</b> Keycloak is now an OAuth client of Google and sends the browser to Google with its own client ID and PKCE."},
+          {"on": "g r3 kc", "off": "r1 r2 r4 app", "path": [[554, 130], [456, 130]], "text": "<b>3. Google answers Keycloak.</b> After the person signs in and consents, the code goes to Keycloak's broker endpoint. Keycloak redeems it and reads the Google ID token."},
+          {"on": "kc r4 app", "good": "app", "off": "r1 r2 r3 g", "path": [[294, 130], [206, 130]], "text": "<b>4. Keycloak answers the app.</b> It finds or creates a local user and issues <i>its own</i> tokens, with <i>its own</i> roles. The app never learns that Google was involved."}
+        ]</script>
+      </figure>
+      <h3>Practice</h3>
+      <div data-ex="a23-order"></div>
+      <div data-ex="a23-link"></div>
+      <div data-ex="a23-role"></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A broker lets people sign in with Google while your apps keep trusting one issuer with one set of roles.</li>
+        <li>Adding Google is configuration: a redirect URI at Google, a client ID and secret in Keycloak.</li>
+        <li>Decide what a new user may do, do not trust unverified email, and be careful with automatic account linking.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 24 ============ -->
+    <section class="step" id="service-calls" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">24</span><h2>Calls between services</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> give a service its own identity, and call the API with it.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>A report generator, a nightly job and a sync tool have no person behind them. They need an identity of their own and the least access that does the job. It builds on steps 13, 19 and 21.</p>
+      </div>
+      <h3>A small client</h3>
+      <p>A console app that asks Keycloak for a token with the client credentials grant, keeps it until shortly before it expires, and reads the statistics endpoint three times. The secret comes from an environment variable.</p>
+      <figure class="code"><figcaption>bash: new project</figcaption><pre><code>dotnet new console -n Reporter -o reporter</code></pre></figure>
+      <figure class="code"><figcaption>reporter/Reporter.csproj</figcaption><pre><code>&lt;Project Sdk="Microsoft.NET.Sdk"&gt;
+
+  &lt;PropertyGroup&gt;
+    &lt;OutputType&gt;Exe&lt;/OutputType&gt;
+    &lt;TargetFramework&gt;net10.0&lt;/TargetFramework&gt;
+    &lt;Nullable&gt;enable&lt;/Nullable&gt;
+    &lt;ImplicitUsings&gt;enable&lt;/ImplicitUsings&gt;
+  &lt;/PropertyGroup&gt;
+
+&lt;/Project&gt;</code></pre></figure>
+      <figure class="code"><figcaption>reporter/Program.cs</figcaption><pre><code>using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+
+var authority = Environment.GetEnvironmentVariable("AUTH_AUTHORITY") ?? "http://localhost:8180/realms/todo";
+var apiBase = Environment.GetEnvironmentVariable("API_BASE") ?? "http://localhost:5000";
+var secret = Environment.GetEnvironmentVariable("REPORTER_SECRET")
+    ?? throw new InvalidOperationException("Set REPORTER_SECRET (never put it in the source).");
+
+using var http = new HttpClient();
+var tokens = new TokenCache(http, authority, "todo-reporter", secret);
+
+for (var i = 0; i &lt; 3; i++)
+{
+    using var req = new HttpRequestMessage(HttpMethod.Get, $"{apiBase}/api/admin/stats");
+    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokens.GetAsync());
+    using var res = await http.SendAsync(req);
+    Console.WriteLine($"{(int)res.StatusCode} {await res.Content.ReadAsStringAsync()}");
+}
+
+Console.WriteLine($"token requests made: {tokens.Requests}");
+
+// Asks for a token only when it has none or the one it has is about to expire.
+class TokenCache(HttpClient http, string authority, string clientId, string secret)
+{
+    string? token;
+    DateTimeOffset expires;
+    public int Requests { get; private set; }
+
+    public async Task&lt;string&gt; GetAsync()
+    {
+        if (token is not null &amp;&amp; DateTimeOffset.UtcNow &lt; expires - TimeSpan.FromSeconds(30)) return token;
+
+        Requests++;
+        using var res = await http.PostAsync($"{authority}/protocol/openid-connect/token",
+            new FormUrlEncodedContent(new Dictionary&lt;string, string&gt;
+            {
+                ["grant_type"] = "client_credentials",
+                ["client_id"] = clientId,
+                ["client_secret"] = secret,
+            }));
+        res.EnsureSuccessStatusCode();
+
+        var body = await res.Content.ReadFromJsonAsync&lt;JsonElement&gt;();
+        token = body.GetProperty("access_token").GetString()!;
+        expires = DateTimeOffset.UtcNow.AddSeconds(body.GetProperty("expires_in").GetInt32());
+        return token;
+    }
+}</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the token cache</summary><div><dl><dt><code>TokenCache.GetAsync</code></dt><dd>Returns the cached token unless it is missing or within 30 seconds of expiring. The three API calls cause <b>one</b> token request, which the program prints.</dd><dt><code>grant_type=client_credentials</code></dt><dd>The client acts as itself (step 13). The response has an access token and <code>expires_in</code>, and no refresh token: when it runs out, ask again.</dd><dt><code>REPORTER_SECRET</code></dt><dd>Never in the source and never on the command line. In the cluster it is a Kubernetes Secret (Part 4); locally it is a variable or user-secrets.</dd><dt><code>/api/admin/stats</code></dt><dd>The one endpoint this role may call. The same token on <code>/api/todos</code> gets <code>403</code>.</dd></dl></div></details>
+      <figure class="code"><figcaption>bash: run it</figcaption><pre><code>REPORTER_SECRET=todo-reporter-practice-secret dotnet run --project reporter</code></pre></figure>
+      <p>Output, from a real run:</p>
+      <figure class="code"><figcaption>output</figcaption><pre><code>200 {"todos":3,"done":1,"owners":3}
+200 {"todos":3,"done":1,"owners":3}
+200 {"todos":3,"done":1,"owners":3}
+token requests made: 1</code></pre></figure>
+      <h3>Stronger than a shared secret</h3>
+      <ul>
+        <li><b>A key instead of a secret.</b> Keycloak can verify a signed assertion from the client (<code>private_key_jwt</code>, RFC 7523) so that no shared secret exists. RFC 9700 prefers asymmetric client authentication over a shared secret.</li>
+        <li><b>Mutual TLS.</b> The service presents a certificate (step 08). A certificate-bound token (RFC 8705) is useless without the matching key.</li>
+        <li><b>In the cluster, the pod's own token</b> (step 18) can be the credential, so no long-lived secret is stored anywhere.</li>
+        <li><b>Least privilege.</b> One client per service, one role per job. A report service that can also delete todos is a breach waiting for a bug.</li>
+      </ul>
+      <figure class="anim" aria-label="Animated diagram: a service getting a token and calling the API">
+        <div class="anim-stage"><svg viewBox="0 0 760 280" role="img" aria-label="The reporter service posts its client ID and secret to the Keycloak token endpoint and receives an access token with the todo-reporter role. It caches the token and calls the API with it until it is about to expire, then asks again.">
+<rect class="a-zone" x="8" y="8" width="744" height="264" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 80 H300"/><path class="a-route" data-k="r2" d="M450 80 H560"/><path class="a-route" data-k="r3" d="M200 190 H560"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="svc"><rect x="24" y="40" width="176" height="100" rx="8"/><text class="a-t" x="112" y="80">Reporter service</text><text class="a-s" x="112" y="100">client_credentials</text></g>
+<g class="a-node" data-k="kc"><rect x="300" y="40" width="150" height="100" rx="8"/><text class="a-t" x="375" y="80">Keycloak</text><text class="a-s" x="375" y="100">token endpoint</text></g>
+<g class="a-node" data-k="api"><rect x="560" y="40" width="176" height="100" rx="8"/><text class="a-t" x="648" y="80">Todo API</text><text class="a-s" x="648" y="100">/api/admin/stats</text></g>
+<g class="a-node" data-k="cache"><rect x="24" y="160" width="176" height="70" rx="8"/><text class="a-t" x="112" y="185">Token cache</text><text class="a-s" x="112" y="205">until 30 s before exp</text></g>
+<text class="a-lbl" data-k="r1" x="250" y="68">1. id + secret</text><text class="a-lbl" data-k="r3" x="380" y="178">3. Bearer token</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "svc r1 kc", "off": "r2 r3 api cache", "path": [[206, 80], [294, 80]], "text": "<b>1. Ask for a token.</b> No user is involved: the service proves itself with its client ID and secret and asks for the client credentials grant."},
+          {"on": "kc r2 api", "off": "r1 r3 svc cache", "path": [[456, 80], [554, 80]], "text": "<b>2. Keycloak answers.</b> An access token for <code>todo-api</code> with the role <code>todo-reporter</code>, valid for 300 seconds. There is no refresh token and no ID token."},
+          {"on": "svc cache", "off": "r1 r2 r3 kc api", "text": "<b>Keep it.</b> The service stores the token and its expiry and reuses it. Asking on every call wastes a round trip and loads the identity provider."},
+          {"on": "svc r3 api", "good": "api", "off": "r1 r2 kc cache", "path": [[206, 190], [554, 190]], "text": "<b>3. Call the API.</b> <code>Authorization: Bearer …</code>. The API checks it like any other token and applies the <code>Statistics</code> policy."}
+        ]</script>
+      </figure>
+      <h3>Practice</h3>
+      <div data-cmd="a24-token"></div>
+      <div data-ex="a24-cache"></div>
+      <div data-ex="a24-secret"></div>
+      <div data-ex="a24-role"></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A service is a client with its own identity: client credentials, its own role, its own secret or key.</li>
+        <li>Cache the token until shortly before it expires, and never ask for a token per call.</li>
+        <li>Keep the secret out of the source and the command line, prefer a key or mutual TLS where you can, and give each service the least role.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
     </main>
 </div>
 
@@ -10015,6 +11237,182 @@ IA.cmds = IA.cmds || {};
     S('kubectl create role', { what: 'create a Role', need: { '--verb': { value: true, repeat: true, what: 'an allowed verb', each: [{ match: /^get(,list)?$|^get$/, missing: 'Allow <code>get</code>: <code>--verb=get</code>.' }, { match: /^list$|^get,list$|^list,get$/, missing: 'Allow <code>list</code> too: <code>--verb=list</code>.' }] }, '--resource': { value: /^pods$/, what: 'on this kind of object' }, '--namespace': { value: /^todo$/, what: 'in this namespace' } }, pos: [pos(/^reporter$/, 'the Role name', 'what to call it', 'reporter')] }),
     'kubectl create role reporter --verb=get --verb=list --resource=pods --namespace todo',
     ['<code>kubectl create role NAME --verb=… --resource=…</code>. The verb flag can be repeated.'], 'Add <code>--dry-run=client -o yaml</code> to print the YAML instead of creating it: a quick way to start a manifest.');
+})();
+
+// ---- exercises/06-build.js
+// Exercises for steps 19 to 24 (run Keycloak, protect the API, roles and owners, BFF sign-in, Google through Keycloak,
+// service calls). The facts behind every answer were observed on a real Keycloak 26.8.1, ASP.NET Core 10 and PostgreSQL 18
+// by tests/identity-app.test.js.
+(function () {
+  var IA = window.IA, X = IA.exercises;
+  var S = function (cmd, o) { return window.IACmdSpec.spec(IA.cmdFlags, cmd, o); };
+  var pos = function (re, label, what, hint) { return { match: re, label: label, what: what, hint: hint }; };
+  function drill(id, prompt, specs, answer, hints, after) { IA.cmds[id] = { prompt: prompt, specs: specs, answer: answer, hints: hints || [], after: after || '', run: { noRun: 'needs a running Keycloak' } }; }
+  // quiz: options as [text, ok, why]
+  function quiz(id, prompt, opts, hints) { X[id] = { kind: 'quiz', prompt: '<p>' + prompt + '</p>', options: opts.map(function (o) { return { t: o[0], ok: !!o[1], why: o[2] }; }), hints: hints || [] }; }
+  function sort(id, prompt, groups, items, hints) { X[id] = { kind: 'sort', prompt: '<p>' + prompt + '</p>', groups: groups, items: items.map(function (i) { return { t: i[0], g: i[1], why: i[2] }; }), hints: hints || [] }; }
+
+  var K = 'http://localhost:8180/realms/todo';
+  var kurl = function (path) { return new RegExp('^' + (K + path).replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&') + '$'); };
+
+  // ---------------- 19
+  drill('a19-discovery', '<p>Fetch the <b>discovery document</b> of the realm <code>todo</code> on <code>http://localhost:8180</code>, quietly (no progress meter).</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--silent': { value: false, what: 'no progress meter' } }, pos: [pos(kurl('/.well-known/openid-configuration'), 'the discovery address', 'where it lives', K + '/.well-known/openid-configuration')] }),
+    'curl -s ' + K + '/.well-known/openid-configuration',
+    ['Every OpenID Connect issuer serves it at the issuer address plus <code>/.well-known/openid-configuration</code>.', 'Quiet is <code>-s</code>.'],
+    'Read <code>jwks_uri</code>, <code>token_endpoint</code>, <code>authorization_endpoint</code> and <code>code_challenge_methods_supported</code>. A client library needs nothing else.');
+  drill('a19-jwks', '<p>Fetch the realm\'s <b>signing keys</b> (the JWKS) quietly, from the address the discovery document gives as <code>jwks_uri</code>: the realm address followed by <code>/protocol/openid-connect/certs</code>.</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--silent': { value: false, what: 'no progress meter' } }, pos: [pos(kurl('/protocol/openid-connect/certs'), 'the JWKS address', 'where the keys are', K + '/protocol/openid-connect/certs')] }),
+    'curl -s ' + K + '/protocol/openid-connect/certs',
+    ['It is the realm address plus <code>/protocol/openid-connect/certs</code>.'],
+    'Each key has a <code>kid</code>, an <code>alg</code> and <code>use: "sig"</code>. A token names the key it was signed with in its own <code>kid</code> header.');
+  drill('a19-gettoken', '<p>Get an access token for the machine client <code>todo-reporter</code> with the client credentials grant. Send the client ID as <code>client_id</code> and the secret from the shell variable <code>$REPORTER_SECRET</code> as <code>client_secret</code>, in a form post to the realm\'s token endpoint (<code>/protocol/openid-connect/token</code>). Print nothing but the response (quiet).</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--silent': { value: false, what: 'no progress meter' }, '--data': { value: true, repeat: true, what: 'a form field', each: [
+      { match: /^grant_type=client_credentials$/, missing: 'Add <code>-d grant_type=client_credentials</code>.' },
+      { match: /^client_id=todo-reporter$/, missing: 'Add <code>-d client_id=todo-reporter</code>.' },
+      { match: /^client_secret=\$\{?REPORTER_SECRET\}?$|^client_secret=/, missing: 'Add the secret as <code>-d client_secret="$REPORTER_SECRET"</code>.' }] } }, pos: [pos(kurl('/protocol/openid-connect/token'), 'the token endpoint', 'where to send it', K + '/protocol/openid-connect/token')] }),
+    'curl -s -d grant_type=client_credentials -d client_id=todo-reporter -d client_secret="$REPORTER_SECRET" ' + K + '/protocol/openid-connect/token',
+    ['A form field is <code>-d name=value</code>; <code>-d</code> makes <code>curl</code> send a POST.', 'You need three fields: the grant, the client ID and the secret.'],
+    'The answer is JSON with <code>access_token</code>, <code>expires_in</code> (300) and <code>token_type</code>. There is no refresh token: a machine just asks again.');
+
+  quiz('a19-realm', 'You want a new Todo API to accept tokens from Keycloak, but the API keeps answering <code>401</code> with <code>The audience \'empty\' is invalid</code> for a valid, unexpired token. What is missing?', [
+    ['An audience mapper, so that <code>todo-api</code> is in the token\'s <code>aud</code> claim.', true, 'The token had no <code>aud</code> at all. The API refuses tokens that do not name it, which is correct. The fix is in the identity provider, not the API.'],
+    ['Raise <code>ClockSkew</code> in the API so that slightly different clocks stop mattering for this token.', false, 'Clock skew is about <code>exp</code> and <code>nbf</code>. The message names the audience.'],
+    ['Set <code>RequireHttpsMetadata = false</code> so that the handler can read the discovery document over HTTP.', false, 'That only controls whether the discovery document may be fetched over HTTP.'],
+    ['The user needs the <code>todo-api</code> role.', false, 'Roles are checked after the token is accepted. This token is refused before that.']]);
+  quiz('a19-token', 'The access token for the <code>todo-reporter</code> client has <code>sub</code> equal to a UUID and <code>preferred_username</code> equal to <code>service-account-todo-reporter</code>. Who is that?', [
+    ['The service account user Keycloak created for the machine client. No person signed in.', true, 'Each client with service accounts enabled gets a hidden user. That is why the realm file lists it, to give it a role.'],
+    ['Alice, signed in through the reporter.', false, 'Alice would have her own <code>sub</code> and <code>preferred_username</code>.'],
+    ['A random user created by the discovery document.', false, 'The discovery document only describes the server. It does not create users.'],
+    ['An admin who used the admin console.', false, 'Admins sign in to the <code>master</code> realm with the admin console client.']]);
+  quiz('a19-issuer', 'You open the realm at <code>http://127.0.0.1:8180/realms/todo</code> to get a token and run the API with <code>Auth__Authority=http://localhost:8180/realms/todo</code>. What happens?', [
+    ['The API refuses the token: its <code>iss</code> is the 127.0.0.1 address, and the API expects the localhost one.', true, 'Keycloak builds the issuer from the address the request used. The API compares it exactly, so use one name everywhere.'],
+    ['It works, because 127.0.0.1 and localhost are the same machine, so the handler treats the two issuer addresses as equal.', false, 'The issuer is a string compared exactly. Machines do not matter.'],
+    ['It works but logs a warning that the issuer differs from the configured authority; set the log level higher to hide it.', false, 'There is no warning mode for the issuer check.'],
+    ['Keycloak refuses to issue the token.', false, 'Keycloak happily issues it, for the address you used.']]);
+  X['a19-order'] = { kind: 'order', prompt: '<p>Put these in the order you do them to get a protected Todo API working with a fresh Keycloak.</p>',
+    items: ['Write the realm file: roles, users, clients and mappers.', 'Start Keycloak so that it imports the realm file.', 'Fetch the discovery document and check the issuer and <code>jwks_uri</code>.', 'Get a token and check <code>iss</code>, <code>aud</code> and <code>roles</code> in it.', 'Point the API at the issuer and call it with the token.'],
+    hints: ['You cannot check the token before the server runs, and you cannot point the API before you know the issuer is what you expect.'] };
+
+  // ---------------- 20
+  sort('a20-status', 'What does the API answer?', ['401', '403', '200'], [
+    ['A request with no <code>Authorization</code> header to <code>/api/todos</code>.', 0, 'The fallback policy requires a signed-in caller, and there is none.'],
+    ['A token whose signature was changed by one character.', 0, 'Invalid tokens are not authenticated: <code>invalid_token</code>.'],
+    ['A valid token for another API (wrong audience).', 0, 'The audience check fails, so the caller is not authenticated for this API.'],
+    ['A valid token for the reporter machine on <code>/api/todos</code>.', 1, 'Authenticated, but without the <code>todo-user</code> role.'],
+    ['Alice\'s valid token on <code>/api/admin/todos</code>.', 1, 'Authenticated, but not an admin.'],
+    ['<code>/healthz</code> with no token.', 2, 'It is marked <code>AllowAnonymous</code> so the platform can probe it.'],
+    ['Alice\'s valid token on <code>/api/todos</code>.', 2, 'Authenticated and in the right role.']]);
+  quiz('a20-probe', 'After you add the fallback policy, the pods keep restarting and the Deployment never becomes ready. <code>kubectl describe</code> shows the probes failing with <code>401</code>. What is the fix?', [
+    ['Mark <code>/healthz</code> and <code>/readyz</code> as <code>AllowAnonymous</code>.', true, 'Kubernetes probes do not carry tokens. Health endpoints must be open, and they must reveal nothing sensitive.'],
+    ['Remove the fallback policy.', false, 'That reopens every endpoint you forget to protect.'],
+    ['Give the probes a bearer token in the Deployment.', false, 'A token expires, and a probe with a static one fails an hour later. Open the health endpoint instead.'],
+    ['Raise <code>initialDelaySeconds</code>.', false, 'The probe fails every time, not only early on.']]);
+  quiz('a20-skew', 'Access tokens live five minutes. You leave <code>ClockSkew</code> at its default. How long after <code>exp</code> does the API still accept a token?', [
+    ['Five more minutes.', true, 'The default <code>ClockSkew</code> is five minutes. The token\'s real life is up to ten minutes. This was observed: a five-second token was still accepted well after expiry until the skew was set to 30 seconds.'],
+    ['Not at all: <code>exp</code> is exact.', false, 'The handler adds the skew to allow for clock drift between servers.'],
+    ['Thirty seconds.', false, 'That is the value this lesson sets, not the default.'],
+    ['Until the next key rotation.', false, 'Keys have nothing to do with expiry.']]);
+  quiz('a20-claims', 'With <code>MapInboundClaims = false</code>, which line reads the user\'s id?', [
+    ['<code>user.FindFirstValue("sub")</code>', true, 'The claim keeps its name from the token.'],
+    ['<code>user.FindFirstValue(ClaimTypes.NameIdentifier)</code>', false, 'That is the long URI the default mapping would have produced. With mapping off, it finds nothing.'],
+    ['<code>user.Identity.Name</code>', false, 'That is the name claim you configured (<code>preferred_username</code>), a display name, not the id.'],
+    ['<code>user.FindFirstValue("id")</code>', false, 'There is no <code>id</code> claim in a Keycloak token.']]);
+  quiz('a20-log', 'The API returns <code>WWW-Authenticate: Bearer error="invalid_token", error_description="The signature is invalid"</code>. Where is it safe to show the description?', [
+    ['In your development console and logs. A stranger should only see a plain 401.', true, 'The description tells an attacker which check failed, and so what to try next.'],
+    ['In the response to anyone who calls, because a clear message helps honest client developers find their mistake quickly.', false, 'Helpful to attackers too.'],
+    ['Nowhere: always send a bare <code>Bearer</code> header, even in development, so that behaviour never differs.', false, 'The RFC defines <code>error</code> for clients, and it is useful in development. Control exposure, do not remove the mechanism.'],
+    ['In the page of your Angular app.', false, 'It is for developers, not for users.']]);
+
+  // ---------------- 21
+  sort('a21-table', 'Alice and Bob are users, Bob is also an admin. Todo 2 belongs to Bob. What does each call answer?', ['200 or 204', '403', '404'], [
+    ['Alice toggles todo 2.', 2, 'The query includes the owner, so Bob\'s todo is not found for her.'],
+    ['Bob toggles todo 2.', 0, 'It is his.'],
+    ['Alice calls <code>GET /api/admin/todos</code>.', 1, 'Signed in, but without <code>todo-admin</code>.'],
+    ['Bob calls <code>GET /api/admin/todos</code>.', 0, 'He holds <code>todo-admin</code>.'],
+    ['Bob (admin) deletes Alice\'s todo 1.', 2, 'Admin opens the admin <em>read</em> route. It does not remove the owner filter from delete.'],
+    ['The reporter calls <code>GET /api/admin/stats</code>.', 0, 'The <code>Statistics</code> policy accepts <code>todo-reporter</code>.'],
+    ['The reporter calls <code>GET /api/todos</code>.', 1, 'It does not have <code>todo-user</code>.']]);
+  quiz('a21-owner', 'A teammate writes <code>todos.MapDelete("/{id:int}", async (int id, TodoStore s) => await s.RemoveAsync(id) ? Results.NoContent() : Results.NotFound())</code> after you added owners. The tests for the rest pass. What is wrong?', [
+    ['Any signed-in user can delete anyone\'s todo by id: the owner is never checked.', true, 'The code compiles without the owner, which is why the table of cases must be a test, not a document.'],
+    ['It returns 204 for a todo that does not exist, which leaks which ids are taken to every caller.', false, 'It returns 404 for that.'],
+    ['It is missing <code>AllowAnonymous</code>.', false, 'That would open it, not close it.'],
+    ['Nothing: the group policy <code>TodoUser</code> checks that the caller owns the todo before the handler runs.', false, 'A role policy checks the role. Only the query can check the owner.']]);
+  quiz('a21-role', 'Bob\'s admin role is removed in Keycloak at 10:00. His token was issued at 09:57 and lives five minutes. When does <code>/api/admin/todos</code> start refusing him?', [
+    ['At about 10:02, when that token expires and his next token has no admin role.', true, 'The API trusts what is in the token. It does not call Keycloak per request, so a role change takes effect when a new token is issued.'],
+    ['At once, at 10:00.', false, 'The API has no way to know unless it asks Keycloak each time.'],
+    ['At 10:05.', false, 'The token was issued at 09:57 and expires at 10:02.'],
+    ['Never, until the API restarts.', false, 'Tokens expire, and keys are cached, not roles.']]);
+  quiz('a21-admin', 'Should <code>todo-admin</code> be allowed to toggle and delete other people\'s todos, so support can help?', [
+    ['No. Give it the read route, and add an explicit, audited support action if the job needs it.', true, 'Least privilege: a role should open what its job needs. "Admin can do everything" is how a stolen admin token becomes a total loss.'],
+    ['Yes. Admin means everything, and a support person who cannot fix a customer\'s list is not an admin.', false, '"Everything" is rarely the job, and it makes every admin token a master key.'],
+    ['Yes, but only during working hours, so that a stolen token is useless at night when nobody is watching.', false, 'A time rule does not narrow what is possible when it is allowed.'],
+    ['Yes, because the owner check is only a UI feature.', false, 'The owner check is in the query on the server.']]);
+
+  // ---------------- 22
+  sort('a22-patterns', 'Which browser pattern does each statement describe?', ['BFF', 'Token-mediating backend', 'Browser-based OAuth client'], [
+    ['The browser holds only an HttpOnly session cookie. No token ever reaches the page.', 0, 'RFC 10017 pattern 1.'],
+    ['The server keeps the refresh token; the browser asks it for short-lived access tokens and calls other APIs directly.', 1, 'RFC 10017 pattern 2. XSS can steal the access token but not the refresh token.'],
+    ['The Angular app runs the code flow itself and keeps tokens in memory.', 2, 'RFC 10017 pattern 3: the app is the OAuth client.'],
+    ['An injected script cannot read anything that lets it work from another machine.', 0, 'There is nothing to carry away; it can still act while the page is open.'],
+    ['Stolen refresh tokens work from anywhere until they are rotated or revoked.', 2, 'That is the cost of keeping them in the browser.']]);
+  quiz('a22-xss', 'A script injected into the Todo page runs <code>fetch("/api/todos")</code> in the BFF setup and sends the answer to an attacker. Is the BFF broken?', [
+    ['No, but it shows the BFF does not prevent XSS: it only keeps tokens and the cookie value out of reach. Fix the injection too.', true, 'The browser still sends the cookie with a same-site fetch. The attacker cannot use it from their own machine, only while the page is open.'],
+    ['Yes: the cookie is HttpOnly, so this should be impossible.', false, 'HttpOnly stops <em>reading</em> the cookie, not using it.'],
+    ['No: SameSite=Strict blocks it.', false, 'The request is same-site, so Strict allows it.'],
+    ['Yes: tokens are in the page.', false, 'There are none.']]);
+  quiz('a22-csrf', 'A page on <code>evil.example</code> contains a form that posts to <code>http://localhost:4200/api/todos</code>. With the BFF, which defences stop it?', [
+    ['SameSite=Strict (the cookie is not sent from another site) and the missing <code>X-Todo-Csrf</code> header (a form cannot set it).', true, 'Two independent layers. Observed: a forged form post added nothing to the list.'],
+    ['Only HttpOnly: the cookie cannot be read by the other site\'s script, so the post is harmless.', false, 'HttpOnly does not stop the browser from sending the cookie.'],
+    ['Only the audience check on the API, which makes sure the request was meant for this service.', false, 'That is for bearer tokens, not cookies.'],
+    ['Nothing: forms cannot be stopped.', false, 'They can, and this is how.']]);
+  quiz('a22-login', 'A developer replaces the sign-in link with <code>fetch("/api/auth/login")</code> to avoid a page reload. Sign-in stops working. Why?', [
+    ['The response is a redirect to another origin, which script cannot follow like a navigation. The browser has to navigate.', true, 'Keycloak\'s login page is for a person in a browser window, not for <code>fetch</code>.'],
+    ['<code>fetch</code> never sends cookies to an API, so the session cannot be established from script at all.', false, 'It can, on same-origin requests.'],
+    ['The API only allows GET requests from a browser, and the login endpoint is not a GET in the generated code.', false, 'Method is not the problem.'],
+    ['Angular blocks it.', false, 'Angular does not.']]);
+  quiz('a22-cookie', 'Which cookie options are right for the BFF session cookie?', [
+    ['<code>__Host-</code> prefix, HttpOnly, Secure, SameSite=Strict, Path=/.', true, 'Each one closes something: sibling sub-domains, script reading, plain HTTP, cross-site sending.'],
+    ['Any name, SameSite=None so that Keycloak\'s redirect can set it.', false, '<code>None</code> sends it everywhere. The cookie can be <em>set</em> by a response to a cross-site navigation under Strict.'],
+    ['Not HttpOnly, so the Angular app can read the user name from it.', false, 'That is what <code>/api/auth/me</code> is for.'],
+    ['A long <code>Domain</code> attribute so every sub-domain shares it.', false, '<code>__Host-</code> forbids <code>Domain</code>, on purpose.']]);
+
+  // ---------------- 23
+  X['a23-order'] = { kind: 'order', prompt: '<p>Put these in the order they happen when a person clicks "Google" on Keycloak\'s login page.</p>',
+    items: ['The browser is redirected to <code>accounts.google.com</code> by Keycloak, with Keycloak\'s own client ID.', 'The person signs in and consents at Google.', 'Google redirects the browser to Keycloak\'s <code>/broker/google/endpoint</code> with a code.', 'Keycloak redeems the code, reads the Google ID token and finds or creates a local user.', 'Keycloak redirects the browser to the Todo app\'s callback with a code <em>of its own</em>.'],
+    hints: ['Keycloak is both an OAuth server (to the app) and an OAuth client (to Google).'] };
+  quiz('a23-link', 'Another identity provider you added does not verify email addresses. A person registers there with <code>bob@example.test</code> and signs in. Automatic account linking by email is on. What can happen?', [
+    ['They are linked to Bob\'s real account and become him, including his <code>todo-admin</code> role.', true, 'Linking by an unverified email is account takeover. Link only on verified addresses, and ask for a password first.'],
+    ['Nothing: emails are unique.', false, 'Uniqueness in Keycloak does not mean the other provider checked the address.'],
+    ['Keycloak refuses because the realm is closed.', false, 'It is not closed to that provider.'],
+    ['They get a new empty account.', false, 'Automatic linking is what changes that outcome.']]);
+  quiz('a23-role', 'A new person signs in with Google for the first time. Which role does the Todo API see in their token?', [
+    ['Only what Keycloak gives a new user: no <code>todo-user</code> unless you set a default role or a mapper.', true, 'The role is Keycloak\'s decision. The person arrives with an identity, not with permissions.'],
+    ['The roles Google says they have.', false, 'Google has no idea about <code>todo-user</code>.'],
+    ['<code>todo-admin</code>, because the first person to sign in to an empty realm becomes its administrator.', false, 'Nothing is granted by order of arrival.'],
+    ['Whatever the email domain suggests, because Keycloak maps a company domain to a role automatically for every provider.', false, 'Only if you write a rule for it, and then only on a verified address.']]);
+
+  // ---------------- 24
+  drill('a24-token', '<p>Get a token for the machine client <code>todo-reporter</code> with client credentials, as in step 19, but authenticate with <b>HTTP basic authentication</b> (<code>-u</code>, secret in <code>$REPORTER_SECRET</code>) instead of putting the secret in the form body.</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--silent': { value: false, what: 'no progress meter' }, '--user': { value: /^todo-reporter:/, what: 'authenticate as the client with HTTP basic', bad: function () { return 'Authenticate as <code>todo-reporter</code>: <code>-u todo-reporter:"$REPORTER_SECRET"</code>.'; } }, '--data': { value: /^grant_type=client_credentials$/, what: 'the grant', missing: 'Add <code>-d grant_type=client_credentials</code>.' } }, pos: [pos(kurl('/protocol/openid-connect/token'), 'the token endpoint', 'where to send it', K + '/protocol/openid-connect/token')] }),
+    'curl -s -u todo-reporter:"$REPORTER_SECRET" -d grant_type=client_credentials ' + K + '/protocol/openid-connect/token',
+    ['<code>-u name:password</code> sends HTTP basic authentication.'], 'Keycloak accepts the client\'s credentials either way. Basic is the form the OAuth specification defines first (RFC 6749 section 2.3.1).');
+  quiz('a24-cache', 'A reporting job calls the API 10,000 times an hour and fetches a new token before every call. The tokens live five minutes. What is wrong?', [
+    ['It makes 10,000 token requests an hour for no reason, loading Keycloak. Cache the token until shortly before it expires: about 12 requests an hour.', true, 'The token request is the expensive, rate-limited, audited step. The call itself is cheap.'],
+    ['Nothing: fresh tokens are safer.', false, 'A cached token is just as valid until <code>exp</code>, and is not exposed to anyone more often.'],
+    ['It should use a refresh token.', false, 'Client credentials issues none, and does not need one.'],
+    ['It should ask for tokens that never expire.', false, 'That makes a leak permanent.']]);
+  sort('a24-secret', 'Where may the reporter\'s client secret live?', ['Acceptable', 'Never'], [
+    ['A Kubernetes Secret mounted as an environment variable, created outside the repository.', 0, 'Not perfect, but out of the source.'],
+    ['In <code>appsettings.json</code> committed to the repository.', 1, 'Anyone with the repository, now or in its history, has it.'],
+    ['An environment variable set by your secret store at start-up.', 0, 'Out of the source and rotatable.'],
+    ['In the command: <code>-d client_secret=abc123</code> typed in a shell.', 1, 'It lands in the shell history and the process list.'],
+    ['In a front-end bundle, so the browser can ask for tokens.', 1, 'A confidential client\'s secret is useless in the one place everyone can read.']]);
+  quiz('a24-role', 'The reporter needs the daily numbers. Which setup is least privilege?', [
+    ['Its own client with only <code>todo-reporter</code>, which the <code>Statistics</code> policy accepts and the todos policy does not.', true, 'One client per service, one role per job. A leak of this secret reads numbers and nothing more.'],
+    ['Reuse <code>todo-web</code>\'s client and secret.', false, 'Then a leak of one is a leak of both, and the logs cannot tell them apart.'],
+    ['Make it <code>todo-admin</code> so that it never gets a 403 and nobody has to maintain a separate role for it.', false, 'It then reads everyone\'s todos too.'],
+    ['Let it use a dedicated user account with a long random password, signed in through the browser flow each day.', false, 'A person\'s credentials are not a service identity.']]);
 })();
 
 </script>

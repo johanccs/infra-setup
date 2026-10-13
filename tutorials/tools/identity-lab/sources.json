@@ -1111,6 +1111,204 @@
       "rfc": null,
       "status": "vendor documentation",
       "checked": "2026-10-13"
+    },
+    {
+      "id": "s19-docker",
+      "step": 19,
+      "claim": "Keycloak container: quay.io/keycloak/keycloak:26.8.1, start-dev, KC_BOOTSTRAP_ADMIN_USERNAME and KC_BOOTSTRAP_ADMIN_PASSWORD create the initial admin; the guide lists a production database, own certificates and a stronger admin password as things to do before production.",
+      "doc": "Keycloak: Getting started with Docker",
+      "section": "Starting Keycloak",
+      "url": "https://www.keycloak.org/getting-started/getting-started-docker",
+      "rfc": null,
+      "status": "vendor documentation",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s19-import",
+      "step": 19,
+      "claim": "--import-realm reads .json files from data/import (/opt/keycloak/data/import in the container) and skips a realm that already exists.",
+      "doc": "Keycloak: Importing and exporting realms",
+      "section": "Importing a realm during startup",
+      "url": "https://www.keycloak.org/server/importExport",
+      "rfc": null,
+      "status": "vendor documentation",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s19-release",
+      "step": 19,
+      "claim": "Keycloak 26.8.1 was published on 2026-10-13 with security fixes (identity brokering, OIDC logout tokens, admin permissions); JDK 25 is the required JDK for the zip distribution.",
+      "doc": "Keycloak 26.8.1 release notes; Getting started with the zip distribution",
+      "section": "Security fixes",
+      "url": "https://github.com/keycloak/keycloak/releases/tag/26.8.1",
+      "rfc": null,
+      "status": "GitHub release (checked against the live release and a real server)",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s19-observed",
+      "step": 19,
+      "claim": "Observed on Keycloak 26.8.1: issuer is built from the request host; the oidc-usermodel-realm-role-mapper writes a top-level roles claim; the oidc-audience-mapper adds todo-api to aud; a service account user receives the roles imported for service-account-<client>; the authorization response carries the iss parameter.",
+      "doc": "tests/identity-app.test.js against a real Keycloak",
+      "section": "Realm import and token claims",
+      "url": "https://www.keycloak.org/docs/latest/server_admin/",
+      "rfc": null,
+      "status": "observed and tested",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s19-jwks",
+      "step": 19,
+      "claim": "The JWKS is served at the jwks_uri of the discovery document.",
+      "doc": "OpenID Connect Discovery 1.0",
+      "section": "3",
+      "url": "https://openid.net/specs/openid-connect-discovery-1_0.html",
+      "rfc": null,
+      "status": "OpenID Foundation final",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s20-jwtbearer",
+      "step": 20,
+      "claim": "JwtBearer: Authority provides keys and issuer by metadata; Audience; MapInboundClaims; RequireHttpsMetadata; TokenValidationParameters.ClockSkew default is 5 minutes; fallback policy; AllowAnonymous.",
+      "doc": "Microsoft Learn: Configure JWT bearer authentication in ASP.NET Core; TokenValidationParameters.ClockSkew",
+      "section": "JwtBearerOptions; ClockSkew",
+      "url": "https://learn.microsoft.com/en-us/aspnet/core/security/authentication/configure-jwt-bearer-authentication",
+      "rfc": null,
+      "status": "vendor documentation; clock skew observed",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s20-6750",
+      "step": 20,
+      "claim": "A request without credentials gets a WWW-Authenticate: Bearer challenge; an invalid token gets error=\"invalid_token\".",
+      "doc": "RFC 6750",
+      "section": "3, 3.1",
+      "url": "https://www.rfc-editor.org/rfc/rfc6750",
+      "rfc": 6750,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s20-fallback",
+      "step": 20,
+      "claim": "The fallback policy applies to endpoints with no authorization metadata, so a default of RequireAuthenticatedUser denies by default; health endpoints need AllowAnonymous for probes.",
+      "doc": "Microsoft Learn: Policy-based authorization in ASP.NET Core",
+      "section": "Fallback authorization policy",
+      "url": "https://learn.microsoft.com/en-us/aspnet/core/security/authorization/policies",
+      "rfc": null,
+      "status": "vendor documentation",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s21-access-table",
+      "step": 21,
+      "claim": "The access table of the lesson is exercised against a real Keycloak and PostgreSQL: anonymous 401, wrong role 403, other users' todos 404, admin and statistics routes.",
+      "doc": "tests/identity-app.test.js",
+      "section": "accessTable",
+      "url": "https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/",
+      "rfc": null,
+      "status": "observed and tested",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s22-10017",
+      "step": 22,
+      "claim": "Browser-based apps: the BFF pattern is the most secure of three; cookies should be Secure, HttpOnly and SameSite=Strict, with a custom request header against CSRF.",
+      "doc": "RFC 10017",
+      "section": "6, 6.1.3",
+      "url": "https://www.rfc-editor.org/rfc/rfc10017",
+      "rfc": 10017,
+      "status": "BEST CURRENT PRACTICE",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s22-cookie-prefix",
+      "step": 22,
+      "claim": "The __Host- prefix requires the Secure attribute, Path=/, no Domain, and being set from a secure origin.",
+      "doc": "RFC 6265bis (draft)",
+      "section": "4.1.3",
+      "url": "https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/",
+      "rfc": null,
+      "status": "IETF draft, long-standing browser behaviour",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s22-oidc-handler",
+      "step": 22,
+      "claim": "ASP.NET Core OpenID Connect handler: CallbackPath, SignedOutCallbackPath, UsePkce, ResponseMode, SaveTokens, SignInScheme, PolicyScheme ForwardDefaultSelector; API endpoints answer 401 and 403 instead of redirecting when events say so.",
+      "doc": "Microsoft Learn: Configure OpenID Connect authentication in ASP.NET Core",
+      "section": "OpenIdConnectOptions",
+      "url": "https://learn.microsoft.com/en-us/aspnet/core/security/authentication/configure-oidc-web-authentication",
+      "rfc": null,
+      "status": "vendor documentation; behaviour observed",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s22-observed",
+      "step": 22,
+      "claim": "Observed in Chromium 4200 to API 5000: __Host-todo is accepted as Secure on http://localhost, is HttpOnly and SameSite=Strict, a state-changing call without X-Todo-Csrf answers 403, a forged cross-site form post adds nothing, and sign-out clears the session.",
+      "doc": "tests/identity-app.test.js (browser)",
+      "section": "BFF flow",
+      "url": "https://datatracker.ietf.org/doc/html/rfc10017",
+      "rfc": null,
+      "status": "observed and tested",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s23-brokering",
+      "step": 23,
+      "claim": "Keycloak identity brokering: Add provider Google, the Redirect URI to register at Google, client ID and secret; Trust Email; first login flow.",
+      "doc": "Keycloak Server Administration Guide: Integrating identity providers",
+      "section": "Social Identity Providers; General configuration; First login flow",
+      "url": "https://www.keycloak.org/docs/latest/server_admin/index.html#_identity_broker",
+      "rfc": null,
+      "status": "vendor documentation",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s23-observed",
+      "step": 23,
+      "claim": "Observed: the google provider added to the realm puts a Google button on the login page and sends the browser to https://accounts.google.com/o/oauth2/v2/auth with redirect_uri http://localhost:8180/realms/todo/broker/google/endpoint and scope openid profile email.",
+      "doc": "tests/identity-app.test.js",
+      "section": "Google provider",
+      "url": "https://developers.google.com/identity/openid-connect/openid-connect",
+      "rfc": null,
+      "status": "observed and tested",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s24-cc",
+      "step": 24,
+      "claim": "The client credentials grant: the client authenticates and receives an access token; a refresh token should not be issued; client authentication with HTTP basic is defined first.",
+      "doc": "RFC 6749",
+      "section": "2.3.1, 4.4",
+      "url": "https://www.rfc-editor.org/rfc/rfc6749",
+      "rfc": 6749,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s24-jwtauth",
+      "step": 24,
+      "claim": "JWT assertions for client authentication (private_key_jwt).",
+      "doc": "RFC 7523",
+      "section": "2.2",
+      "url": "https://www.rfc-editor.org/rfc/rfc7523",
+      "rfc": 7523,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s24-mtls",
+      "step": 24,
+      "claim": "Certificate-bound access tokens and mutual-TLS client authentication.",
+      "doc": "RFC 8705",
+      "section": "2, 3",
+      "url": "https://www.rfc-editor.org/rfc/rfc8705",
+      "rfc": 8705,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
     }
   ]
 }
