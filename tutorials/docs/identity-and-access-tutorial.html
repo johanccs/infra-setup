@@ -452,6 +452,18 @@ code.wrap { display: block; overflow-wrap: anywhere; white-space: normal; paddin
 .atk select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); max-width: 100%; }
 .atk textarea[readonly] { background: var(--code-bg); }
 
+.flow-steps { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 10px; }
+.fs { padding: 10px 12px; border: 1px solid var(--line); border-left: 4px solid var(--muted); border-radius: 8px; background: var(--bg); }
+.fs.front { border-left-color: var(--warn); } .fs.back { border-left-color: var(--accent); } .fs.user { border-left-color: var(--ok); }
+.fs-h { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fs-n { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--code-bg); font: 600 13px var(--font-mono); }
+.fs p { margin: .3em 0; max-width: none; }
+.atk-card { margin: 8px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.atk-card.good { border-left: 4px solid var(--ok); } .atk-card.bad { border-left: 4px solid var(--warn); background: var(--warn-soft); }
+.atk-card p { margin: .3em 0; max-width: none; }
+.google a.copy { text-decoration: none; display: inline-block; }
+.tool select, .ex select, .atk select { max-width: 100%; }
+
 </style>
 <script>
 // Apply the saved theme and text size before the page paints, so there is no flash.
@@ -1848,6 +1860,521 @@ builder.Services.AddAuthorization();</code></pre></figure>
         <li>Decode is not verify. A secret that can be guessed is not a secret. A token for another audience is not for you.</li>
       </ul></div>
       <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 11 ============ -->
+    <section class="step" id="oauth" data-step data-level="Intermediate">
+      <div class="step-head"><span class="num">11</span><h2>OAuth 2.0: access without handing over a password</h2><span class="lvl-chip">Intermediate</span></div>
+      <p class="goal"><b>Goal:</b> say what OAuth is for, name its four roles in any system, and tell the front channel from the back channel.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>"Sign in with Google", "connect your calendar", "this app wants to access your GitHub": all of it is OAuth. It is the most misunderstood protocol on this page, because it is <em>not</em> about signing in. It is about letting one program act for you at another, without giving it your password.</p>
+        <p>This lesson builds on step 09 (tokens) and step 01 (who and what).</p>
+      </div>
+      <div class="what-is"><h4>What is it? OAuth 2.0</h4><dl>
+        <dt>What it is</dt><dd>An authorization framework (RFC 6749) that lets a third-party application obtain limited access to an HTTP service, either on behalf of a resource owner or on its own behalf.</dd>
+        <dt>The problem it solves</dt><dd>Before it, an app that wanted your data asked for your password. The RFC lists what that caused: apps storing passwords in the clear, servers forced to support passwords, apps getting overly broad access with no limit on time or scope, no way to revoke one app without changing the password for all, and a breach of any app exposing the password.</dd>
+        <dt>Everyday comparison</dt><dd>A hotel key card. The hotel does not give a visitor the master key. It issues a card that opens one room, for a few days, and can be cancelled on its own.</dd>
+        <dt>What it is not</dt><dd><b>Not a login protocol.</b> OAuth says what an app may do, not who you are. A token proves permission, and nothing in OAuth says how to read an identity from it. That is what OpenID Connect adds (step 14).</dd>
+        <dt>Where you meet it</dt><dd>Every "Allow this app to access…" screen, and the access token behind every API call in level 6.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? A scope</h4><dl>
+        <dt>What it is</dt><dd>A named permission the client asks for, such as <code>todos.read</code> or <code>openid</code>. The server may grant less than was asked.</dd>
+        <dt>The problem it solves</dt><dd>"Access" is too coarse. A scope limits a token to part of what the user could do.</dd>
+        <dt>Everyday comparison</dt><dd>The tick boxes on a consent form.</dd>
+        <dt>What it is not</dt><dd>Not a role. A scope says what <em>this token</em> may do; a role says what a <em>user</em> may do. A call needs both to allow it (step 16).</dd>
+        <dt>Where you meet it</dt><dd>The consent screen, and the <code>scope</code> claim of an access token.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? Consent</h4><dl>
+        <dt>What it is</dt><dd>The resource owner's approval of what a client asks for, given at the authorization server.</dd>
+        <dt>The problem it solves</dt><dd>The user, not the app, decides what the app may do.</dd>
+        <dt>Everyday comparison</dt><dd>Signing a permission slip.</dd>
+        <dt>What it is not</dt><dd>Not repeated on every use: the authorization server can remember it.</dd>
+        <dt>Where you meet it</dt><dd>The screen that lists the permissions an app wants.</dd>
+      </dl></div>
+
+      <h3>The four roles</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>OAuth's word (RFC 6749)</th><th>It is…</th><th>In the Todo app</th></tr></thead>
+        <tbody>
+          <tr><td><b>Resource owner</b></td><td>An entity able to grant access to a protected resource. When it is a person, an end-user.</td><td>Alice.</td></tr>
+          <tr><td><b>Client</b></td><td>An application making protected-resource requests on behalf of the resource owner and with its authorization. The word says nothing about where it runs.</td><td>The Angular app (through its backend, step 22).</td></tr>
+          <tr><td><b>Authorization server</b></td><td>The server issuing access tokens to the client after authenticating the resource owner and obtaining authorization.</td><td>Keycloak, or Google.</td></tr>
+          <tr><td><b>Resource server</b></td><td>The server hosting the protected resources, accepting access tokens.</td><td>The Todo API.</td></tr>
+        </tbody>
+      </table></div>
+      <p>The authorization server and the resource server can be the same machine or different ones, and one authorization server can issue tokens for many resource servers.</p>
+      <figure class="anim" aria-label="Animated diagram: the four OAuth roles and how access flows between them">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="You, the resource owner, approve a client app at the authorization server. The authorization server gives the client an access token. The client calls the resource server, the API, with the token.">
+<rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+<path class="a-route" data-k="r1" d="M170 90 H300"/><path class="a-route" data-k="r2" d="M450 90 H590"/><path class="a-route" data-k="r3" d="M375 130 V210"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="owner"><rect x="24" y="50" width="146" height="80" rx="8"/><text class="a-t" x="97" y="80">Resource owner</text><text class="a-s" x="97" y="100">you</text></g>
+<g class="a-node" data-k="client"><rect x="300" y="50" width="150" height="80" rx="8"/><text class="a-t" x="375" y="80">Client</text><text class="a-s" x="375" y="100">the Todo UI</text></g>
+<g class="a-node" data-k="as"><rect x="590" y="50" width="146" height="80" rx="8"/><text class="a-t" x="663" y="80">Authorization</text><text class="a-s" x="663" y="100">server</text></g>
+<g class="a-node" data-k="rs"><rect x="300" y="215" width="150" height="60" rx="8"/><text class="a-t" x="375" y="250">Resource server</text></g>
+<text class="a-lbl" data-k="r1" x="235" y="78">approves access</text><text class="a-lbl" data-k="r2" x="520" y="78">issues a token</text><text class="a-lbl" data-k="r3" x="440" y="176">calls with the token</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "owner client", "off": "r1 r2 r3 as rs", "text": "<b>The client wants something it does not own.</b> The Todo UI wants to read your todos from the Todo API. They are yours, not the app's."},
+          {"on": "owner r1 client as", "off": "r2 r3 rs", "path": [[176, 90], [294, 90]], "text": "<b>You approve, at the authorization server.</b> You sign in there and say yes to the scope the client asked for. The client never sees your password."},
+          {"on": "client r2 as", "off": "r1 r3 rs owner", "path": [[596, 90], [456, 90]], "text": "<b>The authorization server issues an access token.</b> It is limited in scope and lifetime, and it is for this client."},
+          {"on": "client r3 rs", "good": "rs", "off": "r1 r2 owner as", "path": [[375, 136], [375, 209]], "text": "<b>The client calls the API.</b> The resource server accepts the token and holds the data. It never learns your password either."}
+        ]</script>
+      </figure>
+
+      <h3>Two kinds of client</h3>
+      <p>OAuth (RFC 6749, section 2.1) sorts clients by whether they can keep a secret. A <b>confidential</b> client can: a program on your server. A <b>public</b> client cannot: an app that runs on the user's device, such as a single-page app in a browser or an installed phone app. Anything shipped to the user can be read by the user, so it cannot hold a secret. This one distinction decides which protections you need in step 12.</p>
+      <h3>Front channel and back channel</h3>
+      <p>Two different routes carry OAuth messages:</p>
+      <ul>
+        <li>The <b>front channel</b> is the user's browser: redirects, the address bar, history. Anything here can be seen by the user, extensions, logs and malicious pages. Only short-lived, low-value things go here.</li>
+        <li>The <b>back channel</b> is a direct HTTPS call from the client's server to the authorization server. Nobody in between can see or change it. Tokens travel only here.</li>
+      </ul>
+      <p>The whole design of the authorization code flow is: use the front channel for the part that needs the user, and get the valuable thing (the token) over the back channel.</p>
+      <h3>The documents</h3>
+      <p>OAuth 2.0 is a family. <b>RFC 6749</b> (2012) is the core. <b>RFC 9700</b> (January 2025) is the current best practice that tightens it: it makes PKCE the norm, forbids the password grant and exact-matches redirect URIs. <b>OAuth 2.1</b> is an Internet-Draft (revision 16, 3 September 2026), not yet an RFC: it collects those changes into one document. This module teaches what RFC 9700 asks for, which is what the draft also requires.</p>
+
+      <h3>Practice</h3>
+      <div data-ex="o11-roles"></div>
+      <div data-ex="o11-channel"></div>
+      <div data-ex="o11-login"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>OAuth lets a client act for a resource owner without their password, with limited scope and lifetime.</li>
+        <li>Four roles: resource owner, client, authorization server, resource server. Clients are confidential or public.</li>
+        <li>The front channel (browser) can be seen; the back channel is private. Tokens use the back channel.</li>
+        <li>OAuth is about permission, not identity.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 12 ============ -->
+    <section class="step" id="codeflow" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">12</span><h2>The authorization code flow with PKCE, message by message</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> write every request of the flow yourself, and explain what each parameter protects against.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>This is the flow behind nearly every modern sign-in, and every parameter in it is there because of a real attack. Learn the messages, and then learn the attack each one answers.</p>
+        <p>This lesson builds on step 11 (roles, channels) and step 02 (hashes).</p>
+      </div>
+      <div class="what-is"><h4>What is it? The authorization code</h4><dl>
+        <dt>What it is</dt><dd>A short-lived, single-use value the authorization server returns through the browser, which the client then trades for tokens over the back channel.</dd>
+        <dt>The problem it solves</dt><dd>Tokens must not travel through the browser. A code can, because on its own it opens nothing, and the server will only honour it for the right client.</dd>
+        <dt>Everyday comparison</dt><dd>A collection slip. You hand it to the right counter and receive the parcel, which was never in your hands on the way.</dd>
+        <dt>What it is not</dt><dd>Not a token, and not a secret by itself: it can leak from the address bar, so something must tie it to the client that asked.</dd>
+        <dt>Where you meet it</dt><dd>The <code>?code=…</code> in the address after you approve an app.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? PKCE</h4><dl>
+        <dt>What it is</dt><dd>Proof Key for Code Exchange, pronounced "pixy" (RFC 7636): the client makes a random <code>code_verifier</code>, sends only its SHA-256 hash (<code>code_challenge</code>) at the start, and sends the verifier when exchanging the code.</dd>
+        <dt>The problem it solves</dt><dd>A stolen code is useless to anyone who lacks the verifier. It was designed against the <em>authorization code interception attack</em>.</dd>
+        <dt>Everyday comparison</dt><dd>Writing a number in the hotel register in a sealed envelope when you book, and showing the number itself when you collect the room: the clerk checks that it matches the sealed one.</dd>
+        <dt>What it is not</dt><dd>Not client authentication. It does not prove which app this is, only that this is the same one that started the flow. RFC 9700: public clients MUST use PKCE, confidential clients are RECOMMENDED to, and it applies to web apps as well.</dd>
+        <dt>Where you meet it</dt><dd><code>code_challenge</code> and <code>code_verifier</code> in the requests below.</dd>
+      </dl></div>
+
+      <h3>The whole flow, with real values</h3>
+      <p>Switch a protection off to see which attack it was stopping. The values are generated for you each time.</p>
+      <div data-tool="flow"></div>
+
+      <h3>The two requests you must be able to write</h3>
+      <h4>1. The authorization request (a redirect)</h4>
+      <p>A GET to the authorization endpoint with these parameters (RFC 6749 4.1.1, RFC 7636 4.3, OpenID Connect):</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Parameter</th><th>Value</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><code>response_type</code></td><td><code>code</code></td><td>Ask for the authorization code flow. (<code>token</code> is the implicit grant, which RFC 9700 says clients should not use.)</td></tr>
+          <tr><td><code>client_id</code></td><td>your client's id</td><td>Which client is asking.</td></tr>
+          <tr><td><code>redirect_uri</code></td><td>where to send the user back</td><td>Must match a registered one <em>exactly</em> (RFC 9700 2.1).</td></tr>
+          <tr><td><code>scope</code></td><td><code>openid todos.read</code></td><td>What the client asks for.</td></tr>
+          <tr><td><code>state</code></td><td>random, per attempt</td><td>Ties the callback to this browser (against CSRF).</td></tr>
+          <tr><td><code>code_challenge</code></td><td>base64url(SHA-256(verifier))</td><td>PKCE.</td></tr>
+          <tr><td><code>code_challenge_method</code></td><td><code>S256</code></td><td>The only method that does not expose the verifier (RFC 9700 2.1.1).</td></tr>
+          <tr><td><code>nonce</code></td><td>random (OpenID Connect)</td><td>Ties the ID token to this request (step 14).</td></tr>
+        </tbody>
+      </table></div>
+      <div data-url="o12-authz"></div>
+      <h4>2. The token request (a back channel POST)</h4>
+      <p>The client sends the code and the verifier, form-encoded, to the token endpoint (RFC 6749 4.1.3, RFC 7636 4.5): <code>grant_type=authorization_code</code>, <code>code</code>, <code>redirect_uri</code> (the same as in the first request), <code>client_id</code> and <code>code_verifier</code>.</p>
+      <div data-cmd="o12-token"></div>
+
+      <h3>PKCE against a stolen code</h3>
+      <figure class="anim" aria-label="Animated diagram: PKCE makes a stolen authorization code useless">
+        <div class="anim-stage"><svg viewBox="0 0 760 320" role="img" aria-label="The client keeps a secret code verifier and sends only its hash with the authorization request. An attacker steals the code from the redirect and tries to exchange it, but cannot provide the verifier, so the token endpoint refuses.">
+<rect class="a-zone" x="8" y="8" width="744" height="304" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 100 H340"/><path class="a-route" data-k="r2" d="M200 220 H340"/><path class="a-route" data-k="r3" d="M540 150 H590"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="client"><rect x="24" y="60" width="176" height="80" rx="8"/><text class="a-t" x="112" y="90">Client</text><text class="a-s" x="112" y="110">keeps code_verifier</text></g>
+<g class="a-node" data-k="att"><rect x="24" y="190" width="176" height="60" rx="8"/><text class="a-t" x="112" y="210">Attacker</text><text class="a-s" x="112" y="230">holds the stolen code</text></g>
+<g class="a-node" data-k="as"><rect x="340" y="50" width="200" height="200" rx="8"/><text class="a-t" x="440" y="120">Authorization server</text><text class="a-s" x="440" y="140">stores code_challenge</text><text class="a-s" x="440" y="158">compares the hash</text><text class="a-s" x="440" y="176">when the code is used</text></g>
+<g class="a-node" data-k="res"><rect x="590" y="110" width="146" height="80" rx="8"/><text class="a-t" x="663" y="155">Result</text></g>
+<text class="a-lbl" data-k="r1" x="270" y="88">code + code_verifier</text><text class="a-lbl" data-k="r2" x="270" y="208">code only</text>
+<text class="a-badge good" data-k="ok" x="663" y="214">tokens issued</text><text class="a-badge bad" data-k="no" x="663" y="214">invalid_grant</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "client as", "off": "r1 r2 r3 att res ok no", "text": "<b>At the start</b> the client sends only <code>code_challenge</code>, the SHA-256 of a secret <code>code_verifier</code> it keeps. The server stores the challenge with the code it will issue."},
+          {"on": "att r2 as", "bad": "att", "off": "r1 r3 client res ok no", "path": [[206, 220], [334, 220]], "text": "<b>The theft.</b> The attacker obtains the <code>code</code> from the redirect (a log, another app, a proxy) and sends it to the token endpoint first."},
+          {"on": "as r3 res no", "bad": "att res no", "off": "r1 r2 client ok", "text": "<b>Refused.</b> The server hashes what was sent, finds no <code>code_verifier</code>, and answers <code>invalid_grant</code>. The code alone is useless."},
+          {"on": "client r1 as r3 res ok", "good": "client res ok", "off": "r2 att no", "path": [[206, 100], [334, 100]], "text": "<b>The real client</b> sends the code with its <code>code_verifier</code>. The hash matches the stored challenge, so it gets its tokens."}
+        ]</script>
+      </figure>
+
+      <h3>Each parameter, by the attack it answers</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Attack</th><th>What the attacker does</th><th>The defence</th></tr></thead>
+        <tbody>
+          <tr><td>Code interception</td><td>Steals the code from the redirect and exchanges it first.</td><td>PKCE (<code>code_challenge</code>, <code>code_verifier</code>).</td></tr>
+          <tr><td>Forged callback (CSRF)</td><td>Gets your browser to finish a flow the attacker started.</td><td><code>state</code>, or PKCE, or the OIDC <code>nonce</code>. RFC 9700 2.1: clients MUST prevent CSRF.</td></tr>
+          <tr><td>Leaky redirect</td><td>Registers or finds a redirect URI that sends the code to them (a similar domain, an open redirector, a wildcard).</td><td>Exact string matching of <code>redirect_uri</code> (RFC 9700 2.1), and no open redirectors.</td></tr>
+          <tr><td>Mix-up</td><td>With several authorization servers, tricks the client into sending a code to the wrong one.</td><td>The <code>iss</code> response parameter (RFC 9207).</td></tr>
+          <tr><td>PKCE downgrade</td><td>Strips <code>code_challenge</code> from the request so the server skips the check.</td><td>The server accepts a <code>code_verifier</code> only if a challenge was sent (RFC 9700 2.1.1, 4.8).</td></tr>
+          <tr><td>Code in history and logs</td><td>Reads the address from browser history, a log or a Referer header.</td><td>Codes are single-use and short-lived. Tokens never go in a URL.</td></tr>
+        </tbody>
+      </table></div>
+      <h4>Errors you will see</h4>
+      <p>The token endpoint answers a failed request with JSON and an <code>error</code> from RFC 6749 5.2: <code>invalid_request</code> (a parameter is missing or malformed), <code>invalid_client</code> (client authentication failed), <code>invalid_grant</code> (the code is invalid, expired, already used, does not match the <code>redirect_uri</code>, or fails PKCE), <code>unauthorized_client</code>, <code>unsupported_grant_type</code> and <code>invalid_scope</code>. By far the most common in practice is <code>invalid_grant</code>: use the code only once, and quickly.</p>
+      <h4>A first look at pushed authorization requests</h4>
+      <p>Instead of putting every parameter in the browser's address, a client can POST them to the authorization server first (<b>PAR</b>, RFC 9126) and redirect the user with only a reference. The parameters then travel on the back channel and cannot be altered in the browser. From .NET 9 the OpenID Connect handler uses PAR by default if the server supports it, which makes the flow three steps instead of two.</p>
+
+      <h3>Practice</h3>
+      <div data-ex="o12-order"></div>
+      <div data-ex="o12-protect"></div>
+      <div data-ex="o12-redirect"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>The code goes through the browser; the tokens come back over a direct call. PKCE ties the code to the client that asked for it.</li>
+        <li><code>state</code>, exact <code>redirect_uri</code> matching and <code>iss</code> each stop a different attack.</li>
+        <li>Public clients must use PKCE, and everyone should. Use <code>S256</code>.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 13 ============ -->
+    <section class="step" id="grants" data-step data-level="Intermediate">
+      <div class="step-head"><span class="num">13</span><h2>Other grants, and the two to stop using</h2><span class="lvl-chip">Intermediate</span></div>
+      <p class="goal"><b>Goal:</b> choose the right grant for any caller, and say why two of the original four are out.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>The authorization code flow needs a person and a browser. Services, command-line tools and televisions have neither, and OAuth has a grant for each. You also need to know which old ones to refuse in code review.</p>
+        <p>This lesson builds on steps 11 and 12.</p>
+      </div>
+      <div class="what-is"><h4>What is it? A grant</h4><dl>
+        <dt>What it is</dt><dd>A way of getting a token: a recipe for what the client sends to the token endpoint, and what it received before.</dd>
+        <dt>The problem it solves</dt><dd>Different callers (a person in a browser, a nightly job, a TV) can prove authorization in different ways.</dd>
+        <dt>Everyday comparison</dt><dd>Ways of getting into a building: a keycard, a visitor pass, a code texted to you.</dd>
+        <dt>What it is not</dt><dd>Not the token itself, and not a role.</dd>
+        <dt>Where you meet it</dt><dd>The <code>grant_type</code> parameter.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? A refresh token</h4><dl>
+        <dt>What it is</dt><dd>A long-lived credential the client uses to obtain new access tokens without bothering the user again (RFC 6749 section 6).</dd>
+        <dt>The problem it solves</dt><dd>Access tokens should live for minutes. A refresh token lets the app keep working all day without asking you to sign in again.</dd>
+        <dt>Everyday comparison</dt><dd>A season ticket you swap for a day pass each morning.</dd>
+        <dt>What it is not</dt><dd>Not sent to APIs. It goes only to the authorization server, and it is more valuable than an access token, so it needs more care.</dd>
+        <dt>Where you meet it</dt><dd>The <code>refresh_token</code> in the token response, and <code>offline_access</code> or <code>access_type=offline</code>.</dd>
+      </dl></div>
+
+      <h3>Which grant?</h3>
+      <div data-tool="grant"></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Grant</th><th>Use it for</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><b>Authorization code with PKCE</b></td><td>A person signing in through a browser, in any kind of client.</td><td>The default.</td></tr>
+          <tr><td><b>Client credentials</b></td><td>A program acting for itself, with no user (RFC 6749 4.4).</td><td>Current.</td></tr>
+          <tr><td><b>Device authorization</b></td><td>A device with no browser or keyboard, where the user finishes on another device (RFC 8628).</td><td>Current.</td></tr>
+          <tr><td><b>Refresh token</b></td><td>Getting a new access token without the user (RFC 6749 6).</td><td>Current, with rotation for public clients.</td></tr>
+          <tr><td><b>Token exchange</b></td><td>Swapping one token for another with a different audience or subject, for example a service calling another service on behalf of the user (RFC 8693).</td><td>Current.</td></tr>
+          <tr><td><b>Implicit</b> (<code>response_type=token</code>)</td><td>Used to return the access token directly in the redirect.</td><td><b>Do not use.</b> RFC 9700 2.1.2: vulnerable to leakage and replay. Omitted from the OAuth 2.1 draft.</td></tr>
+          <tr><td><b>Resource owner password</b></td><td>The client collects the username and password and sends them to the token endpoint.</td><td><b>Must not be used</b> (RFC 9700 2.4): it exposes the user's credentials to the client, and cannot work with MFA or passkeys.</td></tr>
+        </tbody>
+      </table></div>
+      <figure class="anim" aria-label="Animated diagram: the client credentials grant, a program getting a token on its own behalf">
+        <div class="anim-stage"><svg viewBox="0 0 760 260" role="img" aria-label="A service authenticates to the token endpoint with its own credentials and receives an access token with no user involved, then calls the API with it.">
+<rect class="a-zone" x="8" y="8" width="744" height="244" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 80 H340"/><path class="a-route" data-k="r2" d="M340 120 H200"/><path class="a-route" data-k="r3" d="M112 150 V200 H590"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="svc"><rect x="24" y="40" width="176" height="110" rx="8"/><text class="a-t" x="112" y="85">Service</text><text class="a-s" x="112" y="105">todo-reporter</text></g>
+<g class="a-node" data-k="as"><rect x="340" y="40" width="200" height="110" rx="8"/><text class="a-t" x="440" y="85">Authorization server</text><text class="a-s" x="440" y="105">token endpoint</text></g>
+<g class="a-node" data-k="api"><rect x="590" y="170" width="146" height="60" rx="8"/><text class="a-t" x="663" y="205">Todo API</text></g>
+<text class="a-lbl" data-k="r1" x="270" y="68">grant_type=client_credentials</text><text class="a-lbl" data-k="r2" x="270" y="142">access_token</text><text class="a-lbl" data-k="r3" x="350" y="190">Authorization: Bearer …</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "svc r1 as", "off": "r2 r3 api", "path": [[206, 80], [334, 80]], "text": "<b>The service asks for itself.</b> No person is involved. It authenticates with its own credentials (a secret, or better a key or a certificate) and names the scope it needs."},
+          {"on": "as r2 svc", "off": "r1 r3 api", "path": [[334, 120], [206, 120]], "text": "<b>It gets an access token.</b> The token's subject is the service, not a user. There is no refresh token: it simply asks again."},
+          {"on": "svc r3 api", "good": "api", "off": "r1 r2 as", "path": [[112, 200], [584, 200]], "text": "<b>It calls the API with the token</b>, which the API validates exactly as in step 10."}
+        ]</script>
+      </figure>
+      <p>The service authenticates itself to the token endpoint (RFC 9700 2.5 recommends asymmetric methods such as a signed JWT or mutual TLS over a shared secret) and receives an access token whose subject is the service.</p>
+      <figure class="anim" aria-label="Animated diagram: the device authorization grant for a device with no browser">
+        <div class="anim-stage"><svg viewBox="0 0 760 330" role="img" aria-label="A device asks for a device code and a short user code. It shows the user code and an address. The user opens the address on a phone, enters the code and approves. Meanwhile the device polls the token endpoint until it receives tokens.">
+<rect class="a-zone" x="8" y="8" width="744" height="314" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 80 H340"/><path class="a-route" data-k="r2" d="M200 160 H340"/><path class="a-route" data-k="r3" d="M590 220 H540"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="dev"><rect x="24" y="40" width="176" height="160" rx="8"/><text class="a-t" x="112" y="100">Device</text><text class="a-s" x="112" y="120">CLI or TV</text><text class="a-s" x="112" y="138">no browser</text></g>
+<g class="a-node" data-k="as"><rect x="340" y="40" width="200" height="200" rx="8"/><text class="a-t" x="440" y="120">Authorization server</text><text class="a-s" x="440" y="140">device endpoint</text><text class="a-s" x="440" y="158">and token endpoint</text></g>
+<g class="a-node" data-k="phone"><rect x="590" y="170" width="146" height="110" rx="8"/><text class="a-t" x="663" y="215">Your phone</text><text class="a-s" x="663" y="235">a browser</text></g>
+<text class="a-lbl" data-k="r1" x="270" y="68">1. ask for a device code</text><text class="a-lbl" data-k="r2" x="270" y="148">4. poll the token endpoint</text>
+<text class="a-badge" data-k="code" x="112" y="240">example.com/device · WDJB-MJHT</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "dev r1 as", "off": "r2 r3 phone code", "path": [[206, 80], [334, 80]], "text": "<b>1. Ask.</b> The device calls the device authorization endpoint and receives a <code>device_code</code> (for itself), a short <code>user_code</code>, a <code>verification_uri</code> and a polling <code>interval</code> (RFC 8628)."},
+          {"on": "dev code", "off": "r1 r2 r3 as phone", "text": "<b>2. Show.</b> The device displays the <code>user_code</code> and the address. The <code>device_code</code> is never shown."},
+          {"on": "phone r3 as", "off": "r1 r2 dev code", "path": [[596, 220], [546, 220]], "text": "<b>3. You approve elsewhere.</b> On your phone you open the address, type the code, sign in and approve. The authorization server now knows which device that is."},
+          {"on": "dev r2 as", "good": "dev", "off": "r1 r3 phone code", "path": [[206, 160], [334, 160]], "text": "<b>4. The device polls</b> the token endpoint with the <code>device_code</code>. It gets <code>authorization_pending</code> (keep waiting), <code>slow_down</code> (wait longer), then the tokens."}
+        ]</script>
+      </figure>
+      <h3>Refresh tokens, and detecting theft</h3>
+      <p>A refresh token is more dangerous than an access token because it lasts longer. For public clients RFC 9700 requires that refresh tokens are either <b>sender-constrained</b> or <b>rotated</b>: every use returns a new one and spends the old one. If an old one is presented again, two parties hold it, and the server can revoke the whole family.</p>
+      <figure class="anim" aria-label="Animated diagram: refresh token rotation and detecting a stolen refresh token">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="Each use of a refresh token returns a new refresh token and invalidates the old one. If a stolen old refresh token is used again, the server sees the reuse and revokes the whole family.">
+<rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 90 H340"/><path class="a-route" data-k="r2" d="M200 200 H340"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="cl"><rect x="24" y="50" width="176" height="80" rx="8"/><text class="a-t" x="112" y="80">Client</text><text class="a-s" x="112" y="100">holds refresh token R1</text></g>
+<g class="a-node" data-k="thief"><rect x="24" y="170" width="176" height="60" rx="8"/><text class="a-t" x="112" y="190">Thief</text><text class="a-s" x="112" y="210">copied R1 earlier</text></g>
+<g class="a-node" data-k="as"><rect x="340" y="40" width="200" height="220" rx="8"/><text class="a-t" x="440" y="130">Authorization server</text><text class="a-s" x="440" y="150">refresh tokens are</text><text class="a-s" x="440" y="168">one-time: R1, R2, R3…</text></g>
+<text class="a-lbl" data-k="r1" x="270" y="78">refresh with R1</text><text class="a-lbl" data-k="r2" x="270" y="188">refresh with R1</text>
+<text class="a-badge good" data-k="ok" x="640" y="100">new access token + R2</text><text class="a-badge bad" data-k="bad" x="640" y="200">R1 used twice: family revoked</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "cl r1 as ok", "good": "cl ok", "off": "r2 thief bad", "path": [[206, 90], [334, 90]], "text": "<b>Normal use.</b> The client sends refresh token R1 and gets a new access token <em>and a new refresh token R2</em>. R1 is now spent."},
+          {"on": "thief r2 as", "bad": "thief", "off": "r1 cl ok bad", "path": [[206, 200], [334, 200]], "text": "<b>The thief tries R1.</b> It was copied before the client rotated it. The server has already seen R1 used."},
+          {"on": "as bad", "bad": "as bad", "off": "r1 r2 ok", "text": "<b>Reuse is the alarm.</b> A spent refresh token being presented means two parties hold it. The server revokes the whole family, including R2, and the user must sign in again. (RFC 9700 4.14)"}
+        ]</script>
+      </figure>
+      <h3>The commands</h3>
+      <div data-cmd="o13-cc"></div>
+      <div data-cmd="o13-refresh"></div>
+
+      <h3>Practice</h3>
+      <div data-ex="o13-choose"></div>
+      <div data-ex="o13-implicit"></div>
+      <div data-ex="o13-device"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Code with PKCE for people. Client credentials for programs. Device flow for devices without a browser.</li>
+        <li>The implicit and password grants are out. The password grant must not be used, because it hands your password to the client.</li>
+        <li>Refresh tokens must be rotated or sender-constrained for public clients, so a copy is detected.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 14 ============ -->
+    <section class="step" id="oidc" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">14</span><h2>OpenID Connect: OAuth plus proof of who signed in</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> explain what OpenID Connect adds to OAuth, validate an ID token, read a discovery document and say which token goes where.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>OAuth gives an app a token for an API. An app that wants to know <em>who</em> signed in needs something else, and using the access token for that is a classic mistake. OpenID Connect (OIDC) is the standard way, and it is what "Log in with Google" really is.</p>
+        <p>This lesson builds on steps 09 to 13.</p>
+      </div>
+      <div class="what-is"><h4>What is it? OpenID Connect</h4><dl>
+        <dt>What it is</dt><dd>A simple identity layer on top of OAuth 2.0 (OpenID Connect Core 1.0). It lets a client verify the identity of the end-user, based on the authentication performed by an authorization server, and get basic profile information.</dd>
+        <dt>The problem it solves</dt><dd>OAuth never defined how an app learns who the user is, so every provider invented its own way. OIDC standardised it, with one token (the ID token) and one way to validate it.</dd>
+        <dt>Everyday comparison</dt><dd>OAuth is the hotel key card. OIDC is the registration slip that says whose card it is.</dd>
+        <dt>What it is not</dt><dd>Not a separate protocol: it is the code flow of step 12 with <code>openid</code> in the scope, plus an <code>id_token</code>. Not SAML, which solves a similar problem in XML.</dd>
+        <dt>Where you meet it</dt><dd>Log in with Google, Microsoft, Okta, Keycloak. The "OpenID Provider" and "relying party" are its names for the server and the app.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? An ID token</h4><dl>
+        <dt>What it is</dt><dd>A JWT issued by the provider, saying that an end-user authenticated: who (<code>sub</code>), when, how, and for which client (<code>aud</code>).</dd>
+        <dt>The problem it solves</dt><dd>A signed statement of the sign-in event, which the app can check itself.</dd>
+        <dt>Everyday comparison</dt><dd>A receipt for the check-in, stamped by the hotel and addressed to you.</dd>
+        <dt>What it is not</dt><dd>Not for APIs. Its audience is the client app. Sending it to an API as if it were an access token is a mistake that audience and type checks (step 10) are there to catch.</dd>
+        <dt>Where you meet it</dt><dd>The <code>id_token</code> field of the token response.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? Single sign-on</h4><dl>
+        <dt>What it is</dt><dd>One sign-in at the identity provider that lets you into several applications.</dd>
+        <dt>The problem it solves</dt><dd>One place to enforce MFA, offboard people and see sign-ins, and no password per app.</dd>
+        <dt>Everyday comparison</dt><dd>A wristband that opens every stage at the festival.</dd>
+        <dt>What it is not</dt><dd>Not the same session in each app: each app still makes its own local session after validating its own ID token.</dd>
+        <dt>Where you meet it</dt><dd>Company portals, and "Sign in with Google" on many sites at once.</dd>
+      </dl></div>
+      <figure class="anim" aria-label="Animated diagram: an OpenID Connect sign-in is the code flow plus an ID token">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="The app sends the user to the OpenID provider with the openid scope and a nonce. After the user signs in, the app exchanges the code and receives an ID token as well as an access token. It validates the ID token and learns who signed in.">
+<rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 90 H340"/><path class="a-route" data-k="r2" d="M540 90 H590"/><path class="a-route" data-k="r3" d="M112 130 V180"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="app"><rect x="24" y="50" width="176" height="80" rx="8"/><text class="a-t" x="112" y="80">Your app</text><text class="a-s" x="112" y="100">relying party</text></g>
+<g class="a-node" data-k="op"><rect x="340" y="50" width="200" height="80" rx="8"/><text class="a-t" x="440" y="80">OpenID provider</text><text class="a-s" x="440" y="100">Keycloak, Google</text></g>
+<g class="a-node" data-k="idt"><rect x="590" y="50" width="146" height="80" rx="8"/><text class="a-t" x="663" y="80">ID token</text><text class="a-s" x="663" y="100">a JWT about you</text></g>
+<g class="a-node" data-k="val"><rect x="24" y="180" width="330" height="80" rx="8"/><text class="a-t" x="189" y="210">The app validates it</text><text class="a-s" x="189" y="230">iss · aud · exp · nonce · signature</text></g>
+<text class="a-lbl" data-k="r1" x="270" y="78">scope=openid + nonce</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "app r1 op", "off": "r2 r3 idt val", "path": [[206, 90], [334, 90]], "text": "<b>1. Ask to know who this is.</b> The ordinary code flow, with <code>openid</code> in the scope, and a <code>nonce</code> the app will look for later."},
+          {"on": "op r2 idt", "off": "r1 r3 app val", "path": [[546, 90], [584, 90]], "text": "<b>2. The ID token.</b> After the code exchange the provider returns an <code>id_token</code>: a JWT saying who authenticated, when, and for which client."},
+          {"on": "app r3 val", "good": "val", "off": "r1 r2 op idt", "path": [[112, 134], [112, 176]], "text": "<b>3. The app validates it</b> (not the API: the ID token is for the app). Issuer, audience, expiry, nonce and signature. Only then does it trust <code>sub</code> as the user."}
+        ]</script>
+      </figure>
+      <h3>The three tokens, and who each is for</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Token</th><th>For</th><th>Sent to</th><th>Read by</th></tr></thead>
+        <tbody>
+          <tr><td><b>ID token</b></td><td>The client app: who signed in</td><td>Nobody. The app keeps it.</td><td>The client.</td></tr>
+          <tr><td><b>Access token</b></td><td>The API: what the client may do</td><td>The resource server, in <code>Authorization: Bearer</code>.</td><td>The API. The client treats it as opaque.</td></tr>
+          <tr><td><b>Refresh token</b></td><td>The authorization server: get a new access token</td><td>The token endpoint only.</td><td>The authorization server.</td></tr>
+        </tbody>
+      </table></div>
+      <h3>The claims of an ID token</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Claim</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>iss</code></td><td>The issuer: an <code>https</code> URL with no query or fragment.</td></tr>
+          <tr><td><code>sub</code></td><td>The subject: a locally unique, never reassigned identifier for the user at this issuer, no longer than 255 ASCII characters. <b>Use it as the user's key, together with <code>iss</code>.</b></td></tr>
+          <tr><td><code>aud</code></td><td>Must contain the client's <code>client_id</code>.</td></tr>
+          <tr><td><code>exp</code>, <code>iat</code></td><td>When it expires and when it was issued. The token's expiry is unrelated to the length of the user's session at the provider.</td></tr>
+          <tr><td><code>nonce</code></td><td>The value the client sent in the request. It must be present and equal.</td></tr>
+          <tr><td><code>auth_time</code>, <code>acr</code>, <code>amr</code></td><td>When the user authenticated and how strongly and by which methods.</td></tr>
+          <tr><td><code>azp</code></td><td>The authorized party: the client the token was issued to.</td></tr>
+          <tr><td><code>at_hash</code></td><td>The left half of the hash of the access token, binding the two together.</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Validating an ID token</h3>
+      <p>OpenID Connect Core section 3.1.3.7 lists what the client MUST do in the code flow:</p>
+      <ol>
+        <li>The <code>iss</code> must exactly match the issuer identifier the provider published (from discovery).</li>
+        <li>The <code>aud</code> must contain the client's own <code>client_id</code>. Reject the token if it lists audiences the client does not trust.</li>
+        <li>If <code>azp</code> is present, it should be this client's id.</li>
+        <li>Validate the signature with the keys the issuer provides, using an algorithm the client expects (RS256 by default). When the token arrives directly from the token endpoint over TLS, the TLS server validation <em>may</em> be used in place of checking the signature.</li>
+        <li>The current time must be before <code>exp</code>.</li>
+        <li>If a <code>nonce</code> was sent, a <code>nonce</code> claim must be present and equal.</li>
+      </ol>
+      <p>Then use <code>iss</code> + <code>sub</code> as the user's identity. Google puts it plainly: do not use the <code>email</code> claim as a unique identifier, because it may change; always use <code>sub</code>.</p>
+      <h3>Discovery: how a client finds everything</h3>
+      <p>A provider publishes a JSON document at <code>{issuer}/.well-known/openid-configuration</code> (OpenID Connect Discovery 1.0). Libraries read it, which is why you configure only the issuer (the "authority"). The fields you will meet: <code>issuer</code>, <code>authorization_endpoint</code>, <code>token_endpoint</code>, <code>userinfo_endpoint</code>, <code>jwks_uri</code> (where the signing keys are), <code>end_session_endpoint</code>, <code>scopes_supported</code>, <code>response_types_supported</code>, <code>id_token_signing_alg_values_supported</code> and <code>code_challenge_methods_supported</code>.</p>
+      <div data-ex="o14-discovery"></div>
+      <h3>UserInfo, and signing out</h3>
+      <p>The <b>UserInfo endpoint</b> returns claims about the user for an access token with the right scope (<code>profile</code>, <code>email</code>). Signing out has two halves: the app ends its own session, and it can send the browser to the provider's <code>end_session_endpoint</code> (RP-Initiated Logout 1.0) with an <code>id_token_hint</code> and a pre-registered <code>post_logout_redirect_uri</code>, so the provider ends its session too. Without that second half the user is still signed in at the provider, and the next click on "sign in" completes silently.</p>
+      <h3>OIDC, SAML and plain OAuth</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th>OAuth 2.0</th><th>OpenID Connect</th><th>SAML 2.0</th></tr></thead>
+        <tbody>
+          <tr><td>Answers</td><td>May this app do that?</td><td>Who signed in?</td><td>Who signed in? (to another organisation's service)</td></tr>
+          <tr><td>Format</td><td>Access token (often a JWT)</td><td>ID token (a JWT)</td><td>XML assertions</td></tr>
+          <tr><td>Built on</td><td>HTTP</td><td>OAuth 2.0</td><td>Its own protocols and bindings</td></tr>
+          <tr><td>Typical use</td><td>APIs, delegated access</td><td>Modern web and mobile sign-in</td><td>Web single sign-on between organisations (OASIS standard, 2005)</td></tr>
+        </tbody>
+      </table></div>
+      <h3>One sign-in, a second app</h3>
+      <figure class="anim" aria-label="Animated diagram: single sign-on, where a second app signs in with no password prompt">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="The user signs in to app A at the identity provider. When the user opens app B, B redirects to the same provider. The provider already has a session for the user, so it returns a code straight away and B signs the user in without asking for a password.">
+<rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 80 H340"/><path class="a-route" data-k="r2" d="M200 200 H340"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="a"><rect x="24" y="40" width="176" height="80" rx="8"/><text class="a-t" x="112" y="70">App A</text><text class="a-s" x="112" y="90">signed in</text></g>
+<g class="a-node" data-k="b"><rect x="24" y="160" width="176" height="80" rx="8"/><text class="a-t" x="112" y="190">App B</text><text class="a-s" x="112" y="210">opened later</text></g>
+<g class="a-node" data-k="idp"><rect x="340" y="40" width="220" height="200" rx="8"/><text class="a-t" x="450" y="120">Identity provider</text><text class="a-s" x="450" y="140">has your session</text><text class="a-s" x="450" y="158">from the first sign-in</text></g>
+<text class="a-badge" data-k="pw" x="450" y="270">password asked</text><text class="a-badge good" data-k="nopw" x="450" y="270">no password prompt</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "a r1 idp pw", "off": "b r2 nopw", "path": [[206, 80], [334, 80]], "text": "<b>First app.</b> You are sent to the provider, you sign in (password, passkey, MFA), and it keeps a session for you."},
+          {"on": "b r2 idp nopw", "good": "b idp nopw", "off": "a r1 pw", "path": [[206, 200], [334, 200]], "text": "<b>Second app.</b> It redirects to the same provider. The provider sees its own session cookie, so it issues a code straight away. App B validates its own ID token and signs you in with no prompt."}
+        ]</script>
+      </figure>
+
+      <h3>Practice</h3>
+      <div data-ex="o14-validate"></div>
+      <div data-ex="o14-which"></div>
+      <div data-ex="o14-key"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>OpenID Connect is OAuth's code flow with <code>openid</code> in the scope, plus an ID token that tells the client who signed in.</li>
+        <li>Validate the issuer, audience, signature, expiry and nonce. Key the user by <code>iss</code> and <code>sub</code>, never email.</li>
+        <li>ID token for the app, access token for the API, refresh token for the authorization server.</li>
+        <li>Discovery gives a client every endpoint and the keys from one address.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 15 ============ -->
+    <section class="step" id="google" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">15</span><h2>"Log in with Google", by hand</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> register an app with Google, run Google's sign-in flow yourself, and check a real Google ID token.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>You now know every message. Here you send them, for real, to a real provider, and read the answer. After this, "Log in with Google" is no longer a button but a flow you can debug.</p>
+        <p>This lesson needs a Google account, a free Google Cloud project, and a terminal with <code>curl</code>. If you have none of these, read it and tick the step yourself: the next levels do not depend on it.</p>
+      </div>
+      <div class="callout"><p><strong>What could and could not be tested.</strong> The tool and the commands on this page were tested. The steps in Google's console and the live sign-in need your Google account, so they were checked against Google's documentation and its live discovery document, not run. Google changes its console labels: the goal of each step is given as well as the label.</p></div>
+
+      <h3>What Google is, in OIDC's words</h3>
+      <p>Google is an OpenID Provider and you are the relying party. Its discovery document is at <code>https://accounts.google.com/.well-known/openid-configuration</code>. Today it says: issuer <code>https://accounts.google.com</code>, authorization endpoint <code>https://accounts.google.com/o/oauth2/v2/auth</code>, token endpoint <code>https://oauth2.googleapis.com/token</code>, keys at <code>https://www.googleapis.com/oauth2/v3/certs</code>, ID tokens signed with RS256, and PKCE methods <code>plain</code> and <code>S256</code>.</p>
+      <figure class="anim" aria-label="Animated diagram: Log in with Google is OpenID Connect with Google as the provider">
+        <div class="anim-stage"><svg viewBox="0 0 760 320" role="img" aria-label="Your app redirects to accounts.google.com with its client ID and redirect URI. You sign in with Google. Google redirects back with a code. Your server exchanges it at oauth2.googleapis.com for an ID token and checks it with Google keys from the certs endpoint.">
+<rect class="a-zone" x="8" y="8" width="744" height="304" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 90 H340"/><path class="a-route" data-k="r2" d="M340 130 H200"/><path class="a-route" data-k="r3" d="M200 190 H340"/><path class="a-route" data-k="r4" d="M200 260 H340"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="app"><rect x="24" y="40" width="176" height="260" rx="8"/><text class="a-t" x="112" y="150">Your app</text><text class="a-s" x="112" y="170">client ID + secret</text><text class="a-s" x="112" y="188">on your server</text></g>
+<g class="a-node" data-k="g1"><rect x="340" y="60" width="300" height="70" rx="8"/><text class="a-t" x="490" y="85">accounts.google.com</text><text class="a-s" x="490" y="105">/o/oauth2/v2/auth</text></g>
+<g class="a-node" data-k="g2"><rect x="340" y="160" width="300" height="60" rx="8"/><text class="a-t" x="490" y="180">oauth2.googleapis.com</text><text class="a-s" x="490" y="200">/token</text></g>
+<g class="a-node" data-k="g3"><rect x="340" y="240" width="300" height="60" rx="8"/><text class="a-t" x="490" y="260">www.googleapis.com</text><text class="a-s" x="490" y="280">/oauth2/v3/certs</text></g>
+<text class="a-lbl" data-k="r1" x="270" y="78">1. redirect the user</text><text class="a-lbl" data-k="r2" x="270" y="152">2. code comes back</text><text class="a-lbl" data-k="r3" x="270" y="178">3. exchange the code</text><text class="a-lbl" data-k="r4" x="270" y="248">4. fetch signing keys</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "app r1 g1", "off": "r2 r3 r4 g2 g3", "path": [[206, 90], [334, 90]], "text": "<b>1. Redirect to Google</b> with your <code>client_id</code>, a registered <code>redirect_uri</code>, <code>scope=openid email profile</code>, <code>state</code>, <code>nonce</code> and a PKCE challenge."},
+          {"on": "g1 r2 app", "off": "r1 r3 r4 g2 g3", "path": [[334, 130], [206, 130]], "text": "<b>2. You sign in at Google</b>, and Google sends your browser back to the redirect URI with a one-time <code>code</code> and your <code>state</code>."},
+          {"on": "app r3 g2", "off": "r1 r2 r4 g1 g3", "path": [[206, 190], [334, 190]], "text": "<b>3. Exchange the code</b> from your server (this is where the client secret and the code verifier are used). Google answers with an <code>id_token</code> and an <code>access_token</code>."},
+          {"on": "app r4 g3", "good": "app", "off": "r1 r2 r3 g1 g2", "path": [[334, 260], [206, 260]], "text": "<b>4. Check the ID token</b> against the keys Google publishes. Then use <code>iss</code> + <code>sub</code> as the user's identity, never the email."}
+        ]</script>
+      </figure>
+      <p>Google offers two ways to add the button. The <b>standard redirect flow</b> you build here works in any language. The <b>Sign in with Google</b> button (Google Identity Services) shows a button or One Tap prompt and returns an ID token to your page for your server to verify. It uses the browser's FedCM API, and Google says to enable FedCM for new integrations. Note Google's own distinction: the sign-in API returns only ID tokens, and access to Google APIs is a separate authorization step.</p>
+
+      <h3>Part 1: create the client</h3>
+      <ol>
+        <li>In the Google Cloud console, open <b>Google Auth Platform</b> and its <b>Clients</b> page, in a free project of your own.</li>
+        <li><b>Branding and audience:</b> give the app a name and a support email. Choose <b>External</b> as the audience, and leave the publishing status at <b>Testing</b>. In Testing, only the test users you list (up to 100) can authorise the app, and authorisations expire after seven days. Add your own Google account as a test user. (An app that asks only for the basic profile, email and <code>openid</code> scopes is exempt from the listing and the expiry.)</li>
+        <li><b>Create a client</b> of type <b>Web application</b>. Under <b>Authorized redirect URIs</b> add exactly the address shown by the tool below. Google requires <code>https</code> for redirect URIs but exempts localhost, and it matches them exactly, including scheme, case and trailing slash.</li>
+        <li>Copy the <b>client ID</b> into the tool. Keep the <b>client secret</b> for your terminal: it never goes into this page.</li>
+      </ol>
+      <h3>Part 2: send the request</h3>
+      <p>The tool creates <code>state</code>, <code>nonce</code> and a PKCE challenge, shows the request parameter by parameter, and sends you to Google. When you come back it checks <code>state</code> and gives you the exchange command with your own values.</p>
+      <div data-tool="google"></div>
+      <h3>Part 3: exchange the code, in your terminal</h3>
+      <p>Run the command the tool printed. Google answers with JSON: <code>access_token</code>, <code>expires_in</code>, <code>scope</code>, <code>token_type</code> and <code>id_token</code>. Copy the <code>id_token</code>.</p>
+      <h3>Part 4: check the ID token</h3>
+      <p>Fetch Google's keys with <code>curl https://www.googleapis.com/oauth2/v3/certs</code> and paste the whole key set into the key box of the workbench below, with the <code>id_token</code>. The workbench picks the key by <code>kid</code>. Set the issuer to <code>https://accounts.google.com</code>, the audience to your client ID, and the algorithms to <code>RS256</code>.</p>
+      <div data-tool="jwt"></div>
+      <p>Then check by eye, as OpenID Connect requires: <code>iss</code> is <code>https://accounts.google.com</code> (Google documents both that and <code>accounts.google.com</code>), <code>aud</code> is your client ID, <code>exp</code> is in the future, and <code>nonce</code> is the one the tool showed you. For a Google Workspace account, <code>hd</code> is the domain you accept.</p>
+      <div data-ex="o15-claims"></div>
+      <h3>What to store about the user</h3>
+      <p>Google's guidance is blunt: <b>do not use the <code>email</code> claim as the user's unique identifier. Always use <code>sub</code>, which is unique to a Google Account even if the user changes their email.</b> Store the pair (<code>iss</code>, <code>sub</code>). The <code>hd</code> request parameter is only a hint for the login screen. Google says not to rely on that optimisation to control access, because client-side requests can be modified. Check the <code>hd</code> <em>claim</em> in the ID token on your server.</p>
+      <h3>Clean up</h3>
+      <p>When you are done, delete the client in the console, or at least remove the test user, and revoke the app at <code>myaccount.google.com/permissions</code>. In step 23 you will add Google to Keycloak, so your app never talks to Google itself.</p>
+      <div data-ex="o15-store"></div>
+      <div data-ex="o15-hd"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Logging in with Google is the OIDC code flow against Google's published endpoints. You can run every message by hand.</li>
+        <li>The client secret stays in your terminal and your server. State and nonce are checked.</li>
+        <li>Key a Google user by <code>iss</code> and <code>sub</code>. Never trust email as an identifier, and never use the <code>hd</code> parameter as access control.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle" data-manual-tick><input type="checkbox" data-done> Mark this step as done</label></div>
     </section>
     </main>
 </div>
@@ -3248,6 +3775,96 @@ builder.Services.AddAuthorization();</code></pre></figure>
     { id: 'other-path', label: 'A different path on your site', detail: 'GET https://app.example.com/admin (try Path=/api)', scheme: 'https', host: 'app.example.com', path: '/admin', crossSite: false, topLevelNav: true, method: 'GET' },
   ];
   return { accepted, sent, SCENARIOS, SET_BY };
+});
+
+</script>
+<script>
+// The OAuth 2.0 authorization code flow with PKCE, as data: every message with its real parameters, and what each attack
+// does when the protection is switched off. Plus the grant chooser and a URL judge for the "build the request" drills.
+// Sources: RFC 6749 (4.1, 5), RFC 7636, RFC 9700 (2.1 and 4), RFC 9207, OpenID Connect Core 1.0. Pure JavaScript with no DOM.
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./crypto.js'));
+  else root.IAFlow = factory(root.IACrypto);
+})(typeof self !== 'undefined' ? self : this, function (C) {
+  'use strict';
+  const D = { client: 'todo-web', redirect: 'https://app.example.com/callback', authz: 'https://login.example.com/authorize', token: 'https://login.example.com/token', api: 'https://api.example.com/todos', scope: 'openid todos.read' };
+  const q = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+
+  // opts: { pkce, state, oidc, iss }. Random values are made here, so each run shows different ones.
+  async function build(opts) {
+    opts = Object.assign({ pkce: true, state: true, oidc: true, iss: true }, opts || {});
+    const verifier = C.pkceVerifier(), challenge = await C.pkceChallenge(verifier);
+    const state = C.b64uEnc(C.random(16)), nonce = C.b64uEnc(C.random(16)), code = C.b64uEnc(C.random(24));
+    const scope = opts.oidc ? D.scope : 'todos.read';
+    const auth = { response_type: 'code', client_id: D.client, redirect_uri: D.redirect, scope };
+    if (opts.state) auth.state = state;
+    if (opts.oidc) auth.nonce = nonce;
+    if (opts.pkce) { auth.code_challenge = challenge; auth.code_challenge_method = 'S256'; }
+    const back = { code }; if (opts.state) back.state = state; if (opts.iss) back.iss = 'https://login.example.com';
+    const tokenReq = { grant_type: 'authorization_code', code, redirect_uri: D.redirect, client_id: D.client };
+    if (opts.pkce) tokenReq.code_verifier = verifier;
+    const resp = { access_token: 'eyJhbGciOi…', token_type: 'Bearer', expires_in: 600, refresh_token: 'tGzv3JOkF0…', scope };
+    if (opts.oidc) resp.id_token = 'eyJhbGciOi…';
+    const steps = [
+      { n: 1, channel: 'browser', from: 'You', to: 'Client app', title: 'You choose to sign in', http: 'GET /login HTTP/1.1\nHost: app.example.com',
+        note: 'The client makes up three one-time values for this attempt: <code>state</code>' + (opts.pkce ? ', a <code>code_verifier</code>' : '') + (opts.oidc ? ' and a <code>nonce</code>' : '') + '. It keeps them in your session.' + (opts.pkce ? ' Only a hash of the verifier leaves the client now.' : '') },
+      { n: 2, channel: 'front', from: 'Client app', to: 'Authorization server', title: 'Redirect to the authorization endpoint', http: 'HTTP/1.1 302 Found\nLocation: ' + D.authz + '?' + q(auth),
+        note: 'Everything here travels in the browser\'s address bar, so anyone watching the browser can see it. That is why nothing secret may be in it: the <code>code_challenge</code> is a hash.' },
+      { n: 3, channel: 'user', from: 'You', to: 'Authorization server', title: 'You sign in and consent', http: '(a login page and a consent screen: the client never sees this)',
+        note: 'The authorization server checks your password or passkey and shows what the client asks for (<code>' + scope + '</code>). Your credentials never go to the client.' },
+      { n: 4, channel: 'front', from: 'Authorization server', to: 'Client app', title: 'Redirect back with a code', http: 'HTTP/1.1 302 Found\nLocation: ' + D.redirect + '?' + q(back),
+        note: 'The <code>code</code> is short-lived and single-use. It is <em>not</em> a token: on its own it opens nothing, but it passes through the browser, where it can leak.' + (opts.iss ? ' The <code>iss</code> parameter (RFC 9207) tells the client which server answered.' : '') },
+      { n: 5, channel: 'browser', from: 'Browser', to: 'Client app', title: 'The client checks the callback', http: 'GET /callback?' + q(back) + ' HTTP/1.1\nHost: app.example.com',
+        note: (opts.state ? 'It compares <code>state</code> with the value it stored for this browser and rejects the request if they differ.' : '<b>No <code>state</code> was sent, so there is nothing to compare.</b>') + (opts.iss ? ' It also checks <code>iss</code>.' : '') },
+      { n: 6, channel: 'back', from: 'Client app', to: 'Authorization server', title: 'Exchange the code for tokens', http: 'POST /token HTTP/1.1\nHost: login.example.com\nContent-Type: application/x-www-form-urlencoded\n\n' + q(tokenReq),
+        note: 'This request goes straight from the client to the server, over TLS, not through the browser. ' + (opts.pkce ? 'The server hashes <code>code_verifier</code> and compares it with the <code>code_challenge</code> it stored at step 2.' : 'There is no verifier to prove the caller is the one who started the flow.') + ' A confidential client also authenticates here (a secret or a key).' },
+      { n: 7, channel: 'back', from: 'Authorization server', to: 'Client app', title: 'The tokens', http: 'HTTP/1.1 200 OK\nContent-Type: application/json\nCache-Control: no-store\n\n' + JSON.stringify(resp, null, 2),
+        note: (opts.oidc ? 'Because <code>openid</code> was in the scope there is also an <code>id_token</code>: proof of who signed in, for the client (step 14). ' : '') + 'The <code>access_token</code> is for the API. The <code>refresh_token</code> is for getting a new access token later (step 13).' },
+      { n: 8, channel: 'api', from: 'Client app', to: 'API', title: 'Call the API', http: 'GET /todos HTTP/1.1\nHost: api.example.com\nAuthorization: Bearer eyJhbGciOi…',
+        note: 'The API checks the token as in step 10 and answers.' },
+    ];
+    // What each protection stops. `on` says whether the protection is present in this run.
+    const attacks = [
+      { id: 'code-theft', protection: 'PKCE', on: opts.pkce, name: 'A stolen authorization code',
+        story: 'A malicious app on the same device, a log, or a hostile proxy gets the <code>code</code> from step 4 and sends it to the token endpoint first.',
+        without: '<b>Tokens are issued to the attacker.</b> The code is all the server asked for. This is the authorization code interception attack that PKCE (RFC 7636) was written for.',
+        with: 'The attacker has the code but not the <code>code_verifier</code>, which never left the client. The server answers <code>invalid_grant</code>.' },
+      { id: 'login-csrf', protection: 'state', on: opts.state, name: 'A forged callback (login CSRF)',
+        story: 'The attacker starts a flow with their own account, stops before the callback, and gets your browser to open the callback URL with <em>their</em> code.',
+        without: '<b>The client completes the attacker\'s flow in your session.</b> It cannot tell that this browser never started it, so you end up signed in to, or linked to, the attacker\'s account.',
+        with: 'The callback carries a <code>state</code> this browser never stored. The client rejects it. (RFC 9700 says PKCE can serve instead, and that the OIDC <code>nonce</code> protects against CSRF as well.)' },
+      { id: 'mix-up', protection: 'iss parameter', on: opts.iss, name: 'A mix-up between two servers',
+        story: 'The client supports several authorization servers, and an attacker runs one of them. The attacker tricks it into sending the real server\'s code to the attacker\'s token endpoint.',
+        without: '<b>The attacker gets a code for the real server.</b> The client cannot tell which server the response came from.',
+        with: 'The response names its issuer, which does not match the server the client started with. It rejects it. (RFC 9207; RFC 9700 4.4)' },
+    ];
+    return { opts, values: { verifier, challenge, state, nonce, code }, auth, steps, attacks, defaults: D };
+  }
+
+  // "Which grant?" (RFC 6749 section 4, RFC 8628, RFC 9700 2.1 and 2.4). answers: { hasUser, device, clientKind }
+  function chooseGrant(a) {
+    if (!a.hasUser) return { grant: 'client_credentials', title: 'Client credentials', why: 'No person is involved, so the client authenticates as itself (RFC 6749, 4.4). Use a key or a mutual-TLS certificate rather than a long-lived secret where you can.' };
+    if (a.device === 'limited') return { grant: 'device_code', title: 'Device authorization grant', why: 'The device has no browser or no keyboard, so the user finishes on another device with a short code (RFC 8628).' };
+    if (a.legacyPassword) return { grant: 'authorization_code', title: 'Authorization code with PKCE', why: 'Not the password grant: RFC 9700 says it MUST NOT be used. Move the sign-in to the authorization server and use the code flow.' };
+    return { grant: 'authorization_code', title: 'Authorization code with PKCE', why: 'A person signs in through a browser. Use the code flow with PKCE for every kind of client, public or confidential (RFC 9700, 2.1.1).' };
+  }
+
+  // Judge a URL: origin and path, then required parameters. spec: { origin, path, params: { name: value | RegExp | true }, forbid: [names] }
+  function judgeUrl(text, spec) {
+    const problems = [];
+    let u; try { u = new URL(text.trim()); } catch (e) { return { ok: false, problems: ['That is not a complete URL (it needs https:// and a host).'] }; }
+    if (u.origin + u.pathname !== spec.origin + spec.path) problems.push(`The address should be <code>${spec.origin}${spec.path}</code>.`);
+    for (const [k, want] of Object.entries(spec.params)) {
+      const vs = u.searchParams.getAll(k);
+      if (!vs.length) { problems.push(`Missing <code>${k}</code>${spec.why && spec.why[k] ? ': ' + spec.why[k] : ''}.`); continue; }
+      if (vs.length > 1) problems.push(`<code>${k}</code> appears more than once.`);
+      const ok = want === true || (want instanceof RegExp ? want.test(vs[0]) : vs[0] === want);
+      if (!ok) problems.push(`<code>${k}=${vs[0].replace(/[<>&"]/g, '')}</code> is not right${spec.why && spec.why[k] ? ': ' + spec.why[k] : ''}.`);
+    }
+    for (const k of spec.forbid || []) if (u.searchParams.has(k)) problems.push(`<code>${k}</code> must not be in this request.`);
+    return { ok: problems.length === 0, problems, params: Object.fromEntries(u.searchParams) };
+  }
+  return { build, chooseGrant, judgeUrl, defaults: D };
 });
 
 </script>
@@ -8601,6 +9218,161 @@ IA.cmds = IA.cmds || {};
     ] };
 })();
 
+// ---- exercises/04-oauth.js
+// Exercises and drills for steps 11 to 15 (OAuth 2.0, the code flow, other grants, OpenID Connect, Google).
+(function () {
+  var IA = window.IA, X = IA.exercises;
+  IA.cmds = IA.cmds || {}; IA.urls = IA.urls || {};
+  var S = function (cmd, o) { return window.IACmdSpec.spec(IA.cmdFlags, cmd, o); };
+  var pos = function (re, label, what, hint) { return { match: re, label: label, what: what, hint: hint }; };
+  var tokenUrl = /^https:\/\/login\.example\.com\/token$/;
+  function drill(id, prompt, specs, answer, hints, after) { IA.cmds[id] = { prompt: prompt, specs: specs, answer: answer, hints: hints || [], after: after || '', run: { noRun: 'needs an authorization server' } }; }
+  var form = function (re, missing) { return { match: re, missing: missing }; };
+
+  // ---- 11
+  X['o11-roles'] = { kind: 'sort', prompt: '<p>Name the OAuth role of each.</p>',
+    groups: ['Resource owner', 'Client', 'Authorization server', 'Resource server'],
+    items: [
+      { t: 'Alice, who owns the todos.', g: 0, why: 'The entity able to grant access to the resource.' },
+      { t: 'The Angular app that wants to read Alice\'s todos.', g: 1, why: 'The application making requests on the owner\'s behalf.' },
+      { t: 'Keycloak, which signs Alice in and issues tokens.', g: 2, why: 'It issues access tokens after authenticating the owner.' },
+      { t: 'The Todo API, which holds the todos.', g: 3, why: 'It hosts the protected resources and accepts access tokens.' },
+      { t: 'A photo-printing website that you let read your photos at a photo-sharing site.', g: 1, why: 'The printing site is the client, acting for you.' },
+      { t: 'Google, when an app offers "Log in with Google".', g: 2, why: 'Google authenticates the user and issues the tokens.' },
+    ] };
+  X['o11-channel'] = { kind: 'sort', prompt: '<p>Which channel does each message use?</p>',
+    groups: ['Front channel (through the browser)', 'Back channel (server to server)'],
+    items: [
+      { t: 'The redirect to the authorization endpoint.', g: 0, why: 'A redirect travels through the user\'s browser.' },
+      { t: 'The <code>code</code> in <code>?code=…</code> in the address bar.', g: 0, why: 'It is in the browser\'s address.' },
+      { t: 'The POST that exchanges the code for tokens.', g: 1, why: 'It goes directly from the client\'s server to the token endpoint.' },
+      { t: 'The JSON containing the access token.', g: 1, why: 'Tokens come back on the direct response, never through the browser.' },
+      { t: 'The consent screen.', g: 0, why: 'The user sees it in their browser.' },
+    ] };
+  X['o11-login'] = { kind: 'quiz', prompt: '<p>An app receives an OAuth access token for Alice\'s calendar. Does that, by itself, tell the app <b>who Alice is</b>?</p>',
+    options: [
+      { t: 'Yes: the token was issued for Alice, so it identifies her.', ok: false, why: 'A token says what may be done. OAuth defines no way to read an identity from it.' },
+      { t: 'No. OAuth is about permission. OpenID Connect adds an ID token for identity.', ok: true, why: 'This is why "log in with" is built on OpenID Connect and not on bare OAuth.' },
+      { t: 'Yes, if the token is a JWT.', ok: false, why: 'A JWT access token has claims, but what they mean is up to the API. It is not a sign-in.' },
+    ] };
+
+  // ---- 12
+  IA.urls['o12-authz'] = { prompt: '<p>Build the authorization request. The client is <code>todo-web</code>, its registered redirect URI is <code>https://app.example.com/callback</code>, and the authorization endpoint is <code>https://login.example.com/authorize</code>. Ask for the scopes <code>openid todos.read</code> with the <b>code</b> flow. Use <code>state</code> <code>xyz789</code> and the PKCE challenge <code>E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM</code> with the S256 method. Write it as one URL (spaces become <code>%20</code>).</p>',
+    spec: { origin: 'https://login.example.com', path: '/authorize', params: { response_type: 'code', client_id: 'todo-web', redirect_uri: 'https://app.example.com/callback', scope: /^(openid todos\.read|todos\.read openid)$/, state: 'xyz789', code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM', code_challenge_method: 'S256' },
+      why: { response_type: 'the authorization code flow', redirect_uri: 'the registered one, exactly', scope: 'both scopes, space separated', code_challenge_method: 'S256, not plain' }, forbid: ['code_verifier', 'client_secret'] },
+    answer: 'https://login.example.com/authorize?response_type=code&client_id=todo-web&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcallback&scope=openid%20todos.read&state=xyz789&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256',
+    hints: ['The query parameters are <code>response_type</code>, <code>client_id</code>, <code>redirect_uri</code>, <code>scope</code>, <code>state</code>, <code>code_challenge</code> and <code>code_challenge_method</code>.', 'Never put the <code>code_verifier</code> or a secret in this address: it is in the front channel.'],
+    after: 'Notice what is not here: the verifier and any secret. Only the hash of the verifier is in the front channel.' };
+  drill('o12-token', '<p>Exchange the code at <code>https://login.example.com/token</code> with <code>curl</code>. Send, form-encoded with <code>-d</code>: <code>grant_type=authorization_code</code>, <code>code=SplxlOBeZQQYbYS6WxSbIA</code>, the same <code>redirect_uri=https://app.example.com/callback</code>, <code>client_id=todo-web</code>, and your <code>code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk</code>.</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--data': { value: true, repeat: true, what: 'a form field', each: [
+      form(/^grant_type=authorization_code$/, 'Add <code>-d grant_type=authorization_code</code>.'), form(/^code=SplxlOBeZQQYbYS6WxSbIA$/, 'Add the code: <code>-d code=SplxlOBeZQQYbYS6WxSbIA</code>.'),
+      form(/^redirect_uri=https:\/\/app\.example\.com\/callback$/, 'Send the same <code>redirect_uri</code> as in the first request.'), form(/^client_id=todo-web$/, 'Add <code>-d client_id=todo-web</code>.'),
+      form(/^code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk$/, 'Add the PKCE verifier: <code>-d code_verifier=…</code>.')] } }, pos: [pos(tokenUrl, 'the token endpoint', 'where to send it', 'https://login.example.com/token')] }),
+    'curl -d grant_type=authorization_code -d code=SplxlOBeZQQYbYS6WxSbIA -d redirect_uri=https://app.example.com/callback -d client_id=todo-web -d code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk https://login.example.com/token',
+    ['Each field is one <code>-d name=value</code>. <code>curl</code> sends them form-encoded as a POST.'], 'The server hashes <code>code_verifier</code> and compares it with the <code>code_challenge</code> from the first request. A mismatch is <code>invalid_grant</code>.');
+  X['o12-order'] = { kind: 'order', prompt: '<p>Put the authorization code flow in order.</p>',
+    items: ['The client makes <code>state</code> and a <code>code_verifier</code>, and redirects the user to the authorization endpoint with the <code>code_challenge</code>.', 'The user signs in and consents at the authorization server.', 'The authorization server redirects back to the client with <code>code</code> and <code>state</code>.', 'The client checks that <code>state</code> matches the one it stored.', 'The client posts the code and the <code>code_verifier</code> to the token endpoint.', 'The authorization server returns the access token (and ID and refresh tokens).', 'The client calls the API with <code>Authorization: Bearer</code>.'] };
+  X['o12-protect'] = { kind: 'sort', prompt: '<p>Which protection stops each attack?</p>',
+    groups: ['PKCE', '<code>state</code>', 'Exact <code>redirect_uri</code> matching', '<code>iss</code> in the response'],
+    items: [
+      { t: 'A malicious app on the phone exchanges a code it intercepted.', g: 0, why: 'It lacks the code verifier.' },
+      { t: 'An attacker makes your browser complete a flow the attacker started.', g: 1, why: 'The callback carries a state this browser never stored.' },
+      { t: 'The code is sent to <code>https://app.example.com.evil.test/callback</code>.', g: 2, why: 'That is not the registered string.' },
+      { t: 'A client of two authorization servers is tricked into sending a code to the wrong one.', g: 3, why: 'The response names the server it came from, and it does not match.' },
+    ] };
+  X['o12-redirect'] = { kind: 'quiz', multi: true, prompt: '<p>The registered redirect URI is <code>https://app.example.com/callback</code>. With <b>exact string matching</b>, which of these requests does the authorization server accept? Tick all that apply.</p>',
+    options: [
+      { t: '<code>https://app.example.com/callback</code>', ok: true, why: 'An exact match.' },
+      { t: '<code>https://app.example.com/callback/</code>', ok: false, why: 'A trailing slash makes it a different string.' },
+      { t: '<code>https://app.example.com/callback?next=/admin</code>', ok: false, why: 'Extra query parameters are not an exact match.' },
+      { t: '<code>https://evil.app.example.com/callback</code>', ok: false, why: 'A different host.' },
+      { t: '<code>http://app.example.com/callback</code>', ok: false, why: 'A different scheme. Plain http is not allowed for a web client at all.' },
+    ] };
+
+  // ---- 13
+  drill('o13-cc', '<p>Get a token for the service <code>todo-reporter</code> with the <b>client credentials</b> grant. Authenticate with HTTP basic authentication as <code>todo-reporter</code> (<code>-u</code>, with the secret in the shell variable <code>$REPORTER_SECRET</code>), ask for the scope <code>todos.stats</code>, and post to <code>https://login.example.com/token</code>.</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--user': { value: /^todo-reporter:/, what: 'authenticate as the client with HTTP basic', bad: function () { return 'Authenticate as <code>todo-reporter</code>: <code>-u todo-reporter:"$REPORTER_SECRET"</code>.'; } }, '--data': { value: true, repeat: true, what: 'a form field', each: [form(/^grant_type=client_credentials$/, 'Add <code>-d grant_type=client_credentials</code>.'), form(/^scope=todos\.stats$/, 'Add <code>-d scope=todos.stats</code>.')] } }, pos: [pos(tokenUrl, 'the token endpoint', 'where to send it')] }),
+    'curl -u todo-reporter:"$REPORTER_SECRET" -d grant_type=client_credentials -d scope=todos.stats https://login.example.com/token',
+    ['<code>-u name:password</code> sends HTTP basic authentication.', 'The grant is a form field: <code>-d grant_type=client_credentials</code>.'], 'Do not type the secret into the command: it would land in your shell history. A variable, a file or a secret store keeps it out.');
+  drill('o13-refresh', '<p>Use the refresh token in <code>$REFRESH</code> to get a new access token for the client <code>todo-web</code> at <code>https://login.example.com/token</code>.</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--data': { value: true, repeat: true, what: 'a form field', each: [form(/^grant_type=refresh_token$/, 'Add <code>-d grant_type=refresh_token</code>.'), form(/^refresh_token=\$REFRESH$|^refresh_token=.+/, 'Send the refresh token: <code>-d refresh_token="$REFRESH"</code>.'), form(/^client_id=todo-web$/, 'Add <code>-d client_id=todo-web</code>.')] } }, pos: [pos(tokenUrl, 'the token endpoint', 'where to send it')] }),
+    'curl -d grant_type=refresh_token -d refresh_token="$REFRESH" -d client_id=todo-web https://login.example.com/token',
+    ['The grant type for this is <code>refresh_token</code>, and the token goes in a field of the same name.'], 'If the server rotates refresh tokens the response contains a <b>new</b> refresh token. Store it and drop the old one at once.');
+  X['o13-choose'] = { kind: 'sort', prompt: '<p>Which grant does each caller use?</p>',
+    groups: ['Authorization code with PKCE', 'Client credentials', 'Device authorization'],
+    items: [
+      { t: 'A nightly report job that reads the Todo API with its own identity.', g: 1, why: 'No user: the program acts for itself.' },
+      { t: 'An Angular app where a person signs in.', g: 0, why: 'A person in a browser: code with PKCE (through the BFF, step 22).' },
+      { t: 'A smart TV app asking you to sign in from your phone.', g: 2, why: 'No keyboard or browser: the device flow.' },
+      { t: 'A command-line tool run on a headless server.', g: 2, why: 'There is no browser on the box. The user approves on another device.' },
+      { t: 'A mobile app with a sign-in button.', g: 0, why: 'A person with a browser: code with PKCE, as a public client.' },
+      { t: 'One microservice calling another with its own service account.', g: 1, why: 'No person involved.' },
+    ] };
+  X['o13-implicit'] = { kind: 'quiz', prompt: '<p>A review finds a single-page app that signs in with <code>response_type=token</code> (the implicit grant). What does RFC 9700 recommend?</p>',
+    options: [
+      { t: 'Keep it, but shorten the token lifetime.', ok: false, why: 'The token still appears in the address bar, history and logs.' },
+      { t: 'Move to the authorization code grant with PKCE, so that access tokens are not issued in the authorization response.', ok: true, why: 'RFC 9700 2.1.2: clients SHOULD NOT use the implicit grant.' },
+      { t: 'Switch to the password grant, which is more direct.', ok: false, why: 'The password grant MUST NOT be used (RFC 9700 2.4).' },
+    ] };
+  X['o13-device'] = { kind: 'order', prompt: '<p>Put the device flow in order.</p>',
+    items: ['The device asks the device authorization endpoint for a device code.', 'The device shows the short user code and the address.', 'The user opens the address on a phone, enters the code, signs in and approves.', 'Meanwhile the device polls the token endpoint with the device code.', 'The token endpoint answers <code>authorization_pending</code> until the user approves, then returns tokens.'] };
+
+  // ---- 14
+  X['o14-discovery'] = { kind: 'inspect', prompt: '<p>A provider\'s discovery document (shortened). Answer from it.</p>',
+    artifact: '{\n  "issuer": "https://login.lab.test/realms/todo",\n  "authorization_endpoint": "https://login.lab.test/realms/todo/protocol/openid-connect/auth",\n  "token_endpoint": "https://login.lab.test/realms/todo/protocol/openid-connect/token",\n  "userinfo_endpoint": "https://login.lab.test/realms/todo/protocol/openid-connect/userinfo",\n  "end_session_endpoint": "https://login.lab.test/realms/todo/protocol/openid-connect/logout",\n  "jwks_uri": "https://login.lab.test/realms/todo/protocol/openid-connect/certs",\n  "id_token_signing_alg_values_supported": ["RS256", "ES256"],\n  "code_challenge_methods_supported": ["S256"],\n  "response_types_supported": ["code", "id_token"]\n}',
+    parts: [
+      { kind: 'quiz', prompt: 'Where do you send the user to sign in?', options: [{ t: 'The <code>authorization_endpoint</code>.', ok: true, why: 'The front-channel redirect goes there.' }, { t: 'The <code>token_endpoint</code>.', ok: false, why: 'That is the back-channel endpoint where the code is exchanged.' }, { t: 'The <code>jwks_uri</code>.', ok: false, why: 'That publishes keys.' }] },
+      { kind: 'quiz', prompt: 'Where does an API get the keys to verify the signature?', options: [{ t: 'The <code>jwks_uri</code>.', ok: true, why: 'It holds the provider\'s public keys.' }, { t: 'The <code>userinfo_endpoint</code>.', ok: false, why: 'That returns claims about a user.' }] },
+      { kind: 'quiz', prompt: 'Which PKCE method may you use here?', options: [{ t: 'Only <code>S256</code>.', ok: true, why: 'It is the only one in <code>code_challenge_methods_supported</code>.' }, { t: '<code>plain</code> and <code>S256</code>.', ok: false, why: 'The list has only S256.' }] },
+      { kind: 'quiz', prompt: 'What must the <code>iss</code> of every ID token equal?', options: [{ t: 'The <code>issuer</code> value: <code>https://login.lab.test/realms/todo</code>, exactly.', ok: true, why: 'OIDC Core 3.1.3.7: the issuer identifier must exactly match the <code>iss</code> claim.' }, { t: 'The host of the token endpoint.', ok: false, why: 'The comparison is with the <code>issuer</code> string, not a host.' }] },
+    ] };
+  X['o14-validate'] = { kind: 'sort', prompt: '<p>Your client is <code>todo-web</code>. It sent <code>nonce=n-4821</code> and expects the issuer <code>https://login.lab.test</code>. Should it <b>accept</b> each ID token?</p>',
+    groups: ['Accept', 'Reject'],
+    items: [
+      { t: 'iss <code>https://login.lab.test</code>, aud <code>todo-web</code>, not expired, nonce <code>n-4821</code>, signature valid with the provider\'s key.', g: 0, why: 'Everything checks out.' },
+      { t: 'Everything is right, but <code>aud</code> is only <code>reports-web</code>.', g: 1, why: 'The token was issued for another client.' },
+      { t: 'Everything is right, but <code>nonce</code> is <code>n-9000</code>.', g: 1, why: 'It does not match what this client sent: possibly a replayed token.' },
+      { t: 'Everything is right, but <code>exp</code> was an hour ago.', g: 1, why: 'The time must be before <code>exp</code>.' },
+      { t: 'iss is <code>https://login.lab.test.evil.example</code>.', g: 1, why: 'The issuer must match exactly, not just start the same.' },
+      { t: 'The header says <code>alg: none</code>.', g: 1, why: 'An unsigned token is not acceptable when the client expects signed ones.' },
+      { t: 'The ID token came straight from the token endpoint, over TLS, in the response to your own code exchange, and every claim checks out (the signature was not separately verified).', g: 0, why: 'OpenID Connect Core allows the TLS server validation to stand in for the signature check in this one case.' },
+    ] };
+  X['o14-which'] = { kind: 'sort', prompt: '<p>Which token do you use?</p>',
+    groups: ['ID token', 'Access token', 'Refresh token'],
+    items: [
+      { t: 'Put it in <code>Authorization: Bearer …</code> on a call to the Todo API.', g: 1, why: 'It is the token for the resource server.' },
+      { t: 'Find out which user just signed in, to show their name.', g: 0, why: 'The ID token is the proof of authentication, for the client.' },
+      { t: 'Send it to the token endpoint to get a new access token.', g: 2, why: 'Only the authorization server ever sees it.' },
+      { t: 'Check <code>nonce</code> and <code>aud</code> against what this client sent.', g: 0, why: 'ID token validation.' },
+    ] };
+  X['o14-key'] = { kind: 'quiz', prompt: '<p>What should the Todo app use to recognise a returning user from an ID token?</p>',
+    options: [
+      { t: 'The <code>email</code> claim: it is easy to read and unique.', ok: false, why: 'Emails change and may be reassigned. Google says plainly not to use it as the identifier.' },
+      { t: 'The pair <code>iss</code> and <code>sub</code>.', ok: true, why: '<code>sub</code> is unique and never reassigned within an issuer, so the pair is a stable key.' },
+      { t: 'The <code>name</code> claim.', ok: false, why: 'Names are not unique.' },
+    ] };
+
+  // ---- 15
+  X['o15-claims'] = { kind: 'inspect', prompt: '<p>A decoded Google ID token payload (made-up values). Answer from it.</p>',
+    artifact: '{\n  "iss": "https://accounts.google.com",\n  "azp": "123456789012-abc.apps.googleusercontent.com",\n  "aud": "123456789012-abc.apps.googleusercontent.com",\n  "sub": "110169484474386276334",\n  "hd": "example.com",\n  "email": "alice@example.com",\n  "email_verified": true,\n  "nonce": "n-4821",\n  "iat": 1791890400,\n  "exp": 1791894000\n}',
+    parts: [
+      { kind: 'quiz', prompt: 'What identifies this user, for good?', options: [{ t: '<code>iss</code> with <code>sub</code>.', ok: true, why: 'Stable and never reassigned.' }, { t: '<code>email</code>.', ok: false, why: 'It can change.' }] },
+      { kind: 'quiz', prompt: 'Which value must equal the one you generated before sending the user to Google?', options: [{ t: '<code>nonce</code>.', ok: true, why: 'It ties this ID token to your request.' }, { t: '<code>azp</code>.', ok: false, why: 'That is your client ID, not a per-request value.' }] },
+      { kind: 'quiz', prompt: 'Your app is only for people at <code>example.com</code>. What do you check on the server?', options: [{ t: 'The <code>hd</code> claim in the verified ID token (and <code>email_verified</code> if you use the email).', ok: true, why: 'Checked on your server, from a token whose signature you verified.' }, { t: 'That you added <code>hd=example.com</code> to the sign-in request.', ok: false, why: 'The request parameter is only a hint for the login screen and can be changed by the client.' }] },
+    ] };
+  X['o15-store'] = { kind: 'quiz', prompt: '<p>Alice changes her Google email address from <code>alice@old.example</code> to <code>alice@new.example</code>. Your app keyed users by email. What happens?</p>',
+    options: [
+      { t: 'Nothing: Google keeps the old email in the token.', ok: false, why: 'The email claim shows the current address.' },
+      { t: 'She appears as a new user and loses her data, or worse, another person who later gets the old address is treated as her.', ok: true, why: 'This is exactly why Google says to use <code>sub</code>.' },
+      { t: 'Her <code>sub</code> changes too, so it is the same problem.', ok: false, why: '<code>sub</code> stays the same for a Google Account.' },
+    ] };
+  X['o15-hd'] = { kind: 'quiz', prompt: '<p>You add <code>hd=example.com</code> to the authorization request, so that the Google account chooser only offers company accounts. Is that enough to keep other people out?</p>',
+    options: [
+      { t: 'Yes, Google refuses other domains.', ok: false, why: 'It is a user interface optimisation, and request parameters can be edited by the client.' },
+      { t: 'No. Check the <code>hd</code> claim of the verified ID token on your server.', ok: true, why: 'Google: do not rely on this optimisation to control access.' },
+    ] };
+})();
+
 </script>
 <script>
 // The page code of the Identity and Access Lab: mounts exercises ([data-ex]) and tools ([data-tool]), keeps the step ticks
@@ -8819,11 +9591,42 @@ IA.cmds = IA.cmds || {};
     run();
   }
 
+
+  // ------------------------------------------------------------------ "write the URL" drills
+  function mountUrl(root) {
+    var id = root.getAttribute('data-url'), spec = (IA.urls || {})[id], F = window.IAFlow;
+    if (!spec || !F) return;
+    var saved = store.get('ia-url:' + id) || {};
+    root.classList.add('ex', 'cmd'); root.innerHTML = '';
+    root.appendChild(el('div', 'ex-q', spec.prompt));
+    var ta = el('textarea', 'cmd-in mono'); ta.rows = 3; ta.spellcheck = false; ta.placeholder = 'Type the address here'; ta.value = saved.v || ''; ta.setAttribute('aria-label', 'URL');
+    var out = el('div', 'ex-out'), bar = el('div', 'lab-bar'), bHint = button('Hint'), bSol = button('Show answer');
+    if ((spec.hints || []).length) bar.appendChild(bHint); bar.appendChild(bSol);
+    root.appendChild(ta); root.appendChild(bar); root.appendChild(out);
+    var hintBox = el('div', 'lab-hint'); hintBox.hidden = true; root.appendChild(hintBox); var hints = 0;
+    function run() {
+      store.set('ia-url:' + id, { v: ta.value, ok: (store.get('ia-url:' + id) || {}).ok });
+      if (!ta.value.trim()) { out.innerHTML = ''; root.classList.remove('ok'); return; }
+      var r = F.judgeUrl(ta.value, spec.spec);
+      root.classList.toggle('ok', r.ok);
+      if (r.ok) {
+        out.innerHTML = '<p class="cmd-ok">✓ Correct. Your request, parameter by parameter:</p><div class="table-wrap"><table><tbody>' + Object.keys(r.params).map(function (k) { return '<tr><td><code>' + esc(k) + '</code></td><td><code>' + esc(r.params[k]) + '</code></td></tr>'; }).join('') + '</tbody></table></div>' + (spec.after ? '<p class="tool-note">' + spec.after + '</p>' : '');
+        var st = store.get('ia-url:' + id) || {}; st.ok = true; store.set('ia-url:' + id, st);
+        root.dispatchEvent(new CustomEvent('expass', { bubbles: true }));
+      } else out.innerHTML = '<ul class="cmd-bad">' + r.problems.map(function (p) { return '<li>' + p + '</li>'; }).join('') + '</ul>';
+    }
+    ta.addEventListener('input', function () { clearTimeout(ta._t); ta._t = setTimeout(run, 250); });
+    bHint.addEventListener('click', function () { var hs = spec.hints || []; hints = Math.min(hs.length, hints + 1); hintBox.hidden = false; hintBox.innerHTML = hs.slice(0, hints).map(function (h, i) { return '<p><b>Hint ' + (i + 1) + ' of ' + hs.length + '.</b> ' + h + '</p>'; }).join(''); });
+    bSol.addEventListener('click', function () { ta.value = spec.answer; run(); });
+    if (saved.ok) root.classList.add('ok');
+    run();
+  }
+
   // ------------------------------------------------------------------ a step's tick means: every exercise in it has been passed
-  function exOk(n) { var c = n.getAttribute('data-cmd'); return !!(store.get(c ? 'ia-cmd:' + c : 'ia-ex:' + n.getAttribute('data-ex')) || {}).ok; }
+  function exOk(n) { var c = n.getAttribute('data-cmd'), u = n.getAttribute('data-url'); return !!(store.get(c ? 'ia-cmd:' + c : u ? 'ia-url:' + u : 'ia-ex:' + n.getAttribute('data-ex')) || {}).ok; }
   function syncTicks() {
     $$('section[data-step]').forEach(function (sec) {
-      var box = $('input[data-done]', sec); var ex = $$('[data-ex], [data-cmd]', sec);
+      var box = $('input[data-done]', sec); var ex = $$('[data-ex], [data-cmd], [data-url]', sec);
       if (!box || !ex.length || $('[data-manual-tick]', sec)) return;
       var done = ex.filter(exOk).length, all = done === ex.length;
       box.disabled = true;
@@ -8840,7 +9643,7 @@ IA.cmds = IA.cmds || {};
     var levels = {};
     $$('section[data-step]').forEach(function (sec) {
       var lvl = sec.getAttribute('data-level') || 'Other';
-      $$('[data-ex], [data-cmd]', sec).forEach(function (n) {
+      $$('[data-ex], [data-cmd], [data-url]', sec).forEach(function (n) {
         var o = levels[lvl] = levels[lvl] || { n: 0, t: 0 };
         o.t++; if (exOk(n)) o.n++;
       });
@@ -8879,9 +9682,17 @@ IA.cmds = IA.cmds || {};
     var dec = el('div', 'tool-out'), ver = el('div', 'tool-ver');
     q.appendChild(el('label', 'pg-l', 'A token (stays in this page)')); q.appendChild(tok); q.appendChild(ex); q.appendChild(dec); q.appendChild(ver); root.appendChild(q);
     var secret = 'lab-secret-lab-secret-lab-secret-32';
-    function keyFrom(text) {
+    function keyFrom(text, kid) {
       text = text.trim(); if (!text) return null;
-      if (text[0] === '{') return JSON.parse(text);
+      if (text[0] === '{') {
+        var j = JSON.parse(text);
+        if (Array.isArray(j.keys)) {                       // a whole key set (a JWKS): pick the key the token names
+          var m = j.keys.filter(function (k) { return k.kid === kid; });
+          if (!m.length) throw new Error('The key set has no key with kid ' + JSON.stringify(kid) + (j.keys.length ? ' (it has: ' + j.keys.map(function (k) { return k.kid; }).join(', ') + ')' : '') + '.');
+          return m[0];
+        }
+        return j;
+      }
       return { kty: 'oct', k: C.b64uEnc(C.utf8(text)) };
     }
     async function render() {
@@ -8926,7 +9737,7 @@ IA.cmds = IA.cmds || {};
     async function check() {
       var out = $('.v-out', ver); if (!out) return;
       var p = C.parse(tok.value), key;
-      try { key = keyFrom($('.v-key', ver).value); } catch (e) { out.innerHTML = '<p class="cmd-bad">The key is not valid JSON: ' + esc(e.message) + '</p>'; return; }
+      try { key = keyFrom($('.v-key', ver).value, p.header && p.header.kid); } catch (e) { out.innerHTML = '<p class="cmd-bad">The key problem: ' + esc(e.message) + '</p>'; return; }
       if (!key) { out.innerHTML = '<p class="tool-note">Enter a key to check the signature.</p>'; return; }
       var algs = $('.v-alg', ver).value.split(/[\s,]+/).filter(Boolean);
       var r = await C.verify(tok.value, { algorithms: algs, key: key, issuer: $('.v-iss', ver).value || undefined, audience: $('.v-aud', ver).value || undefined });
@@ -8935,7 +9746,7 @@ IA.cmds = IA.cmds || {};
     async function resign() {
       var msg = $('.v-msg', ver);
       try {
-        var p = C.parse(tok.value), payload = JSON.parse($('.v-edit', ver).value), key = keyFrom($('.v-key', ver).value);
+        var p = C.parse(tok.value), payload = JSON.parse($('.v-edit', ver).value), key = keyFrom($('.v-key', ver).value, p.header && p.header.kid);
         if (!/^HS(256|384|512)$/.test(p.header.alg)) throw new Error('Only HS256, HS384 and HS512 tokens can be signed here, because they use a secret you hold.');
         if (!key || key.kty !== 'oct') throw new Error('Enter the secret first.');
         tok.value = await C.sign(p.header, payload, key); msg.textContent = 'Signed. The token above is the new one.'; render();
@@ -9091,12 +9902,92 @@ IA.cmds = IA.cmds || {};
     hashes();
   }
 
-  var TOOLS = { jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp, cookie: toolCookie, crypto: toolCrypto };
+
+  function toolFlow(root) {
+    var F = window.IAFlow;
+    root.innerHTML = '';
+    var q = el('div', 'tool flow');
+    q.innerHTML = '<div class="ck-form"><label class="ck-b"><input type="checkbox" class="f-pkce" checked> PKCE (code_challenge)</label><label class="ck-b"><input type="checkbox" class="f-state" checked> state</label><label class="ck-b"><input type="checkbox" class="f-iss" checked> iss in the response</label><button type="button" class="copy f-new">New random values</button></div><div class="f-body"></div>';
+    root.appendChild(q);
+    var body = $('.f-body', q);
+    var CH = { front: 'front channel (through the browser)', back: 'back channel (server to server)', user: 'you', browser: 'your browser', api: 'API call' };
+    async function render() {
+      var f = await F.build({ pkce: $('.f-pkce', q).checked, state: $('.f-state', q).checked, iss: $('.f-iss', q).checked });
+      var h = '<ol class="flow-steps">' + f.steps.map(function (s) {
+        return '<li class="fs ' + s.channel + '"><div class="fs-h"><span class="fs-n">' + s.n + '</span><b>' + esc(s.title) + '</b><span class="lvl-chip">' + esc(CH[s.channel]) + '</span></div><p class="tool-note">' + esc(s.from) + ' → ' + esc(s.to) + '</p><pre class="ex-art">' + esc(s.http) + '</pre><p>' + s.note + '</p></li>';
+      }).join('') + '</ol><h4>What an attacker can do</h4>' + f.attacks.map(function (a) {
+        return '<div class="atk-card ' + (a.on ? 'good' : 'bad') + '"><b>' + esc(a.name) + '</b> <span class="lvl-chip">' + esc(a.protection) + (a.on ? ' on' : ' OFF') + '</span><p>' + a.story + '</p><p>' + (a.on ? '✓ ' + a.with : '✗ ' + a.without) + '</p></div>';
+      }).join('');
+      body.innerHTML = h;
+    }
+    $$('input', q).forEach(function (i) { i.addEventListener('change', render); });
+    $('.f-new', q).addEventListener('click', render);
+    render();
+  }
+
+  function toolGrant(root) {
+    var F = window.IAFlow;
+    root.innerHTML = '';
+    var q = el('div', 'tool grant');
+    q.innerHTML = '<label class="pg-l">Is a person signing in?</label><select class="g-user" aria-label="Is a person signing in?"><option value="1">Yes, a person</option><option value="0">No, a program on its own behalf</option></select>' +
+      '<label class="pg-l">What can the device do?</label><select class="g-dev" aria-label="What can the device do?"><option value="full">It has a browser and a keyboard</option><option value="limited">No browser or no keyboard (TV, CLI on a server, printer)</option></select>' +
+      '<div class="g-out" aria-live="polite"></div>';
+    root.appendChild(q);
+    function render() {
+      var hasUser = $('.g-user', q).value === '1', dev = $('.g-dev', q).value;
+      var r = F.chooseGrant({ hasUser: hasUser, device: hasUser ? dev : 'full' });
+      $('.g-dev', q).disabled = !hasUser;
+      $('.g-out', q).innerHTML = '<p class="cmd-ok">Use: <b>' + esc(r.title) + '</b> (<code>grant_type</code> <code>' + esc(r.grant) + '</code>)</p><p>' + esc(r.why) + '</p>';
+    }
+    $$('select', q).forEach(function (i) { i.addEventListener('change', render); });
+    render();
+  }
+
+  // Sign in with Google, by hand: build the request, get sent to Google, come back, and see what Google returned.
+  function toolGoogle(root) {
+    root.innerHTML = '';
+    var q = el('div', 'tool google'), KEY = 'ia-google';
+    var redirect = location.origin + location.pathname;
+    q.innerHTML = '<p class="tool-note">Nothing here is sent anywhere except to <code>accounts.google.com</code>, when you press <b>Open Google</b>.</p>' +
+      '<label class="pg-l">Your client ID (from Google Cloud, step 1)</label><input class="cmd-in mono gg-id" placeholder="123456789012-abc….apps.googleusercontent.com" aria-label="Google client ID">' +
+      '<label class="pg-l">The redirect URI you registered (must match exactly)</label><input class="cmd-in mono" readonly value="' + esc(redirect) + '" aria-label="Redirect URI">' +
+      '<div class="lab-bar"><button type="button" class="copy gg-build">Build the sign-in address</button></div><div class="gg-url"></div><div class="gg-back"></div>';
+    root.appendChild(q);
+    var saved = null; try { saved = JSON.parse(sessionStorage.getItem(KEY)); } catch (e) {}
+    if (saved && saved.client_id) $('.gg-id', q).value = saved.client_id;
+    $('.gg-build', q).addEventListener('click', async function () {
+      var id = $('.gg-id', q).value.trim(), out = $('.gg-url', q);
+      if (!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(id)) { out.innerHTML = '<p class="cmd-bad">That does not look like a Google client ID: it ends with <code>.apps.googleusercontent.com</code>.</p>'; return; }
+      var v = C.pkceVerifier(), ch = await C.pkceChallenge(v), st = C.b64uEnc(C.random(16)), no = C.b64uEnc(C.random(16));
+      try { sessionStorage.setItem(KEY, JSON.stringify({ client_id: id, verifier: v, state: st, nonce: no, redirect: redirect })); } catch (e) {}
+      var p = new URLSearchParams({ client_id: id, redirect_uri: redirect, response_type: 'code', scope: 'openid email profile', state: st, nonce: no, code_challenge: ch, code_challenge_method: 'S256' });
+      var url = 'https://accounts.google.com/o/oauth2/v2/auth?' + p.toString();
+      out.innerHTML = '<p>Your request, parameter by parameter:</p><div class="table-wrap"><table><tbody>' + Array.from(p.entries()).map(function (kv) { return '<tr><td><code>' + esc(kv[0]) + '</code></td><td><code>' + esc(kv[1]) + '</code></td></tr>'; }).join('') + '</tbody></table></div><p><a class="copy" href="' + esc(url) + '">Open Google</a></p>';
+    });
+    // coming back from Google
+    var sp = new URLSearchParams(location.search);
+    if (saved && (sp.has('code') || sp.has('error'))) {
+      var box = $('.gg-back', q), h = '';
+      if (sp.has('error')) h = '<p class="cmd-bad">Google answered with an error: <code>' + esc(sp.get('error')) + '</code> ' + esc(sp.get('error_description') || '') + '</p>';
+      else {
+        var okState = sp.get('state') === saved.state;
+        h = '<h4>You are back</h4><p class="' + (okState ? 'cmd-ok' : 'cmd-bad') + '">' + (okState ? '✓ The <code>state</code> matches the one this browser made, so this answer belongs to your request.' : '✗ The <code>state</code> does not match. Do not use this response.') + '</p>' +
+          '<p>Google gave you a one-time <code>code</code>:</p><pre class="ex-art">' + esc(sp.get('code')) + '</pre><p>Exchange it from your terminal, where your client secret is. The page never sees the secret:</p>' +
+          '<pre class="ex-art">' + esc('curl https://oauth2.googleapis.com/token \\\n  -d client_id=' + saved.client_id + ' \\\n  -d client_secret="$GOOGLE_CLIENT_SECRET" \\\n  -d grant_type=authorization_code \\\n  -d code=' + sp.get('code') + ' \\\n  -d redirect_uri=' + saved.redirect + ' \\\n  -d code_verifier=' + saved.verifier) + '</pre><p class="tool-note">Your <code>nonce</code> is <code>' + esc(saved.nonce) + '</code>. It must be inside the ID token you get back (step 14).</p>';
+      }
+      box.innerHTML = h;
+      try { history.replaceState(null, '', location.pathname + '#google'); } catch (e) {}
+      setTimeout(function () { q.scrollIntoView({ block: 'start' }); }, 300);
+    }
+  }
+
+  var TOOLS = { flow: toolFlow, grant: toolGrant, google: toolGoogle, jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp, cookie: toolCookie, crypto: toolCrypto };
   function mountTool(root) { var f = TOOLS[root.getAttribute('data-tool')]; if (f) f(root); }
 
   function init() {
     $$('[data-ex]').forEach(mountExercise);
     $$('[data-cmd]').forEach(mountCmd);
+    $$('[data-url]').forEach(mountUrl);
     $$('[data-tool]').forEach(mountTool);
     renderProgress(); syncTicks();
   }

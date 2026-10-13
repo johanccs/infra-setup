@@ -68,3 +68,15 @@ code.wrap { display: block; overflow-wrap: anywhere; white-space: normal; paddin
 
 .atk select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); max-width: 100%; }
 .atk textarea[readonly] { background: var(--code-bg); }
+
+.flow-steps { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 10px; }
+.fs { padding: 10px 12px; border: 1px solid var(--line); border-left: 4px solid var(--muted); border-radius: 8px; background: var(--bg); }
+.fs.front { border-left-color: var(--warn); } .fs.back { border-left-color: var(--accent); } .fs.user { border-left-color: var(--ok); }
+.fs-h { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fs-n { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--code-bg); font: 600 13px var(--font-mono); }
+.fs p { margin: .3em 0; max-width: none; }
+.atk-card { margin: 8px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.atk-card.good { border-left: 4px solid var(--ok); } .atk-card.bad { border-left: 4px solid var(--warn); background: var(--warn-soft); }
+.atk-card p { margin: .3em 0; max-width: none; }
+.google a.copy { text-decoration: none; display: inline-block; }
+.tool select, .ex select, .atk select { max-width: 100%; }

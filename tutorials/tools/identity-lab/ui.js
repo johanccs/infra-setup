@@ -214,11 +214,42 @@
     run();
   }
 
+
+  // ------------------------------------------------------------------ "write the URL" drills
+  function mountUrl(root) {
+    var id = root.getAttribute('data-url'), spec = (IA.urls || {})[id], F = window.IAFlow;
+    if (!spec || !F) return;
+    var saved = store.get('ia-url:' + id) || {};
+    root.classList.add('ex', 'cmd'); root.innerHTML = '';
+    root.appendChild(el('div', 'ex-q', spec.prompt));
+    var ta = el('textarea', 'cmd-in mono'); ta.rows = 3; ta.spellcheck = false; ta.placeholder = 'Type the address here'; ta.value = saved.v || ''; ta.setAttribute('aria-label', 'URL');
+    var out = el('div', 'ex-out'), bar = el('div', 'lab-bar'), bHint = button('Hint'), bSol = button('Show answer');
+    if ((spec.hints || []).length) bar.appendChild(bHint); bar.appendChild(bSol);
+    root.appendChild(ta); root.appendChild(bar); root.appendChild(out);
+    var hintBox = el('div', 'lab-hint'); hintBox.hidden = true; root.appendChild(hintBox); var hints = 0;
+    function run() {
+      store.set('ia-url:' + id, { v: ta.value, ok: (store.get('ia-url:' + id) || {}).ok });
+      if (!ta.value.trim()) { out.innerHTML = ''; root.classList.remove('ok'); return; }
+      var r = F.judgeUrl(ta.value, spec.spec);
+      root.classList.toggle('ok', r.ok);
+      if (r.ok) {
+        out.innerHTML = '<p class="cmd-ok">✓ Correct. Your request, parameter by parameter:</p><div class="table-wrap"><table><tbody>' + Object.keys(r.params).map(function (k) { return '<tr><td><code>' + esc(k) + '</code></td><td><code>' + esc(r.params[k]) + '</code></td></tr>'; }).join('') + '</tbody></table></div>' + (spec.after ? '<p class="tool-note">' + spec.after + '</p>' : '');
+        var st = store.get('ia-url:' + id) || {}; st.ok = true; store.set('ia-url:' + id, st);
+        root.dispatchEvent(new CustomEvent('expass', { bubbles: true }));
+      } else out.innerHTML = '<ul class="cmd-bad">' + r.problems.map(function (p) { return '<li>' + p + '</li>'; }).join('') + '</ul>';
+    }
+    ta.addEventListener('input', function () { clearTimeout(ta._t); ta._t = setTimeout(run, 250); });
+    bHint.addEventListener('click', function () { var hs = spec.hints || []; hints = Math.min(hs.length, hints + 1); hintBox.hidden = false; hintBox.innerHTML = hs.slice(0, hints).map(function (h, i) { return '<p><b>Hint ' + (i + 1) + ' of ' + hs.length + '.</b> ' + h + '</p>'; }).join(''); });
+    bSol.addEventListener('click', function () { ta.value = spec.answer; run(); });
+    if (saved.ok) root.classList.add('ok');
+    run();
+  }
+
   // ------------------------------------------------------------------ a step's tick means: every exercise in it has been passed
-  function exOk(n) { var c = n.getAttribute('data-cmd'); return !!(store.get(c ? 'ia-cmd:' + c : 'ia-ex:' + n.getAttribute('data-ex')) || {}).ok; }
+  function exOk(n) { var c = n.getAttribute('data-cmd'), u = n.getAttribute('data-url'); return !!(store.get(c ? 'ia-cmd:' + c : u ? 'ia-url:' + u : 'ia-ex:' + n.getAttribute('data-ex')) || {}).ok; }
   function syncTicks() {
     $$('section[data-step]').forEach(function (sec) {
-      var box = $('input[data-done]', sec); var ex = $$('[data-ex], [data-cmd]', sec);
+      var box = $('input[data-done]', sec); var ex = $$('[data-ex], [data-cmd], [data-url]', sec);
       if (!box || !ex.length || $('[data-manual-tick]', sec)) return;
       var done = ex.filter(exOk).length, all = done === ex.length;
       box.disabled = true;
@@ -235,7 +266,7 @@
     var levels = {};
     $$('section[data-step]').forEach(function (sec) {
       var lvl = sec.getAttribute('data-level') || 'Other';
-      $$('[data-ex], [data-cmd]', sec).forEach(function (n) {
+      $$('[data-ex], [data-cmd], [data-url]', sec).forEach(function (n) {
         var o = levels[lvl] = levels[lvl] || { n: 0, t: 0 };
         o.t++; if (exOk(n)) o.n++;
       });
@@ -274,9 +305,17 @@
     var dec = el('div', 'tool-out'), ver = el('div', 'tool-ver');
     q.appendChild(el('label', 'pg-l', 'A token (stays in this page)')); q.appendChild(tok); q.appendChild(ex); q.appendChild(dec); q.appendChild(ver); root.appendChild(q);
     var secret = 'lab-secret-lab-secret-lab-secret-32';
-    function keyFrom(text) {
+    function keyFrom(text, kid) {
       text = text.trim(); if (!text) return null;
-      if (text[0] === '{') return JSON.parse(text);
+      if (text[0] === '{') {
+        var j = JSON.parse(text);
+        if (Array.isArray(j.keys)) {                       // a whole key set (a JWKS): pick the key the token names
+          var m = j.keys.filter(function (k) { return k.kid === kid; });
+          if (!m.length) throw new Error('The key set has no key with kid ' + JSON.stringify(kid) + (j.keys.length ? ' (it has: ' + j.keys.map(function (k) { return k.kid; }).join(', ') + ')' : '') + '.');
+          return m[0];
+        }
+        return j;
+      }
       return { kty: 'oct', k: C.b64uEnc(C.utf8(text)) };
     }
     async function render() {
@@ -321,7 +360,7 @@
     async function check() {
       var out = $('.v-out', ver); if (!out) return;
       var p = C.parse(tok.value), key;
-      try { key = keyFrom($('.v-key', ver).value); } catch (e) { out.innerHTML = '<p class="cmd-bad">The key is not valid JSON: ' + esc(e.message) + '</p>'; return; }
+      try { key = keyFrom($('.v-key', ver).value, p.header && p.header.kid); } catch (e) { out.innerHTML = '<p class="cmd-bad">The key problem: ' + esc(e.message) + '</p>'; return; }
       if (!key) { out.innerHTML = '<p class="tool-note">Enter a key to check the signature.</p>'; return; }
       var algs = $('.v-alg', ver).value.split(/[\s,]+/).filter(Boolean);
       var r = await C.verify(tok.value, { algorithms: algs, key: key, issuer: $('.v-iss', ver).value || undefined, audience: $('.v-aud', ver).value || undefined });
@@ -330,7 +369,7 @@
     async function resign() {
       var msg = $('.v-msg', ver);
       try {
-        var p = C.parse(tok.value), payload = JSON.parse($('.v-edit', ver).value), key = keyFrom($('.v-key', ver).value);
+        var p = C.parse(tok.value), payload = JSON.parse($('.v-edit', ver).value), key = keyFrom($('.v-key', ver).value, p.header && p.header.kid);
         if (!/^HS(256|384|512)$/.test(p.header.alg)) throw new Error('Only HS256, HS384 and HS512 tokens can be signed here, because they use a secret you hold.');
         if (!key || key.kty !== 'oct') throw new Error('Enter the secret first.');
         tok.value = await C.sign(p.header, payload, key); msg.textContent = 'Signed. The token above is the new one.'; render();
@@ -486,12 +525,92 @@
     hashes();
   }
 
-  var TOOLS = { jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp, cookie: toolCookie, crypto: toolCrypto };
+
+  function toolFlow(root) {
+    var F = window.IAFlow;
+    root.innerHTML = '';
+    var q = el('div', 'tool flow');
+    q.innerHTML = '<div class="ck-form"><label class="ck-b"><input type="checkbox" class="f-pkce" checked> PKCE (code_challenge)</label><label class="ck-b"><input type="checkbox" class="f-state" checked> state</label><label class="ck-b"><input type="checkbox" class="f-iss" checked> iss in the response</label><button type="button" class="copy f-new">New random values</button></div><div class="f-body"></div>';
+    root.appendChild(q);
+    var body = $('.f-body', q);
+    var CH = { front: 'front channel (through the browser)', back: 'back channel (server to server)', user: 'you', browser: 'your browser', api: 'API call' };
+    async function render() {
+      var f = await F.build({ pkce: $('.f-pkce', q).checked, state: $('.f-state', q).checked, iss: $('.f-iss', q).checked });
+      var h = '<ol class="flow-steps">' + f.steps.map(function (s) {
+        return '<li class="fs ' + s.channel + '"><div class="fs-h"><span class="fs-n">' + s.n + '</span><b>' + esc(s.title) + '</b><span class="lvl-chip">' + esc(CH[s.channel]) + '</span></div><p class="tool-note">' + esc(s.from) + ' → ' + esc(s.to) + '</p><pre class="ex-art">' + esc(s.http) + '</pre><p>' + s.note + '</p></li>';
+      }).join('') + '</ol><h4>What an attacker can do</h4>' + f.attacks.map(function (a) {
+        return '<div class="atk-card ' + (a.on ? 'good' : 'bad') + '"><b>' + esc(a.name) + '</b> <span class="lvl-chip">' + esc(a.protection) + (a.on ? ' on' : ' OFF') + '</span><p>' + a.story + '</p><p>' + (a.on ? '✓ ' + a.with : '✗ ' + a.without) + '</p></div>';
+      }).join('');
+      body.innerHTML = h;
+    }
+    $$('input', q).forEach(function (i) { i.addEventListener('change', render); });
+    $('.f-new', q).addEventListener('click', render);
+    render();
+  }
+
+  function toolGrant(root) {
+    var F = window.IAFlow;
+    root.innerHTML = '';
+    var q = el('div', 'tool grant');
+    q.innerHTML = '<label class="pg-l">Is a person signing in?</label><select class="g-user" aria-label="Is a person signing in?"><option value="1">Yes, a person</option><option value="0">No, a program on its own behalf</option></select>' +
+      '<label class="pg-l">What can the device do?</label><select class="g-dev" aria-label="What can the device do?"><option value="full">It has a browser and a keyboard</option><option value="limited">No browser or no keyboard (TV, CLI on a server, printer)</option></select>' +
+      '<div class="g-out" aria-live="polite"></div>';
+    root.appendChild(q);
+    function render() {
+      var hasUser = $('.g-user', q).value === '1', dev = $('.g-dev', q).value;
+      var r = F.chooseGrant({ hasUser: hasUser, device: hasUser ? dev : 'full' });
+      $('.g-dev', q).disabled = !hasUser;
+      $('.g-out', q).innerHTML = '<p class="cmd-ok">Use: <b>' + esc(r.title) + '</b> (<code>grant_type</code> <code>' + esc(r.grant) + '</code>)</p><p>' + esc(r.why) + '</p>';
+    }
+    $$('select', q).forEach(function (i) { i.addEventListener('change', render); });
+    render();
+  }
+
+  // Sign in with Google, by hand: build the request, get sent to Google, come back, and see what Google returned.
+  function toolGoogle(root) {
+    root.innerHTML = '';
+    var q = el('div', 'tool google'), KEY = 'ia-google';
+    var redirect = location.origin + location.pathname;
+    q.innerHTML = '<p class="tool-note">Nothing here is sent anywhere except to <code>accounts.google.com</code>, when you press <b>Open Google</b>.</p>' +
+      '<label class="pg-l">Your client ID (from Google Cloud, step 1)</label><input class="cmd-in mono gg-id" placeholder="123456789012-abc….apps.googleusercontent.com" aria-label="Google client ID">' +
+      '<label class="pg-l">The redirect URI you registered (must match exactly)</label><input class="cmd-in mono" readonly value="' + esc(redirect) + '" aria-label="Redirect URI">' +
+      '<div class="lab-bar"><button type="button" class="copy gg-build">Build the sign-in address</button></div><div class="gg-url"></div><div class="gg-back"></div>';
+    root.appendChild(q);
+    var saved = null; try { saved = JSON.parse(sessionStorage.getItem(KEY)); } catch (e) {}
+    if (saved && saved.client_id) $('.gg-id', q).value = saved.client_id;
+    $('.gg-build', q).addEventListener('click', async function () {
+      var id = $('.gg-id', q).value.trim(), out = $('.gg-url', q);
+      if (!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(id)) { out.innerHTML = '<p class="cmd-bad">That does not look like a Google client ID: it ends with <code>.apps.googleusercontent.com</code>.</p>'; return; }
+      var v = C.pkceVerifier(), ch = await C.pkceChallenge(v), st = C.b64uEnc(C.random(16)), no = C.b64uEnc(C.random(16));
+      try { sessionStorage.setItem(KEY, JSON.stringify({ client_id: id, verifier: v, state: st, nonce: no, redirect: redirect })); } catch (e) {}
+      var p = new URLSearchParams({ client_id: id, redirect_uri: redirect, response_type: 'code', scope: 'openid email profile', state: st, nonce: no, code_challenge: ch, code_challenge_method: 'S256' });
+      var url = 'https://accounts.google.com/o/oauth2/v2/auth?' + p.toString();
+      out.innerHTML = '<p>Your request, parameter by parameter:</p><div class="table-wrap"><table><tbody>' + Array.from(p.entries()).map(function (kv) { return '<tr><td><code>' + esc(kv[0]) + '</code></td><td><code>' + esc(kv[1]) + '</code></td></tr>'; }).join('') + '</tbody></table></div><p><a class="copy" href="' + esc(url) + '">Open Google</a></p>';
+    });
+    // coming back from Google
+    var sp = new URLSearchParams(location.search);
+    if (saved && (sp.has('code') || sp.has('error'))) {
+      var box = $('.gg-back', q), h = '';
+      if (sp.has('error')) h = '<p class="cmd-bad">Google answered with an error: <code>' + esc(sp.get('error')) + '</code> ' + esc(sp.get('error_description') || '') + '</p>';
+      else {
+        var okState = sp.get('state') === saved.state;
+        h = '<h4>You are back</h4><p class="' + (okState ? 'cmd-ok' : 'cmd-bad') + '">' + (okState ? '✓ The <code>state</code> matches the one this browser made, so this answer belongs to your request.' : '✗ The <code>state</code> does not match. Do not use this response.') + '</p>' +
+          '<p>Google gave you a one-time <code>code</code>:</p><pre class="ex-art">' + esc(sp.get('code')) + '</pre><p>Exchange it from your terminal, where your client secret is. The page never sees the secret:</p>' +
+          '<pre class="ex-art">' + esc('curl https://oauth2.googleapis.com/token \\\n  -d client_id=' + saved.client_id + ' \\\n  -d client_secret="$GOOGLE_CLIENT_SECRET" \\\n  -d grant_type=authorization_code \\\n  -d code=' + sp.get('code') + ' \\\n  -d redirect_uri=' + saved.redirect + ' \\\n  -d code_verifier=' + saved.verifier) + '</pre><p class="tool-note">Your <code>nonce</code> is <code>' + esc(saved.nonce) + '</code>. It must be inside the ID token you get back (step 14).</p>';
+      }
+      box.innerHTML = h;
+      try { history.replaceState(null, '', location.pathname + '#google'); } catch (e) {}
+      setTimeout(function () { q.scrollIntoView({ block: 'start' }); }, 300);
+    }
+  }
+
+  var TOOLS = { flow: toolFlow, grant: toolGrant, google: toolGoogle, jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp, cookie: toolCookie, crypto: toolCrypto };
   function mountTool(root) { var f = TOOLS[root.getAttribute('data-tool')]; if (f) f(root); }
 
   function init() {
     $$('[data-ex]').forEach(mountExercise);
     $$('[data-cmd]').forEach(mountCmd);
+    $$('[data-url]').forEach(mountUrl);
     $$('[data-tool]').forEach(mountTool);
     renderProgress(); syncTicks();
   }

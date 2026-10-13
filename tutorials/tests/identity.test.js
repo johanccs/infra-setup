@@ -39,7 +39,7 @@ function structure(html) {
   const nums = secs.map((m) => (/<span class="num">(\d+)<\/span>/.exec(m[3]) || [])[1]);
   check(nums.every((n, i) => n === String(i).padStart(2, '0')), 'lessons are numbered 00, 01, 02 ... in order', nums.join(','));
   check(secs.every((m) => /<p class="goal">/.test(m[3])), 'every lesson has a goal line');
-  check(secs.every((m) => /<div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done>/.test(m[3])), 'every lesson ends with the "Mark this step as done" box');
+  check(secs.every((m) => /<div class="step-foot"><label class="done-toggle"(?: data-manual-tick)?><input type="checkbox" data-done>/.test(m[3])), 'every lesson ends with the "Mark this step as done" box');
   check(secs.every((m) => ['Start here', 'Easy', 'Intermediate', 'Advanced', 'Expert'].includes(m[2])), 'every lesson shows its level');
   const anchors = [...html.matchAll(/href="#([\w-]+)"/g)].map((m) => m[1]);
   const idsAll = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
@@ -293,6 +293,8 @@ function exerciseTests(html) {
   const ids = Object.keys(reg);
   check(ids.length > 0, `the exercises load (${ids.length})`);
   const used = [...html.matchAll(/data-ex="([^"]+)"/g)].map((m) => m[1]);
+  const usedCmd = [...html.matchAll(/data-cmd="([^"]+)"/g)].map((m) => m[1]), usedUrl = [...html.matchAll(/data-url="([^"]+)"/g)].map((m) => m[1]);
+  { const IA = loadExercises(); const miss = [...usedCmd.filter((c) => !IA.cmds[c]), ...usedUrl.filter((u) => !IA.urls[u])]; check(miss.length === 0, 'every command and URL drill a lesson shows exists', miss.join(', ')); const unused = [...Object.keys(IA.cmds).filter((c) => !usedCmd.includes(c)), ...Object.keys(IA.urls).filter((u) => !usedUrl.includes(u))]; check(unused.length === 0, 'every command and URL drill is used by a lesson', unused.join(', ')); }
   check(used.every((u) => reg[u]), 'every exercise a lesson shows exists', used.filter((u) => !reg[u]).join(', '));
   check(ids.every((i) => used.includes(i)), 'every exercise is used by a lesson', ids.filter((i) => !used.includes(i)).join(', '));
   check(new Set(used).size === used.length, 'no exercise is shown twice');
@@ -316,7 +318,7 @@ function exerciseTests(html) {
 
 // ---- the command drills: the answer is accepted, broken versions are not, and the answer really runs
 function loadExercises() {
-  const IA = { exercises: {}, cmds: {}, cmdFlags: JSON.parse(read(path.join(LAB, 'vendor', 'cmd-flags.json'))) };
+  const IA = { exercises: {}, cmds: {}, urls: {}, cmdFlags: JSON.parse(read(path.join(LAB, 'vendor', 'cmd-flags.json'))) };
   const win = { IA, IACmdSpec: require(path.join(LAB, 'cmdspec.js')) };
   // run each exercise file in this realm (a separate vm context would make its regular expressions foreign objects)
   for (const f of fs.readdirSync(path.join(LAB, 'exercises')).filter((n) => /\.js$/.test(n)).sort()) new Function('window', read(path.join(LAB, 'exercises', f)))(win);
@@ -536,6 +538,70 @@ function factTests() {
   check(n > 0 && bad.length === 0, `the ${n} facts exercises state about tokens are true of the tokens`, bad.join('\n'));
 }
 
+// the URL drills: the answer is accepted and the typical mistakes are not
+function urlDrillTests() {
+  const F = require(path.join(LAB, 'flow.js'));
+  const IA = loadExercises(), bad = [];
+  for (const [id, d] of Object.entries(IA.urls)) {
+    const ok = F.judgeUrl(d.answer, d.spec);
+    if (!ok.ok) { bad.push(`${id}: its own answer is rejected: ${ok.problems.join(' ')}`); continue; }
+    const u = new URL(d.answer);
+    for (const k of Object.keys(d.spec.params)) { const v = new URL(d.answer); v.searchParams.delete(k); if (F.judgeUrl(v.toString(), d.spec).ok) bad.push(`${id}: accepted without ${k}`); }
+    const w = new URL(d.answer); w.searchParams.set('code_challenge_method', 'plain'); if (d.spec.params.code_challenge_method && F.judgeUrl(w.toString(), d.spec).ok) bad.push(`${id}: accepted plain`);
+    const e = new URL(d.answer); e.searchParams.set('code_verifier', 'x'); if (F.judgeUrl(e.toString(), d.spec).ok) bad.push(`${id}: accepted a code_verifier in the front channel`);
+    if (F.judgeUrl(d.answer.replace('https://login.example.com', 'https://login.example.org'), d.spec).ok) bad.push(`${id}: accepted the wrong host`);
+  }
+  check(Object.keys(IA.urls).length > 0 && bad.length === 0, `${Object.keys(IA.urls).length} URL drill(s): the answer is accepted, and a missing parameter, plain, a verifier in the address and the wrong host are rejected`, bad.join('\n'));
+}
+
+// the flow data matches the RFCs, and every attack switch changes the outcome
+async function flowTests() {
+  const F = require(path.join(LAB, 'flow.js')), C = require(path.join(LAB, 'crypto.js'));
+  const f = await F.build({});
+  const a = f.auth, bad = [];
+  for (const k of ['response_type', 'client_id', 'redirect_uri', 'scope', 'state', 'nonce', 'code_challenge', 'code_challenge_method']) if (!a[k]) bad.push('authorization request lacks ' + k);
+  if (a.response_type !== 'code') bad.push('response_type is not code');
+  if (a.code_challenge_method !== 'S256') bad.push('method is not S256');
+  if (a.code_challenge !== await C.pkceChallenge(f.values.verifier)) bad.push('the challenge is not the SHA-256 of the verifier');
+  if (!/^[A-Za-z0-9\-._~]{43,128}$/.test(f.values.verifier)) bad.push('the verifier is not 43 to 128 unreserved characters (RFC 7636 4.1)');
+  const tokenStep = f.steps.find((s) => s.n === 6).http;
+  for (const need of ['grant_type=authorization_code', 'code=', 'redirect_uri=', 'client_id=', 'code_verifier=' + f.values.verifier]) if (!tokenStep.includes(need)) bad.push('the token request lacks ' + need);
+  if (tokenStep.includes('client_secret')) bad.push('the page example sends a client secret in the body');
+  const authStep = f.steps.find((s) => s.n === 2).http;
+  if (authStep.includes(f.values.verifier)) bad.push('the verifier appears in the front channel request');
+  const off = await F.build({ pkce: false, state: false, iss: false });
+  if (off.auth.code_challenge || off.auth.state) bad.push('switching protections off still sends them');
+  if (!off.attacks.every((x) => x.on === false)) bad.push('attack switches do not follow the options');
+  if (!f.attacks.every((x) => x.on === true)) bad.push('attack protections should be on by default');
+  if (f.steps.some((s) => /access_token/.test(s.http) && s.channel === 'front')) bad.push('a token appears in a front channel message');
+  check(bad.length === 0, 'the code flow data: required parameters present, S256 challenge is the hash of the verifier, tokens only on the back channel, and the attack switches follow the options', bad.join('\n'));
+  // grant chooser
+  const g = (o) => F.chooseGrant(o).grant;
+  check(g({ hasUser: false }) === 'client_credentials' && g({ hasUser: true, device: 'full' }) === 'authorization_code' && g({ hasUser: true, device: 'limited' }) === 'device_code' && g({ hasUser: true, legacyPassword: true }) === 'authorization_code', 'the grant chooser: no user is client credentials, a person with a browser is code, a limited device is the device flow, and the password grant is never an answer');
+}
+
+// what the page says about Google matches Google's own live discovery document and keys endpoint
+async function googleTests(html) {
+  const have = run('curl', ['-s', '-m', '20', '-o', os.devNull, '-w', '%{http_code}', 'https://accounts.google.com/.well-known/openid-configuration']).stdout.trim() === '200';
+  if (!have) return skip('Google could not be reached: the page was not compared with its discovery document');
+  const d = JSON.parse(run('curl', ['-s', '-m', '20', 'https://accounts.google.com/.well-known/openid-configuration']).stdout);
+  const bad = [];
+  const claim = { issuer: 'https://accounts.google.com', authorization_endpoint: 'https://accounts.google.com/o/oauth2/v2/auth', token_endpoint: 'https://oauth2.googleapis.com/token', jwks_uri: 'https://www.googleapis.com/oauth2/v3/certs' };
+  for (const [k, v] of Object.entries(claim)) { if (d[k] !== v) bad.push(`${k}: Google says ${d[k]}, the page says ${v}`); if (!html.includes(v)) bad.push(`the page does not contain ${v}`); }
+  if (!(d.id_token_signing_alg_values_supported || []).includes('RS256')) bad.push('Google no longer lists RS256');
+  if (!(d.code_challenge_methods_supported || []).includes('S256') || !(d.code_challenge_methods_supported || []).includes('plain')) bad.push('PKCE methods differ from the page: ' + JSON.stringify(d.code_challenge_methods_supported));
+  const keys = JSON.parse(run('curl', ['-s', '-m', '20', claim.jwks_uri]).stdout);
+  if (!Array.isArray(keys.keys) || !keys.keys.length || !keys.keys.every((k) => k.kty === 'RSA' && k.kid)) bad.push('the keys endpoint did not return a JWK set of RSA keys with kids');
+  check(bad.length === 0, 'the Google endpoints, signing algorithm and PKCE methods the page states match Google\'s live discovery document, and its key endpoint returns a JWK set', bad.join('\n'));
+  // the workbench's JWKS support picks a Google key by kid: verify a token we sign with a key set of the same shape
+  const C = require(path.join(LAB, 'crypto.js'));
+  const kp = await C.generateKeyPair('RS256');
+  const tok = await C.sign({ alg: 'RS256', typ: 'JWT', kid: 'k2' }, { iss: claim.issuer, aud: 'x', exp: 4102444800 }, kp.privateJwk);
+  const set = { keys: [Object.assign({}, kp.publicJwk, { kid: 'k1' }), Object.assign({}, kp.publicJwk, { kid: 'k2' })] };
+  const pick = set.keys.find((k) => k.kid === C.parse(tok).header.kid);
+  check(pick && (await C.verify(tok, { algorithms: ['RS256'], key: pick, issuer: claim.issuer, audience: 'x', now: 1700000000 })).ok, 'a token is verified with the key chosen by kid from a key set');
+}
+
 // ---- the certificate reader agrees with OpenSSL on certificates OpenSSL made
 async function certTests() {
   const X = require(path.join(LAB, 'x509.js'));
@@ -734,6 +800,9 @@ async function main() {
   drillJudgeTests();
   await cryptoTests();
   await attackTests();
+  urlDrillTests();
+  await flowTests();
+  await googleTests(typeof html === 'string' ? html : read(PAGE));
   factTests();
   await drillRunTests(typeof html === 'string' ? html : read(PAGE));
   manifestTests(typeof html === 'string' ? html : read(PAGE));
