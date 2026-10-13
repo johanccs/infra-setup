@@ -139,6 +139,64 @@
         show: function () {},
       };
     },
+
+    rbac: function (ex, box) {
+      var roles = {}; ex.roleNames.forEach(function (r) { roles[r] = (ex.start && ex.start[r]) ? ex.start[r].slice() : []; });
+      var tbl = el('div', 'table-wrap'), t = el('table', 'rbac-grid');
+      var head = '<thead><tr><th>Permission</th>' + ex.roleNames.map(function (r) { return '<th>' + esc(r) + '</th>'; }).join('') + '</tr></thead>';
+      var rows = ex.perms.map(function (p) { return '<tr><td><code>' + esc(p) + '</code></td>' + ex.roleNames.map(function (r) { return '<td><input type="checkbox" data-role="' + esc(r) + '" data-perm="' + esc(p) + '" aria-label="' + esc(r) + ' has ' + esc(p) + '"' + (roles[r].indexOf(p) >= 0 ? ' checked' : '') + '></td>'; }).join('') + '</tr>'; }).join('');
+      t.innerHTML = head + '<tbody>' + rows + '</tbody>'; tbl.appendChild(t); box.appendChild(tbl);
+      box.appendChild(el('p', 'tool-note', 'Users: ' + Object.keys(ex.users).map(function (u) { return '<b>' + esc(u) + '</b> is ' + (ex.users[u].length ? ex.users[u].map(function (r) { return '<code>' + esc(r) + '</code>'; }).join(' + ') : 'in no role'); }).join('; ') + '.'));
+      var ct = el('div', 'table-wrap'); box.appendChild(ct);
+      function cases(res) {
+        ct.innerHTML = '<table><thead><tr><th></th><th>Case</th><th>Should be</th><th>Yours</th></tr></thead><tbody>' + ex.cases.map(function (c, i) {
+          var it = res && res.items && res.items[i];
+          return '<tr class="' + (it ? (it.ok ? 'ok' : 'bad') : '') + '"><td>' + (it ? (it.ok ? '✓' : '✗') : '') + '</td><td>' + c.label + '</td><td>' + (c.expect ? 'allow' : 'deny') + '</td><td>' + (it ? (it.got ? 'allow' : 'deny') : '') + '</td></tr>';
+        }).join('') + '</tbody></table>';
+      }
+      cases(null);
+      function read() { var out = {}; ex.roleNames.forEach(function (r) { out[r] = $$('input[data-role="' + r + '"]', t).filter(function (i) { return i.checked; }).map(function (i) { return i.getAttribute('data-perm'); }); }); return out; }
+      return {
+        get: function () { return { roles: read() }; },
+        set: function (a) { $$('input', t).forEach(function (i) { i.checked = ((a.roles || {})[i.getAttribute('data-role')] || []).indexOf(i.getAttribute('data-perm')) >= 0; }); },
+        show: function (res) { cases(res); },
+      };
+    },
+    k8srole: function (ex, box) {
+      var ta = el('textarea', 'cmd-in mono'); ta.rows = 12; ta.spellcheck = false; ta.value = ex.starter || ''; ta.setAttribute('aria-label', 'Role YAML'); box.appendChild(ta);
+      var err = el('div', 'ex-why'); err.hidden = true; box.appendChild(err);
+      var ct = el('div', 'table-wrap'); box.appendChild(ct);
+      function cases(res) {
+        ct.innerHTML = '<table><thead><tr><th></th><th>Request</th><th>Should be</th><th>Yours</th></tr></thead><tbody>' + ex.cases.map(function (c, i) {
+          var it = res && res.items && res.items[i];
+          return '<tr class="' + (it ? (it.ok ? 'ok' : 'bad') : '') + '"><td>' + (it ? (it.ok ? '✓' : '✗') : '') + '</td><td>' + c.label + '</td><td>' + (c.expect ? 'allow' : 'deny') + '</td><td>' + (it ? (it.got ? 'allow' : 'deny') : '') + '</td></tr>';
+        }).join('') + '</tbody></table>';
+      }
+      cases(null);
+      function parse() {
+        err.hidden = true;
+        try { var d = window.jsyaml.load(ta.value); if (!d || typeof d !== 'object') throw new Error('Write a Role as YAML.'); return { role: d }; }
+        catch (e) { err.hidden = false; err.textContent = 'YAML problem: ' + e.message; return { role: null }; }
+      }
+      return {
+        get: function () { var r = parse(); if (r.role && (r.role.kind !== 'Role' || (r.role.metadata || {}).namespace !== ex.namespace)) { err.hidden = false; err.textContent = 'It should be a Role (kind: Role) in the namespace ' + ex.namespace + '.'; return { role: null }; } return r; },
+        set: function () { ta.value = ex.answerYaml; },
+        show: function (res) { cases(res); },
+      };
+    },
+    scenario: function (ex, box, id) {
+      var code = el('pre', 'ex-art code-cs'); code.textContent = ex.broken; box.appendChild(el('p', 'tool-note', ex.intro)); box.appendChild(code);
+      var q = el('div', 'ex-q', ex.question); box.appendChild(q);
+      var inner = builders.quiz(ex, box, id);
+      var fixed = el('div', 'scn-fix'); fixed.hidden = true; box.appendChild(fixed);
+      return {
+        get: inner.get, set: inner.set,
+        show: function (res) {
+          inner.show(res);
+          if (res.ok) { fixed.hidden = false; fixed.innerHTML = '<p><b>The fix.</b> ' + ex.explain + '</p><pre class="ex-art code-cs"></pre>'; $('pre', fixed).textContent = ex.fixed; }
+        },
+      };
+    },
     inspect: function (ex, box, id) {
       var art = el('pre', 'ex-art'); art.textContent = ex.artifact; box.appendChild(art);
       var subs = ex.parts.map(function (p, i) {
@@ -604,7 +662,38 @@
     }
   }
 
-  var TOOLS = { flow: toolFlow, grant: toolGrant, google: toolGoogle, jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp, cookie: toolCookie, crypto: toolCrypto };
+
+  function toolRbac(root) {
+    var AZ = window.IAAuthz;
+    root.innerHTML = '';
+    var q = el('div', 'tool rbac');
+    var perms = ['todos:read', 'todos:create', 'todos:delete', 'todos:delete:own', 'users:manage'];
+    var roles = { viewer: ['todos:read'], editor: ['todos:read', 'todos:create', 'todos:delete:own'], admin: ['todos:read', 'todos:create', 'todos:delete', 'users:manage'] };
+    var users = { alice: ['editor'], bob: ['viewer'], carol: ['admin'], dan: [] };
+    var cases = [
+      { user: 'alice', perm: 'todos:read' }, { user: 'alice', perm: 'todos:delete', owner: 'alice' }, { user: 'alice', perm: 'todos:delete', owner: 'bob' },
+      { user: 'bob', perm: 'todos:create' }, { user: 'carol', perm: 'todos:delete', owner: 'alice' }, { user: 'carol', perm: 'users:manage' }, { user: 'dan', perm: 'todos:read' },
+    ];
+    q.innerHTML = '<p class="tool-note">Tick which role grants which permission, assign roles to people, and watch the decisions. A permission ending in <code>:own</code> applies only to things the caller owns.</p><div class="table-wrap"><table class="rbac-grid"></table></div><div class="rb-users ck-form"></div><div class="table-wrap rb-cases"></div>';
+    root.appendChild(q);
+    var grid = $('.rbac-grid', q), usersBox = $('.rb-users', q);
+    function renderGrid() {
+      var rn = Object.keys(roles);
+      grid.innerHTML = '<thead><tr><th>Permission</th>' + rn.map(function (r) { return '<th>' + esc(r) + '</th>'; }).join('') + '</tr></thead><tbody>' + perms.map(function (p) { return '<tr><td><code>' + esc(p) + '</code></td>' + rn.map(function (r) { return '<td><input type="checkbox" data-role="' + r + '" data-perm="' + p + '"' + (roles[r].indexOf(p) >= 0 ? ' checked' : '') + ' aria-label="' + r + ' has ' + p + '"></td>'; }).join('') + '</tr>'; }).join('') + '</tbody>';
+      usersBox.innerHTML = Object.keys(users).map(function (u) { return '<label>' + esc(u) + ' <select data-user="' + u + '"><option value="">no role</option>' + rn.map(function (r) { return '<option' + (users[u][0] === r ? ' selected' : '') + '>' + r + '</option>'; }).join('') + '</select></label>'; }).join('');
+      $$('input', grid).forEach(function (i) { i.addEventListener('change', function () { var r = i.getAttribute('data-role'), p = i.getAttribute('data-perm'); var a = roles[r], k = a.indexOf(p); if (i.checked && k < 0) a.push(p); if (!i.checked && k >= 0) a.splice(k, 1); decide(); }); });
+      $$('select', usersBox).forEach(function (s) { s.addEventListener('change', function () { users[s.getAttribute('data-user')] = s.value ? [s.value] : []; decide(); }); });
+    }
+    function decide() {
+      $('.rb-cases', q).innerHTML = '<table><thead><tr><th>Request</th><th>Decision</th><th>Why</th></tr></thead><tbody>' + cases.map(function (c) {
+        var r = AZ.decide({ roles: roles, users: users }, c);
+        return '<tr class="' + (r.allow ? 'sent' : 'blocked') + '"><td><b>' + esc(c.user) + '</b> → <code>' + esc(c.perm) + '</code>' + (c.owner ? ' on a todo owned by <b>' + esc(c.owner) + '</b>' : '') + '</td><td>' + (r.allow ? '✓ allow' : '✗ deny') + '</td><td>' + esc(r.why) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    }
+    renderGrid(); decide();
+  }
+
+  var TOOLS = { rbac: toolRbac, flow: toolFlow, grant: toolGrant, google: toolGoogle, jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp, cookie: toolCookie, crypto: toolCrypto };
   function mountTool(root) { var f = TOOLS[root.getAttribute('data-tool')]; if (f) f(root); }
 
   function init() {

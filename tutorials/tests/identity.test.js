@@ -304,7 +304,7 @@ function exerciseTests(html) {
     try {
       if (!E.judge(ex, E.solution(ex)).ok) broken.push(id + ': solution rejected');
       if (E.judge(ex, E.wrongAnswer(ex)).ok) broken.push(id + ': a wrong answer is accepted');
-      const walk = (e) => (e.kind === 'quiz' ? [e] : e.kind === 'inspect' ? e.parts : []);
+      const walk = (e) => (e.kind === 'quiz' || e.kind === 'scenario' ? [e] : e.kind === 'inspect' ? e.parts : []);
       for (const q of walk(ex)) { if (!q.options.some((o) => o.ok)) broken.push(id + ': no correct option'); if (q.options.some((o) => !o.ok && !o.why)) broken.push(id + ': a wrong option has no reason'); }
       if (ex.kind === 'sort' && ex.items.some((it) => !it.why)) broken.push(id + ': an item has no reason');
     } catch (e) { broken.push(id + ': ' + e.message); }
@@ -318,7 +318,7 @@ function exerciseTests(html) {
 
 // ---- the command drills: the answer is accepted, broken versions are not, and the answer really runs
 function loadExercises() {
-  const IA = { exercises: {}, cmds: {}, urls: {}, cmdFlags: JSON.parse(read(path.join(LAB, 'vendor', 'cmd-flags.json'))) };
+  const IA = { exercises: {}, cmds: {}, urls: {}, scenarios: [], cmdFlags: JSON.parse(read(path.join(LAB, 'vendor', 'cmd-flags.json'))) };
   const win = { IA, IACmdSpec: require(path.join(LAB, 'cmdspec.js')) };
   // run each exercise file in this realm (a separate vm context would make its regular expressions foreign objects)
   for (const f of fs.readdirSync(path.join(LAB, 'exercises')).filter((n) => /\.js$/.test(n)).sort()) new Function('window', read(path.join(LAB, 'exercises', f)))(win);
@@ -602,6 +602,176 @@ async function googleTests(html) {
   check(pick && (await C.verify(tok, { algorithms: ['RS256'], key: pick, issuer: claim.issuer, audience: 'x', now: 1700000000 })).ok, 'a token is verified with the key chosen by kid from a key set');
 }
 
+// ---- the access control models follow the documented rules
+function authzTests() {
+  const AZ = require(path.join(LAB, 'authz.js'));
+  const bad = [];
+  const model = { roles: { viewer: ['todos:read'], editor: ['todos:read', 'todos:create', 'todos:delete:own'], admin: ['todos:read', 'todos:delete', 'users:manage'] }, users: { v: ['viewer'], e: ['editor'], a: ['admin'], n: [] } };
+  const t = (user, perm, owner, want, label) => { const r = AZ.decide(model, { user, perm, owner }); if (r.allow !== want) bad.push(`${label}: got ${r.allow}`); if (!r.why) bad.push(label + ': no reason'); };
+  t('v', 'todos:read', undefined, true, 'viewer reads'); t('v', 'todos:create', undefined, false, 'viewer creates');
+  t('e', 'todos:delete', 'e', true, 'editor deletes own'); t('e', 'todos:delete', 'v', false, 'editor deletes another\'s');
+  t('a', 'todos:delete', 'v', true, 'admin deletes any'); t('n', 'todos:read', undefined, false, 'no role is denied by default');
+  t('e', 'users:manage', undefined, false, 'editor manages users');
+  check(bad.length === 0, 'RBAC with an ownership rule: allow by role, ":own" only for the owner, deny by default', bad.join('\n'));
+  // Kubernetes: the documentation's pod-reader example, and its stated rules
+  const podReader = { kind: 'Role', name: 'pod-reader', namespace: 'default', rules: [{ apiGroups: [''], resources: ['pods'], verbs: ['get', 'watch', 'list'] }] };
+  const jane = { kind: 'User', name: 'jane' };
+  const w1 = { roles: [podReader], bindings: [{ kind: 'RoleBinding', namespace: 'default', roleRef: { kind: 'Role', name: 'pod-reader' }, subjects: [jane] }] };
+  const q = (w, who, a) => AZ.k8sCan(w, who, a).allow;
+  const k = [];
+  const A = (verb, resource, ns, extra) => Object.assign({ verb, resource, group: '', namespace: ns }, extra || {});
+  if (!q(w1, jane, A('get', 'pods', 'default'))) k.push('jane cannot get pods in default (docs example)');
+  if (q(w1, jane, A('get', 'pods', 'other'))) k.push('a RoleBinding granted access in another namespace');
+  if (q(w1, jane, A('delete', 'pods', 'default'))) k.push('delete was allowed though not granted');
+  if (q(w1, { kind: 'User', name: 'joe' }, A('get', 'pods', 'default'))) k.push('an unbound user was allowed');
+  // a RoleBinding to a ClusterRole is limited to its namespace; a ClusterRoleBinding is cluster-wide
+  const cr = { kind: 'ClusterRole', name: 'pod-reader-c', rules: [{ apiGroups: [''], resources: ['pods'], verbs: ['get'] }] };
+  const w2 = { roles: [cr], bindings: [{ kind: 'RoleBinding', namespace: 'dev', roleRef: { kind: 'ClusterRole', name: 'pod-reader-c' }, subjects: [jane] }] };
+  if (!q(w2, jane, A('get', 'pods', 'dev')) || q(w2, jane, A('get', 'pods', 'prod'))) k.push('a RoleBinding to a ClusterRole is not limited to its namespace');
+  const w3 = { roles: [cr], bindings: [{ kind: 'ClusterRoleBinding', roleRef: { kind: 'ClusterRole', name: 'pod-reader-c' }, subjects: [jane] }] };
+  if (!q(w3, jane, A('get', 'pods', 'dev')) || !q(w3, jane, A('get', 'pods', 'prod'))) k.push('a ClusterRoleBinding is not cluster-wide');
+  // purely additive: two grants combine, nothing subtracts
+  const extra = { kind: 'Role', name: 'secret-reader', namespace: 'default', rules: [{ apiGroups: [''], resources: ['secrets'], verbs: ['get'] }] };
+  const w4 = { roles: [podReader, extra], bindings: [w1.bindings[0], { kind: 'RoleBinding', namespace: 'default', roleRef: { kind: 'Role', name: 'secret-reader' }, subjects: [jane] }] };
+  if (!q(w4, jane, A('get', 'pods', 'default')) || !q(w4, jane, A('get', 'secrets', 'default'))) k.push('permissions are not additive');
+  // resourceNames limits a rule to named objects
+  const named = { kind: 'Role', name: 'one-cm', namespace: 'default', rules: [{ apiGroups: [''], resources: ['configmaps'], resourceNames: ['my-configmap'], verbs: ['get'] }] };
+  const w5 = { roles: [named], bindings: [{ kind: 'RoleBinding', namespace: 'default', roleRef: { kind: 'Role', name: 'one-cm' }, subjects: [jane] }] };
+  if (!q(w5, jane, A('get', 'configmaps', 'default', { name: 'my-configmap' })) || q(w5, jane, A('get', 'configmaps', 'default', { name: 'other' }))) k.push('resourceNames does not narrow the rule');
+  // service accounts are named system:serviceaccount:<ns>:<name>
+  const sa = { kind: 'ServiceAccount', name: 'todo-reporter', namespace: 'todo' };
+  if (AZ.subjectName(sa) !== 'system:serviceaccount:todo:todo-reporter') k.push('service account subject name');
+  // a wrong API group does not match
+  if (q(w1, jane, A('get', 'pods', 'default', { group: 'apps' }))) k.push('a rule for the core group matched the apps group');
+  check(k.length === 0, 'Kubernetes RBAC model: namespaced Roles, RoleBinding to a ClusterRole limited to its namespace, ClusterRoleBinding cluster-wide, purely additive, resourceNames, API groups', k.join('\n'));
+}
+
+// the C# in step 17 and 18 builds and behaves as the lessons say, over HTTP
+async function scenarioTests(html) {
+  const dotnet = find('dotnet'), have = (b) => run('sh', ['-c', 'command -v ' + b]).status === 0;
+  if (!dotnet || !have('curl')) return skip('dotnet or curl is missing: the C# scenarios were not built and run');
+  const IA = loadExercises(), sc = IA.scenarios || [];
+  const pattern = codeBlock(html, 'src/api/TodoOwnerAuthorization.cs');
+  if (!pattern || !sc.length) return check(false, 'the page shows the scenarios and the resource handler');
+  const [handlerPart, programPart] = pattern.replace(/^using .*;\n/gm, '').split('// Program.cs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ia-scn-'));
+  const env = { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_NOLOGO: '1', DOTNET_ROOT: path.dirname(dotnet) };
+  const sh = (cmd, o = {}) => run('sh', ['-c', cmd], { cwd: dir, timeout: 300000, input: '', env, ...o });
+  const n = sh(`${dotnet} new web -n scn -o app --no-restore`);
+  if (n.status !== 0) return skip('dotnet new web failed');
+  const types = new Set(), stmts = [];
+  const add = (code, base) => {
+    const lines = code.replace(/\{base\}/g, base).split('\n');
+    const keep = []; for (const l of lines) { if (/^record /.test(l)) types.add(l); else keep.push(l); }
+    stmts.push(keep.join('\n'));
+  };
+  // each snippet declares its own small record types: give them names that cannot collide
+  const uniq = (code, tag) => { const names = [...code.matchAll(/^record (\w+)\(/gm)].map((m) => m[1]); let c = code; for (const nm of names) c = c.replace(new RegExp('\\b' + nm + '\\b', 'g'), nm + '_' + tag); return c; };
+  for (const s of sc) { add(uniq(s.broken, s.base + 'b'), '/broken/' + s.base); add(uniq(s.fixed, s.base + 'f'), '/fixed/' + s.base); }
+  // service registrations in the lesson's Program.cs belong before Build(); the rest after
+  const progLines = programPart.replace('"/todos/{id:int}"', '"/pattern/todos/{id:int}"').split('\n');
+  const services = progLines.filter((l) => /^builder\./.test(l)).join('\n'), prog = progLines.filter((l) => !/^builder\./.test(l)).join('\n');
+  const program = `using System.Security.Claims;
+using System.Text.Encodings.Web;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Infrastructure;
+using Microsoft.Extensions.Options;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddAuthentication("Test").AddScheme<AuthenticationSchemeOptions, TestAuth>("Test", _ => { });
+builder.Services.AddAuthorizationBuilder().AddPolicy("Admin", p => p.RequireRole("admin"));
+${services}
+var app = builder.Build();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapPost("/__reset", () => { Db.Reset(); return Results.NoContent(); });
+${stmts.join('\n\n')}
+${prog}
+app.Run();
+
+${[...types].join('\n')}
+${handlerPart}
+record Todo(int Id, string Owner, string Title);
+class AppUser { public string Id { get; set; } = ""; public string Name { get; set; } = ""; public bool IsAdmin { get; set; } }
+static class Db
+{
+    public static List<Todo> Todos = new();
+    public static List<AppUser> Users = new();
+    public static void Reset()
+    {
+        Todos = new() { new(1, "alice", "Buy milk"), new(2, "bob", "Pay rent"), new(3, "alice", "Call mum"), new(50, "alice", "Pattern"), new(51, "bob", "Other") };
+        Users = new() { new AppUser { Id = "alice", Name = "Alice" }, new AppUser { Id = "bob", Name = "Bob" }, new AppUser { Id = "root", Name = "Root", IsAdmin = true } };
+    }
+    static Db() { Reset(); }
+}
+class TestAuth(IOptionsMonitor<AuthenticationSchemeOptions> o, ILoggerFactory l, UrlEncoder e) : AuthenticationHandler<AuthenticationSchemeOptions>(o, l, e)
+{
+    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+    {
+        if (!Request.Headers.TryGetValue("X-Test-User", out var u)) return Task.FromResult(AuthenticateResult.NoResult());
+        var claims = new List<Claim> { new("sub", u.ToString()) };
+        if (Request.Headers.TryGetValue("X-Test-Roles", out var r)) foreach (var x in r.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries)) claims.Add(new Claim(ClaimTypes.Role, x));
+        var id = new ClaimsIdentity(claims, "Test", ClaimTypes.Name, ClaimTypes.Role);
+        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(id), "Test")));
+    }
+}
+`;
+  fs.writeFileSync(path.join(dir, 'app', 'Program.cs'), program);
+  const b = sh(`${dotnet} build app -c Release -nologo -v q`);
+  if (b.status !== 0) { check(false, 'every scenario, broken and fixed, and the resource handler compile', (b.stdout + b.stderr).split('\n').filter((l) => /error/.test(l)).slice(0, 6).join('\n')); fs.rmSync(dir, { recursive: true, force: true }); return; }
+  check(true, `every scenario (${sc.length} broken and fixed pairs) and the resource handler compile`);
+  const port = 5099;
+  const logFile = path.join(dir, 'server.log'), logFd = fs.openSync(logFile, 'w');
+  const app = spawn('sh', ['-c', `exec ${dotnet} app/bin/Release/net10.0/scn.dll`], { cwd: dir, stdio: ['ignore', logFd, logFd], env: { ...env, ASPNETCORE_URLS: 'http://127.0.0.1:' + port } });
+  const probes = [];
+  for (const s of sc) for (const p of s.probes) { probes.push({ s, p, v: 'broken', base: '/broken/' + s.base }); probes.push({ s, p, v: 'fixed', base: '/fixed/' + s.base }); }
+  probes.push(...[['alice', 'DELETE', '/pattern/todos/51', 404, null, 'pattern: not yours looks like not there'], ['alice', 'DELETE', '/pattern/todos/50', 204, null, 'pattern: the owner may delete'], ['root', 'DELETE', '/pattern/todos/51', 404, 'admin', 'pattern: an admin may read but not delete another\'s']].map(([as, method, p, status, roles, label]) => ({ pattern: true, as, method, path: p, status, roles, label })));
+  const fails = [];
+  try {
+    let up = false; for (let i = 0; i < 80 && !up; i++) { up = run('curl', ['-s', '-o', os.devNull, '-X', 'POST', `http://127.0.0.1:${port}/__reset`], { timeout: 5000 }).status === 0; if (!up) await sleep(500); }
+    for (const q of probes) {
+      run('curl', ['-s', '-o', os.devNull, '-X', 'POST', `http://127.0.0.1:${port}/__reset`]);
+      const p = q.pattern ? q : q.p;
+      const args = ['-s', '-i', '-X', p.method, `http://127.0.0.1:${port}${q.pattern ? p.path : q.base + p.path}`];
+      if (p.as) args.push('-H', 'X-Test-User: ' + p.as);
+      if (p.roles) args.push('-H', 'X-Test-Roles: ' + p.roles);
+      for (const [h, v] of Object.entries(p.hdr || {})) args.push('-H', `${h}: ${v}`);
+      if (p.body) args.push('-H', 'content-type: application/json', '-d', p.body);
+      const r = run('curl', args, { timeout: 15000 });
+      const status = +(/^HTTP\/[\d.]+ (\d+)/.exec(r.stdout) || [])[1], body = r.stdout.split(/\r?\n\r?\n/).slice(1).join('\n\n');
+      const want = q.pattern ? { status: p.status } : p[q.v];
+      const label = q.pattern ? p.label : `${q.s.id} ${q.v}: ${p.as || 'anonymous'} ${p.method} ${p.path}`;
+      if (status !== want.status) fails.push(`${label}: status ${status}, expected ${want.status}`);
+      if (want.body && !want.body.test(body)) fails.push(`${label}: body does not match ${want.body}: ${body.slice(0, 80)}`);
+      if (want.notBody && want.notBody.test(body)) fails.push(`${label}: body should not match ${want.notBody}`);
+    }
+  } finally { app.kill(); await sleep(300); }
+  if (fails.length && fails.some((f) => /status NaN/.test(f))) fails.unshift('the app did not answer. Server log: ' + fs.readFileSync(logFile, 'utf8').split('\n').slice(0, 12).join(' | '));
+  check(fails.length === 0, `${probes.length} HTTP requests: each flaw is real on the broken endpoint, each fix closes it, and the fixes still let the right person in`, fails.join('\n'));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// the RBAC manifest in step 18 is valid, and its Role gives the access the exercise's answer gives
+function rbacManifestTests(html) {
+  const y = codeBlock(html, 'infra/rbac/todo-reporter.yaml');
+  if (!y) return check(false, 'the page shows infra/rbac/todo-reporter.yaml');
+  const kc = find('kubeconform');
+  if (kc) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ia-rbac-')); fs.writeFileSync(path.join(dir, 'rbac.yaml'), y);
+    const v = run(kc, ['-strict', '-summary', path.join(dir, 'rbac.yaml')]);
+    check(v.status === 0 && /Valid: 2/.test(v.stdout), 'the Role and RoleBinding in step 18 are valid Kubernetes objects', v.stdout + v.stderr);
+    fs.rmSync(dir, { recursive: true, force: true });
+  } else skip('kubeconform is not installed: the RBAC manifest was not validated');
+  let docs; try { docs = yamlDocs(y); } catch (e) { return skip('python yaml is not available'); }
+  const AZ = require(path.join(LAB, 'authz.js'));
+  const role = docs.find((d) => d.kind === 'Role'), rb = docs.find((d) => d.kind === 'RoleBinding');
+  const ex = loadExercises().exercises['a18-role'];
+  const world = { roles: [{ kind: 'Role', name: role.metadata.name, namespace: role.metadata.namespace, rules: role.rules }], bindings: [{ kind: 'RoleBinding', namespace: rb.metadata.namespace, roleRef: { kind: rb.roleRef.kind, name: rb.roleRef.name }, subjects: rb.subjects }] };
+  const bad = ex.cases.filter((c) => AZ.k8sCan(world, ex.subject, c.request).allow !== c.expect).map((c) => c.label);
+  check(bad.length === 0, 'the Role the lesson shows gives exactly the access the exercise asks for', bad.join('; '));
+}
+
 // ---- the certificate reader agrees with OpenSSL on certificates OpenSSL made
 async function certTests() {
   const X = require(path.join(LAB, 'x509.js'));
@@ -795,6 +965,7 @@ async function main() {
   const html = parity();
   if (typeof html === 'string') { structure(html); diagrams(html); exerciseTests(html); }
   cookieTests();
+  authzTests();
   ledger();
   engineTests();
   drillJudgeTests();
@@ -807,6 +978,8 @@ async function main() {
   await drillRunTests(typeof html === 'string' ? html : read(PAGE));
   manifestTests(typeof html === 'string' ? html : read(PAGE));
   await kestrelTests(typeof html === 'string' ? html : read(PAGE));
+  await scenarioTests(typeof html === 'string' ? html : read(PAGE));
+  rbacManifestTests(typeof html === 'string' ? html : read(PAGE));
   await certTests();
   await browserTests();
   process.exit(summary());

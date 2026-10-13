@@ -8,14 +8,15 @@
 //   attack   { kind, prompt, lab (id in attacklab.js) }                               answer: { worked, fixedRejected }
 // Every exercise may have hints: [html], after: html (shown when it is passed).
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.IAEngine = factory();
-})(typeof self !== 'undefined' ? self : this, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./authz.js'));
+  else root.IAEngine = factory(root.IAAuthz);
+})(typeof self !== 'undefined' ? self : this, function (AZ) {
   'use strict';
   const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
 
   function judge(ex, answer) {
     switch (ex.kind) {
+      case 'scenario':
       case 'quiz': {
         const want = ex.options.map((o, i) => (o.ok ? i : -1)).filter((i) => i >= 0);
         const got = Array.isArray(answer) ? answer : [];
@@ -44,6 +45,22 @@
         const ok = parts.every((p) => p.ok);
         return { ok, parts, items: [], message: ok ? 'All correct.' : `${parts.filter((p) => p.ok).length} of ${parts.length} questions are right.` };
       }
+      case 'rbac': {
+        // answer: { roles: { editor: [perm, ...] } }. Every case must come out as expected.
+        const model = { roles: (answer && answer.roles) || {}, users: ex.users };
+        const items = ex.cases.map((c) => { const r = AZ.decide(model, { user: c.user, perm: c.perm, owner: c.owner }); return { ok: r.allow === c.expect, got: r.allow, why: r.why }; });
+        const ok = items.every((x) => x.ok);
+        return { ok, items, message: ok ? 'Every case comes out right.' : `${items.filter((x) => x.ok).length} of ${items.length} cases are right.` };
+      }
+      case 'k8srole': {
+        // answer: { role: { rules: [...] } } (a parsed Role). The cases are checked against the documented RBAC rules.
+        const role = answer && answer.role;
+        if (!role || !Array.isArray(role.rules)) return { ok: false, items: [], message: 'Write a Role with a rules list.' };
+        const world = { roles: [{ kind: 'Role', name: 'target', namespace: ex.namespace, rules: role.rules }], bindings: [{ kind: 'RoleBinding', namespace: ex.namespace, roleRef: { kind: 'Role', name: 'target' }, subjects: [ex.subject] }] };
+        const items = ex.cases.map((c) => { const r = AZ.k8sCan(world, ex.subject, c.request); return { ok: r.allow === c.expect, got: r.allow }; });
+        const ok = items.every((x) => x.ok);
+        return { ok, items, message: ok ? 'Every case comes out right.' : `${items.filter((x) => x.ok).length} of ${items.length} cases are right.` };
+      }
       case 'attack': {
         const a = answer && typeof answer === 'object' ? answer : {};
         const ok = !!(a.worked && a.fixedRejected);
@@ -54,22 +71,28 @@
   }
   function solution(ex) {
     switch (ex.kind) {
+      case 'scenario':
       case 'quiz': return ex.options.map((o, i) => (o.ok ? i : -1)).filter((i) => i >= 0);
       case 'order': return ex.items.map((_, i) => i);
       case 'sort': return ex.items.map((it) => it.g);
       case 'inspect': return ex.parts.map(solution);
       case 'attack': return { worked: true, fixedRejected: true };
+      case 'rbac': return { roles: ex.answer };
+      case 'k8srole': return { role: ex.answer };
       default: throw new Error('unknown exercise kind ' + ex.kind);
     }
   }
   // A wrong answer for each exercise, used by the tests to prove that the check can fail.
   function wrongAnswer(ex) {
     switch (ex.kind) {
+      case 'scenario':
       case 'quiz': { const want = solution(ex); const all = ex.options.map((_, i) => i); const other = all.filter((i) => !want.includes(i)); return other.length ? [other[0]] : want.slice(1); }
       case 'order': { const a = ex.items.map((_, i) => i); [a[0], a[1]] = [a[1], a[0]]; return a; }
       case 'sort': return ex.items.map((it) => (it.g + 1) % ex.groups.length);
       case 'inspect': return ex.parts.map((p, i) => (i === 0 ? wrongAnswer(p) : solution(p)));
       case 'attack': return { worked: true, fixedRejected: false };
+      case 'rbac': return { roles: {} };
+      case 'k8srole': return { role: { rules: [] } };
       default: throw new Error('unknown exercise kind ' + ex.kind);
     }
   }

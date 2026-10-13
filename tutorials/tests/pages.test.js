@@ -26,7 +26,7 @@ const ALL_PAGES = [
   { file: 'terraform-the-lab-tutorial.html', name: 'Terraform the Lab', steps: 17, mid: 'module', link: 'gateway' },
   { file: 'todo-on-eks-tutorial.html', name: 'Todo on EKS', steps: 16, mid: 'docker', link: 'cluster' },
   { file: 'github-actions-tutorial.html', name: 'GitHub Actions Lab', steps: 23, mid: 'matrix', link: 'oidc', labTicks: true },
-  { file: 'identity-and-access-tutorial.html', name: 'Identity and Access Lab', steps: 16, mid: 'overview', link: 'overview', labTicks: true, noCode: true },   // noCode: no code blocks yet (the page is built level by level)
+  { file: 'identity-and-access-tutorial.html', name: 'Identity and Access Lab', steps: 19, mid: 'overview', link: 'overview', labTicks: true, noCode: true },   // noCode: no code blocks yet (the page is built level by level)
 ];
 const PAGES = process.env.ONLY ? ALL_PAGES.filter((p) => p.file === process.env.ONLY) : ALL_PAGES;   // ONLY=identity-and-access-tutorial.html runs one page
 

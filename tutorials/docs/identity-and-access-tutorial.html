@@ -350,6 +350,7 @@ dialog.note-dlg::backdrop { background: rgba(10, 16, 22, .45); }
 .note-quote-s { flex: 1; margin: 0; font-size: 12px; color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .note-edit { font: 500 12px/1 var(--font-body); color: var(--accent); background: none; border: 0; padding: 2px 4px; cursor: pointer; }
 .note-text { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-no, .bm-no { font: 600 11.5px var(--font-mono); color: var(--muted); margin-right: 6px; font-variant-numeric: tabular-nums; }
 .note-date { margin: 6px 0 0; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .note-old { margin: 4px 0 0; font-size: 12px; color: var(--warn); }
 .notes-lines { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 12; }
@@ -463,6 +464,11 @@ code.wrap { display: block; overflow-wrap: anywhere; white-space: normal; paddin
 .atk-card p { margin: .3em 0; max-width: none; }
 .google a.copy { text-decoration: none; display: inline-block; }
 .tool select, .ex select, .atk select { max-width: 100%; }
+
+.rbac-grid th, .rbac-grid td { text-align: center; } .rbac-grid td:first-child, .rbac-grid th:first-child { text-align: left; }
+.rbac tr.sent td:nth-child(2), tr.ok td:first-child { color: var(--ok); font-weight: 600; } .rbac tr.blocked td:nth-child(2), tr.bad td:first-child { color: var(--warn); font-weight: 600; }
+.scn-fix { margin-top: 10px; padding: 10px 12px; border-left: 4px solid var(--ok); background: var(--bg); border-radius: 6px; }
+pre.code-cs { font: 12.5px/1.5 var(--font-mono); white-space: pre; overflow-x: auto; }
 
 </style>
 <script>
@@ -2378,6 +2384,339 @@ builder.Services.AddAuthorization();</code></pre></figure>
       </ul></div>
       <div class="step-foot"><label class="done-toggle" data-manual-tick><input type="checkbox" data-done> Mark this step as done</label></div>
     </section>
+
+    <!-- ============ 16 ============ -->
+    <section class="step" id="models" data-step data-level="Intermediate">
+      <div class="step-head"><span class="num">16</span><h2>Access models: ACL, RBAC, ABAC, ReBAC</h2><span class="lvl-chip">Intermediate</span></div>
+      <p class="goal"><b>Goal:</b> explain each model in one sentence, design roles for an app, and say when roles alone are not enough.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Authentication tells you who. Then every system needs rules for what that person may do, and the shape of those rules decides how easy the system is to run, to audit and to get wrong. Four models cover nearly everything. Real systems mix them.</p>
+        <p>This lesson builds on step 01 (authorization) and step 11 (scopes).</p>
+      </div>
+      <div class="what-is"><h4>What is it? An access control model</h4><dl>
+        <dt>What it is</dt><dd>A way of writing down who may do what to which thing. Every rule has the same parts: a <b>subject</b> (who), an <b>action</b> (what), a <b>resource</b> (to which) and sometimes a <b>context</b> (when, from where).</dd>
+        <dt>The problem it solves</dt><dd>Without a model, access rules are scattered <code>if</code> statements that nobody can list, review or change safely.</dd>
+        <dt>Everyday comparison</dt><dd>The rules of a building: a guest list on the door, badges by job, "managers on the 4th floor after 6", "anyone on the team that rents this office".</dd>
+        <dt>What it is not</dt><dd>Not authentication, and not the code that enforces it. A model is the <em>rules</em>; they still have to be checked on every request.</dd>
+        <dt>Where you meet it</dt><dd>Roles in Keycloak, Kubernetes RBAC (step 18), cloud permission policies, a sharing dialog.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? RBAC</h4><dl>
+        <dt>What it is</dt><dd>Role-based access control: permissions are granted to <em>roles</em>, and people are given roles. Alice is an <code>editor</code>, and <code>editor</code> may create todos.</dd>
+        <dt>The problem it solves</dt><dd>You manage a few roles instead of thousands of person-by-permission grants. Joining a team is one assignment, and leaving is one removal.</dd>
+        <dt>Everyday comparison</dt><dd>Job titles: the title says what the badge opens.</dd>
+        <dt>What it is not</dt><dd>Not able to say "only your own": a role covers every object of a kind. And not a scope: a scope limits <em>a token</em>, a role describes <em>a user</em> (step 11).</dd>
+        <dt>Where you meet it</dt><dd><code>[Authorize(Roles = "admin")]</code>, Keycloak realm roles, Kubernetes Roles.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? ABAC and ReBAC</h4><dl>
+        <dt>What it is</dt><dd><b>ABAC</b> (attribute-based) decides by evaluating attributes of the subject, the object, the requested operation and sometimes the environment against policy (NIST SP 800-162). <b>ReBAC</b> (relationship-based) decides by a relationship between the user and the object: member of the team that owns the folder. Google's Zanzibar system, described at USENIX ATC 2019, stores and evaluates such lists globally for its services.</dd>
+        <dt>The problem it solves</dt><dd>Roles cannot express "only your own", "only under 500", "only from the office network", or "anyone on the owning team".</dd>
+        <dt>Everyday comparison</dt><dd>ABAC: "managers may approve expenses under 500 in their own department". ReBAC: "you can edit a file if you are in the team that owns its folder".</dd>
+        <dt>What they are not</dt><dd>Not replacements for roles. Most systems use roles for features and an ownership or attribute rule for individual objects.</dd>
+        <dt>Where you meet them</dt><dd>Cloud policy conditions, document-sharing systems, <code>resource.Owner == user.Id</code> in your own code.</dd>
+      </dl></div>
+
+      <h3>Four models, one example each</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Model</th><th>Rule looks like</th><th>Strength</th><th>Weakness</th></tr></thead>
+        <tbody>
+          <tr><td><b>ACL</b> (access control list)</td><td>This document: alice read, bob read and write.</td><td>Simple, per object.</td><td>Hard to see "what can Alice access?" and to change at scale.</td></tr>
+          <tr><td><b>RBAC</b></td><td>editor may <code>todos:create</code>. Alice is an editor.</td><td>Few things to manage and audit.</td><td>Role explosion when every special case becomes a role. Cannot say "own".</td></tr>
+          <tr><td><b>ABAC</b></td><td>Allow if <code>user.dept == doc.dept</code> and <code>doc.amount &lt; 500</code>.</td><td>Fine-grained, contextual.</td><td>Rules are harder to read and test as a set.</td></tr>
+          <tr><td><b>ReBAC</b></td><td>Allow if user is a member of the team that owns the folder that holds the file.</td><td>Follows how people actually share.</td><td>Needs a store of relationships and a way to walk them.</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Principles that apply to all of them</h3>
+      <ul>
+        <li><b>Deny by default.</b> Anything not allowed is refused. OWASP lists the opposite as the first common weakness.</li>
+        <li><b>Least privilege.</b> Give each role, token and service only what it needs.</li>
+        <li><b>Separation of duty.</b> The person who creates a payment is not the one who approves it. Roles alone cannot say "not the same person"; it needs a rule about the object.</li>
+        <li><b>Enforce on the server, on every request.</b> The decision can live in a library or a policy engine, but the check must be where the data is.</li>
+        <li><b>Mind how fresh a role is.</b> A role carried in a token is as old as the token. Changing a user's role does not change tokens already issued.</li>
+      </ul>
+      <h3>Scopes, roles, permissions and claims</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th>Describes</th><th>Lives in</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Role</b></td><td>What a <em>user</em> is, in this system</td><td>The identity provider or the app</td><td><code>admin</code></td></tr>
+          <tr><td><b>Permission</b></td><td>One allowed action on a kind of thing</td><td>The app's rules</td><td><code>todos:delete</code></td></tr>
+          <tr><td><b>Scope</b></td><td>What <em>this token</em> may be used for</td><td>The token</td><td><code>todos.read</code></td></tr>
+          <tr><td><b>Claim</b></td><td>A statement in a token that <em>carries</em> any of the above</td><td>The token</td><td><code>"roles": ["admin"]</code></td></tr>
+        </tbody>
+      </table></div>
+      <p>A call is allowed when <b>both</b> the user's permissions and the token's scopes allow it: the effective permission is the intersection. That is how a third-party app with a read-only token cannot delete, even though the user could.</p>
+      <h3>Policy as code</h3>
+      <p>As rules grow, they move out of scattered <code>if</code> statements into one place that can be read, tested and reviewed. <b>Open Policy Agent</b> (the language is Rego) and <b>Cedar</b> (a policy language created at AWS) are two open-source examples for applications, and <b>Kyverno</b> (Part 4) does it for Kubernetes admission. Whichever one you use, the split is the same: a <em>decision</em> (allow or deny, from a request and some data) and an <em>enforcement</em> point that asks and obeys.</p>
+      <figure class="anim" aria-label="Animated diagram: an RBAC decision with an ownership rule">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="A request from Erin to delete a todo reaches the policy. The policy looks up her role, editor, then the permissions of that role. The editor role has delete only on own resources, so the decision depends on who owns the todo.">
+<rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 80 H300"/><path class="a-route" data-k="r2" d="M450 80 H560"/><path class="a-route" data-k="r3" d="M635 120 V200"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="req"><rect x="24" y="40" width="176" height="80" rx="8"/><text class="a-t" x="112" y="70">Request</text><text class="a-s" x="112" y="90">erin: delete todo 7</text></g>
+<g class="a-node" data-k="role"><rect x="300" y="40" width="150" height="80" rx="8"/><text class="a-t" x="375" y="70">Her role</text><text class="a-s" x="375" y="90">editor</text></g>
+<g class="a-node" data-k="perm"><rect x="560" y="40" width="176" height="80" rx="8"/><text class="a-t" x="648" y="70">Role grants</text><text class="a-s" x="648" y="90">todos:delete:own</text></g>
+<g class="a-node" data-k="own"><rect x="560" y="200" width="176" height="70" rx="8"/><text class="a-t" x="648" y="240">Owner of todo 7?</text></g>
+<text class="a-badge good" data-k="ok" x="300" y="250">allow: it is her todo</text><text class="a-badge bad" data-k="no" x="300" y="250">deny: it is vera's todo</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "req", "off": "r1 r2 r3 role perm own ok no", "text": "<b>A request.</b> Who is asking (from the validated token), what they want to do, and to which thing."},
+          {"on": "req r1 role", "off": "r2 r3 perm own ok no", "path": [[206, 80], [294, 80]], "text": "<b>Role.</b> The policy looks up the caller's roles. Users do not hold permissions directly: they hold roles."},
+          {"on": "role r2 perm", "off": "r1 r3 own ok no", "path": [[456, 80], [554, 80]], "text": "<b>Permissions.</b> The role grants <code>todos:delete:own</code>: delete, but only on things the caller owns."},
+          {"on": "perm r3 own ok", "good": "own ok", "off": "r1 r2 no", "path": [[635, 126], [635, 194]], "text": "<b>The ownership rule.</b> The todo's owner is Erin, so the rule is met: allowed."},
+          {"on": "perm r3 own no", "bad": "own no", "off": "r1 r2 ok", "path": [[635, 126], [635, 194]], "text": "<b>Same role, another todo.</b> The owner is Vera, so the same request is denied. A role alone could not express this."}
+        ]</script>
+      </figure>
+
+      <h3>Play with RBAC</h3>
+      <p>Tick which role grants which permission, and give each person a role. A permission ending in <code>:own</code> applies only to todos the caller owns. Watch which decisions change, and read the reason given for each.</p>
+      <div data-tool="rbac"></div>
+
+      <h3>Practice</h3>
+      <div data-ex="a16-rules"></div>
+      <div data-ex="a16-rbac"></div>
+      <div data-ex="a16-scopes"></div>
+      <div data-ex="a16-sod"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Every rule is subject, action, resource and sometimes context. ACL lists on the object, RBAC by role, ABAC by attributes, ReBAC by relationship.</li>
+        <li>RBAC manages few things but cannot say "own". Real systems pair roles with an ownership or attribute rule.</li>
+        <li>Deny by default, least privilege, separation of duty, and enforce on the server.</li>
+        <li>A role describes a user, a scope limits a token; a call needs both.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 17 ============ -->
+    <section class="step" id="bac" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">17</span><h2>Broken access control, and how to close it</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> recognise the common access-control flaws in code and fix each one in ASP.NET Core.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Broken access control is first in the OWASP Top 10 for 2025. The 2025 edition reports that 100% of the applications tested had some form of it. The flaws are not clever: they are checks that someone forgot. The way to learn to see them is to read real-looking code and be asked "what happens if".</p>
+        <p>This lesson builds on steps 01, 16 and 10. The code is C# for the Todo API you secure in level 6.</p>
+      </div>
+      <div class="what-is"><h4>What is it? Broken access control</h4><dl>
+        <dt>What it is</dt><dd>Failures that let users act outside their intended permissions. OWASP lists, among others: access that should be denied by default but is open, changing a URL or request to reach someone else's data, missing checks on POST, PUT and DELETE, acting as another user, and tampering with a token or cookie.</dd>
+        <dt>The problem it causes</dt><dd>Information disclosure, modification or destruction of data, or business functions used beyond a user's limits.</dd>
+        <dt>Everyday comparison</dt><dd>A hotel that checks you have a key card but not which room the card is for.</dd>
+        <dt>What it is not</dt><dd>Not an authentication failure: the user usually <em>is</em> signed in. The system simply never asks whether <em>this</em> user may do <em>this</em>.</dd>
+        <dt>Where you meet it</dt><dd>Everywhere. API1, API3 and API5 of the OWASP API Security Top 10 (2023) are its three object, property and function forms.</dd>
+      </dl></div>
+      <h3>The three forms in the API list</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>OWASP API (2023)</th><th>In plain words</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>API1: Broken Object Level Authorization</b></td><td>The caller can reach another user's <em>object</em> by changing an id.</td><td><code>GET /todos/2</code> returns Bob's todo.</td></tr>
+          <tr><td><b>API3: Broken Object Property Level Authorization</b></td><td>The caller can read or write a <em>field</em> they should not.</td><td>Setting <code>isAdmin</code> in a profile update.</td></tr>
+          <tr><td><b>API5: Broken Function Level Authorization</b></td><td>The caller can use a <em>function</em> reserved for others.</td><td>A normal user calls the admin endpoint.</td></tr>
+        </tbody>
+      </table></div>
+      <figure class="anim" aria-label="Animated diagram: an insecure direct object reference and its fix">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="Alice is signed in and requests todo 2 by changing the id in the address. The broken endpoint returns Bob's todo because it only checks that she is signed in. The fixed endpoint queries by id and owner, and answers not found.">
+<rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 100 H340"/><path class="a-route" data-k="r2" d="M540 100 H590"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="alice"><rect x="24" y="50" width="176" height="100" rx="8"/><text class="a-t" x="112" y="80">Alice</text><text class="a-s" x="112" y="100">signed in</text><text class="a-s" x="112" y="118">GET /todos/2</text></g>
+<g class="a-node" data-k="api"><rect x="340" y="40" width="200" height="200" rx="8"/><text class="a-t" x="440" y="120">API</text><text class="a-s" x="440" y="140">knows who she is</text><text class="a-s" x="440" y="158">which todo is hers?</text></g>
+<g class="a-node" data-k="db"><rect x="590" y="60" width="146" height="80" rx="8"/><text class="a-t" x="663" y="90">Todo 2</text><text class="a-s" x="663" y="110">owner: bob</text></g>
+<text class="a-badge bad" data-k="bad" x="663" y="190">200: Bob's todo returned</text><text class="a-badge good" data-k="good" x="663" y="190">404: not found for her</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "alice r1 api", "off": "r2 db bad good", "path": [[206, 100], [334, 100]], "text": "<b>Alice changes the number.</b> She is signed in and asks for <code>/todos/2</code>, a todo that is not hers."},
+          {"on": "api r2 db bad", "bad": "db bad", "off": "r1 alice good", "path": [[546, 100], [584, 100]], "text": "<b>The flaw.</b> The broken endpoint checked that she is signed in, and nothing about <em>this object</em>. It returns Bob's todo."},
+          {"on": "api good", "good": "api good", "off": "r1 r2 alice db bad", "text": "<b>The fix.</b> Query by id <em>and</em> owner, taken from the token. A todo that is not hers is not found, which does not even reveal that it exists."}
+        ]</script>
+      </figure>
+      <h3>Eight to find</h3>
+      <p>Each snippet is the endpoint with the flaw. Work out what happens before you answer. A correct answer shows the fixed code. Every snippet here, broken and fixed, is built and called over HTTP by the tests, so what they claim is what the code does.</p>
+      <div data-ex="a17-idor"></div>
+      <div data-ex="a17-admin"></div>
+      <div data-ex="a17-owner"></div>
+      <div data-ex="a17-overpost"></div>
+      <div data-ex="a17-verb"></div>
+      <div data-ex="a17-role"></div>
+      <div data-ex="a17-leak"></div>
+      <div data-ex="a17-list"></div>
+
+      <h3>The patterns that close them</h3>
+      <ul>
+        <li><b>Deny by default.</b> A <em>fallback policy</em> requires an authenticated user for every endpoint that has no policy of its own, so a forgotten endpoint is closed, not open. Public endpoints opt out with <code>[AllowAnonymous]</code>.</li>
+        <li><b>Named policies for functions.</b> <code>RequireAuthorization("Admin")</code>, defined once with <code>AddAuthorizationBuilder().AddPolicy(...)</code>.</li>
+        <li><b>Identity only from the validated token.</b> Never from the body, a header or a query string.</li>
+        <li><b>Ownership in the query.</b> Every query that returns or changes an object is filtered by the owner from the token, so a forgotten check cannot widen the result.</li>
+        <li><b>Resource-based authorization</b> when the rule needs the loaded object. An attribute runs before the data is loaded, so the check has to be called from the handler:</li>
+      </ul>
+      <figure class="code"><figcaption>src/api/TodoOwnerAuthorization.cs</figcaption><pre><code>using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Infrastructure;
+
+class TodoOwnerHandler : AuthorizationHandler&lt;OperationAuthorizationRequirement, Todo&gt;
+{
+    protected override Task HandleRequirementAsync(
+        AuthorizationHandlerContext context, OperationAuthorizationRequirement requirement, Todo resource)
+    {
+        var me = context.User.FindFirst("sub")?.Value;
+        if (me is not null &amp;&amp; resource.Owner == me)
+            context.Succeed(requirement);                       // the owner may do anything to their own todo
+        else if (requirement.Name == "Read" &amp;&amp; context.User.IsInRole("admin"))
+            context.Succeed(requirement);                       // an admin may read any todo
+        return Task.CompletedTask;
+    }
+}
+
+// Program.cs
+builder.Services.AddSingleton&lt;IAuthorizationHandler, TodoOwnerHandler&gt;();
+
+app.MapDelete("/todos/{id:int}", async (int id, ClaimsPrincipal user, IAuthorizationService authz) =&gt;
+{
+    var todo = Db.Todos.FirstOrDefault(t =&gt; t.Id == id);
+    if (todo is null) return Results.NotFound();
+    var result = await authz.AuthorizeAsync(user, todo, new OperationAuthorizationRequirement { Name = "Delete" });
+    if (!result.Succeeded) return Results.NotFound();           // not yours looks the same as not there
+    Db.Todos.Remove(todo);
+    return Results.NoContent();
+}).RequireAuthorization();</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the resource handler</summary><div><dl>
+        <dt><code>AuthorizationHandler&lt;OperationAuthorizationRequirement, Todo&gt;</code></dt><dd>A handler for requirements about one kind of resource, here a <code>Todo</code>. <code>OperationAuthorizationRequirement</code> is the framework's helper for "an operation named X", so one handler serves Read, Update and Delete.</dd>
+        <dt><code>context.Succeed(requirement)</code></dt><dd>Says this requirement is met. If no handler succeeds, the answer is no: deny by default.</dd>
+        <dt><code>authz.AuthorizeAsync(user, todo, requirement)</code></dt><dd>Asks the framework: may this user do this operation to this object? It is called after the object is loaded.</dd>
+        <dt><code>return Results.NotFound()</code></dt><dd>For an object, the same answer for "no such todo" and "not yours", so the response reveals nothing.</dd>
+      </dl></div></details>
+      <h3>Test it, always</h3>
+      <p>OWASP: developers and QA should include functional access control in unit and integration tests. A small table is enough: for each endpoint, who may and who may not, and the status code each gets. Step 21 gives you the table for the Todo API.</p>
+
+      <h3>Practice</h3>
+      <div data-ex="a17-concept"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Most access control bugs are a missing check: for the object, the field, or the function.</li>
+        <li>Identity comes from the validated token. Ownership belongs in the query. Roles belong on the endpoint.</li>
+        <li>Deny by default with a fallback policy, so a forgotten endpoint is closed.</li>
+        <li>For objects, "not yours" and "not there" give the same answer.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 18 ============ -->
+    <section class="step" id="k8s" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">18</span><h2>Access control around the platform</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> write a Kubernetes Role, test it with <code>kubectl auth can-i</code>, and explain how a pod gets cloud credentials with no stored secret.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>The same ideas that protect your API protect the platform under it: who may read Secrets in a namespace, which pod may touch which cloud resource. In Part 4 you restricted what pods <em>can do</em>. Here you decide what <em>identities</em> may do.</p>
+        <p>This lesson builds on steps 09 and 16, and on Part 1's cluster and Part 4's service accounts.</p>
+      </div>
+      <div class="what-is"><h4>What is it? A service account</h4><dl>
+        <dt>What it is</dt><dd>An identity for processes that run in a pod. A process inside a pod can use it to authenticate to the cluster's API server.</dd>
+        <dt>The problem it solves</dt><dd>Programs need an identity too, and a human's login is the wrong one.</dd>
+        <dt>Everyday comparison</dt><dd>A staff badge for a robot, which opens only the doors the robot needs.</dd>
+        <dt>What it is not</dt><dd>Not a user: it exists inside the cluster, in a namespace, and its token is short-lived and bound to a pod.</dd>
+        <dt>Where you meet it</dt><dd>The <code>serviceAccountName</code> of a pod, and the subject of a RoleBinding.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? Workload identity</h4><dl>
+        <dt>What it is</dt><dd>Letting a workload prove who it is to a cloud, with a token its platform issues, instead of a stored key. In Kubernetes the cluster is an OpenID Connect identity provider and the cloud is a relying party.</dd>
+        <dt>The problem it solves</dt><dd>Long-lived cloud keys in config files and environment variables leak. A short-lived, signed, audience-bound token does not need to be stored.</dd>
+        <dt>Everyday comparison</dt><dd>A visitor pass that the building's reception issues, which another building accepts because it trusts that reception.</dd>
+        <dt>What it is not</dt><dd>Not a boundary between containers: Amazon's own documentation says containers are not a security boundary, and that this does not change it.</dd>
+        <dt>Where you meet it</dt><dd>IAM roles for service accounts (IRSA) on EKS; the GitHub Actions OIDC trust in the Actions Lab is the same idea.</dd>
+      </dl></div>
+
+      <h3>Kubernetes RBAC</h3>
+      <p>Kubernetes authenticates a request, then authorizes it with RBAC (among other authorizers). Its rules, from the documentation:</p>
+      <ul>
+        <li>A <b>Role</b> sets permissions within one namespace. A <b>ClusterRole</b> is not namespaced.</li>
+        <li>A <b>RoleBinding</b> grants a Role or ClusterRole to subjects within a namespace. A <b>ClusterRoleBinding</b> grants it cluster-wide. A RoleBinding that points at a ClusterRole still grants only inside its own namespace.</li>
+        <li><b>Permissions are purely additive: there are no "deny" rules.</b> To take access away, remove the grant.</li>
+        <li>A rule names <code>apiGroups</code> (the core group is <code>""</code>), <code>resources</code>, <code>verbs</code>, and optionally <code>resourceNames</code> to limit it to specific objects.</li>
+        <li><b>Escalation is prevented:</b> you may create or update a Role only if you already hold every permission in it at that scope, or you have the <code>escalate</code> verb. Binding follows a similar rule.</li>
+      </ul>
+      <figure class="code"><figcaption>infra/rbac/todo-reporter.yaml</figcaption><pre><code>apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: reporter
+  namespace: todo
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["todo-settings"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: reporter
+  namespace: todo
+subjects:
+  - kind: ServiceAccount
+    name: todo-reporter
+    namespace: todo
+roleRef:
+  kind: Role
+  name: reporter
+  apiGroup: rbac.authorization.k8s.io</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the Role and its binding</summary><div><dl>
+        <dt><code>rules[0]</code></dt><dd>May <code>get</code> and <code>list</code> pods in the namespace <code>todo</code> (and nothing else about pods: no <code>delete</code>, no <code>create</code>).</dd>
+        <dt><code>rules[1]</code> with <code>resourceNames</code></dt><dd>May <code>get</code> only the ConfigMap called <code>todo-settings</code>. Without <code>resourceNames</code>, a rule covers every object of the kind.</dd>
+        <dt><code>subjects</code></dt><dd>Who receives the Role: here the service account <code>todo-reporter</code> in <code>todo</code>.</dd>
+        <dt><code>roleRef</code></dt><dd>Which Role. It cannot be changed after creation: to point somewhere else you replace the binding.</dd>
+      </dl></div></details>
+      <div data-ex="a18-role"></div>
+      <p>Test what an identity can do without becoming it. <code>kubectl auth can-i</code> asks the API server's authorization layer; add <code>--as</code> to ask for someone else, and <code>--list</code> to list everything.</p>
+      <div data-cmd="a18-canI"></div>
+      <div data-cmd="a18-list"></div>
+      <div data-cmd="a18-create"></div>
+      <h4>Dangerous permissions</h4>
+      <p><code>get</code> or <code>list</code> on <b>secrets</b> reads every secret in the namespace. <code>create</code> on pods or deployments lets someone run code under any service account in the namespace. <code>escalate</code> and <code>bind</code> let a person grant what they do not hold. Give them to very few identities, and review bindings the way you would review a firewall rule.</p>
+
+      <h3>Service account tokens</h3>
+      <p>Since Kubernetes 1.22 a pod gets a short-lived, automatically rotating token by the <code>TokenRequest</code> API, mounted as a projected volume. The token is a JWT, bound to the pod, and by default its audience is the Kubernetes API server. A token requested for another audience is useless to the API server, and the reverse. Opt out of mounting credentials with <code>automountServiceAccountToken: false</code> for pods that never call the API.</p>
+      <div data-ex="a18-sa"></div>
+
+      <h3>Workload identity</h3>
+      <p>Kubernetes can act as an OpenID Connect provider: with token projection on and an <code>https</code> issuer, the API server serves a discovery document at <code>/.well-known/openid-configuration</code> and its keys at <code>/openid/v1/jwks</code>, so an outside system can verify service account tokens. Amazon EKS hosts such an endpoint for each cluster. In IAM roles for service accounts (IRSA) you register the cluster as an OIDC provider once, associate an IAM role with a service account, and the pod's token is exchanged with the AWS Security Token Service (<code>AssumeRoleWithWebIdentity</code>) for temporary credentials.</p>
+      <figure class="anim" aria-label="Animated diagram: workload identity federation, a pod exchanging its Kubernetes token for cloud credentials">
+        <div class="anim-stage"><svg viewBox="0 0 760 330" role="img" aria-label="A pod has a short-lived projected service account token signed by the cluster. It sends the token to the cloud security token service. The cloud service has the cluster as a trusted identity provider and checks the signature, issuer, audience and subject against the role trust policy, then returns temporary credentials.">
+<rect class="a-zone" x="8" y="8" width="744" height="314" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 90 H340"/><path class="a-route" data-k="r2" d="M540 110 H590"/><path class="a-route" data-k="r3" d="M340 160 H200"/><path class="a-route" data-k="r4" d="M440 190 V240"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="pod"><rect x="24" y="50" width="176" height="140" rx="8"/><text class="a-t" x="112" y="100">Pod</text><text class="a-s" x="112" y="120">service account</text><text class="a-s" x="112" y="138">todo-reporter</text></g>
+<g class="a-node" data-k="sts"><rect x="340" y="50" width="200" height="140" rx="8"/><text class="a-t" x="440" y="100">Cloud token service</text><text class="a-s" x="440" y="120">trusts the cluster's</text><text class="a-s" x="440" y="138">OIDC issuer</text></g>
+<g class="a-node" data-k="keys"><rect x="590" y="60" width="146" height="100" rx="8"/><text class="a-t" x="663" y="100">Cluster keys</text><text class="a-s" x="663" y="120">public JWKS</text></g>
+<g class="a-node" data-k="cred"><rect x="340" y="240" width="200" height="70" rx="8"/><text class="a-t" x="440" y="280">Temporary credentials</text></g>
+<text class="a-lbl" data-k="r1" x="270" y="78">1. token (aud, sub)</text><text class="a-lbl" data-k="r3" x="270" y="148">3. temporary credentials</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "pod", "off": "r1 r2 r3 r4 sts keys cred", "text": "<b>The pod has an identity.</b> Kubernetes issues its service account a short-lived, signed token (a JWT) and mounts it into the pod. No cloud secret is stored anywhere."},
+          {"on": "pod r1 sts", "off": "r2 r3 r4 keys cred", "path": [[206, 90], [334, 90]], "text": "<b>1. Present it.</b> The pod sends the token to the cloud's security token service and asks to assume a role."},
+          {"on": "sts r2 keys", "off": "r1 r3 r4 pod cred", "path": [[546, 110], [584, 110]], "text": "<b>2. Check it.</b> The service trusts the cluster as an identity provider. It reads the cluster's published keys and verifies the signature, then checks the issuer, the audience and the subject against the role's trust policy."},
+          {"on": "sts r3 pod r4 cred", "good": "cred pod", "off": "r1 r2 keys", "path": [[334, 160], [206, 160]], "text": "<b>3. Credentials.</b> If everything matches, the pod gets short-lived credentials for that role only. The same checks as step 10, applied to a machine."}
+        ]</script>
+      </figure>
+      <p>The cloud's trust policy is where the least privilege is written: which issuer, and which service account in which namespace, may assume which role. It is the access control of step 16 applied to a machine, with the token checks of step 10.</p>
+
+      <h3>Practice</h3>
+      <div data-ex="a18-binding"></div>
+      <div data-ex="a18-additive"></div>
+      <div data-ex="a18-escalate"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Kubernetes RBAC: Roles and bindings, namespaced or cluster-wide, purely additive, with resourceNames to narrow a rule and escalation prevented.</li>
+        <li><code>kubectl auth can-i --as … --list</code> tests an identity without being it.</li>
+        <li>Service account tokens are short-lived, bound JWTs. A cloud can trust the cluster's issuer and swap a token for temporary credentials, with no stored key.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
     </main>
 </div>
 
@@ -2890,6 +3229,17 @@ builder.Services.AddAuthorization();</code></pre></figure>
   } catch (e) {}
   var notes = [];
   try { notes = JSON.parse(localStorage.getItem(KEY) || '[]') || []; } catch (e) { notes = []; }
+  // Every note and bookmark has a running number (1, 2, 3 ...) so the most recent one is easy to see. Entries made before
+  // numbers existed get one now, in the order they were made. A number is never changed afterwards.
+  function numberEntries(list, key) {
+    var max = 0, todo = [];
+    list.forEach(function (x) { if (typeof x.no === 'number') max = Math.max(max, x.no); else todo.push(x); });
+    if (!todo.length) return;
+    todo.sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); }).forEach(function (x) { x.no = ++max; });
+    try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) {}
+  }
+  function nextNo(list) { return list.reduce(function (m, x) { return Math.max(m, x.no || 0); }, 0) + 1; }
+  numberEntries(notes, KEY);
   function save() { try { localStorage.setItem(KEY, JSON.stringify(notes)); } catch (e) {} }
   function pref(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; }
   var $ = function (id) { return document.getElementById(id); };
@@ -3046,7 +3396,7 @@ builder.Services.AddAuthorization();</code></pre></figure>
     if (!text || !cur) return;
     if (cur.note) { cur.note.text = text; cur.note.upd = Date.now(); }
     else {
-      var n = { id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: cur.info.sec, offset: cur.info.offset, quote: cur.info.quote, text: text, ts: Date.now() };
+      var n = { no: nextNo(notes), id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: cur.info.sec, offset: cur.info.offset, quote: cur.info.quote, text: text, ts: Date.now() };
       notes.push(n); highlight(n);
       setOpen(true);
     }
@@ -3099,6 +3449,7 @@ builder.Services.AddAuthorization();</code></pre></figure>
     ordered().forEach(function (n) {
       var c = el('article', 'note-card'); c.setAttribute('data-id', n.id);
       var top = el('div', 'note-top');
+      top.appendChild(el('span', 'note-no', '#' + n.no)); top.lastChild.title = 'Note number ' + n.no + ': the higher the number, the later it was added';
       top.appendChild(el('span', 'note-step', stepLabel(n)));
       top.appendChild(el('p', 'note-quote-s', quoteText(n.quote)));
       var b = el('button', 'note-edit', 'Edit'); b.type = 'button'; b.setAttribute('aria-label', 'Edit this note');
@@ -3182,6 +3533,7 @@ builder.Services.AddAuthorization();</code></pre></figure>
   var BKEY = 'tutorial-bookmarks:' + PAGE, PKEY = 'tutorial-pos:' + PAGE;
   var marks = [], lastPos = null, ready = false, userMoved = false, saveT = 0;
   try { marks = JSON.parse(localStorage.getItem(BKEY) || '[]') || []; } catch (e) { marks = []; }
+  numberEntries(marks, BKEY);
   try { lastPos = JSON.parse(localStorage.getItem(PKEY) || 'null'); } catch (e) { lastPos = null; }
   var bmBtn = $('bm-btn'), bmList = $('bm-list'), toast = null, toastT = 0;
   function saveMarks() { try { localStorage.setItem(BKEY, JSON.stringify(marks)); } catch (e) {} }
@@ -3199,7 +3551,7 @@ builder.Services.AddAuthorization();</code></pre></figure>
   function toggleBm(p) {
     if (p.bm) { unhighlight(p.bm.id, true); marks = marks.filter(function (b) { return b !== p.bm; }); showToast('Bookmark removed.'); }
     else {
-      var b = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: p.info.sec, offset: p.info.offset, quote: p.info.quote, ts: Date.now() };
+      var b = { no: nextNo(marks), id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: p.info.sec, offset: p.info.offset, quote: p.info.quote, ts: Date.now() };
       marks.push(b); highlight(b, true);
       showToast('Bookmarked “' + (b.quote.length > 40 ? b.quote.slice(0, 40) + '…' : b.quote) + '”. Find it under Bookmarks at the top.');
     }
@@ -3234,7 +3586,7 @@ builder.Services.AddAuthorization();</code></pre></figure>
       return ia - ib || a.offset - b.offset;
     }).forEach(function (b) {
       var row = el('div', 'bm-item'); row.tabIndex = 0; row.setAttribute('role', 'menuitem');
-      var t = el('span', 't', quoteText(b.quote)); t.appendChild(el('span', 's', secName(b.sec) + ' · ' + stamp(b.ts)));
+      var t = el('span', 't', quoteText(b.quote)); t.insertBefore(el('span', 'bm-no', '#' + b.no), t.firstChild); t.appendChild(el('span', 's', secName(b.sec) + ' · ' + stamp(b.ts)));
       var x = el('button', 'bm-x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Remove this bookmark');
       row.appendChild(t); row.appendChild(x);
       row.addEventListener('click', function () { hideBm(); goBm(b); });
@@ -3730,6 +4082,69 @@ builder.Services.AddAuthorization();</code></pre></figure>
   }
 
   return { pemBlocks, toPem, parseCertificate, parseAll, verifySignature, matchHost, order, checkChain };
+});
+
+</script>
+<script>/* js-yaml (MIT) */
+!function(e,t){"object"==typeof exports&&"undefined"!=typeof module?t(exports):"function"==typeof define&&define.amd?define(["exports"],t):t((e="undefined"!=typeof globalThis?globalThis:e||self).jsyaml={})}(this,function(e){"use strict";function t(e){return e&&e.__esModule&&Object.prototype.hasOwnProperty.call(e,"default")?e.default:e}var n,r,i,o,a,l,u,c,s,p,f,d,h,m,g,y,v,b,A,k,w,x,C,S,I,T,O,j,M,F,E,N,L,_,D,U,q,Y,K,R,H,P,B,W,$={},G={},Z={};function V(){if(n)return Z;function e(t){return(e="function"==typeof Symbol&&"symbol"==typeof Symbol.iterator?function(e){return typeof e}:function(e){return e&&"function"==typeof Symbol&&e.constructor===Symbol&&e!==Symbol.prototype?"symbol":typeof e})(t)}function t(e){return null==e}return n=1,Z.isNothing=t,Z.isObject=function(t){return"object"===e(t)&&null!==t},Z.toArray=function(e){return Array.isArray(e)?e:t(e)?[]:[e]},Z.repeat=function(e,t){for(var n="",r=0;r<t;r+=1)n+=e;return n},Z.isNegativeZero=function(e){return 0===e&&Number.NEGATIVE_INFINITY===1/e},Z.extend=function(e,t){if(t)for(var n=Object.keys(t),r=0,i=n.length;r<i;r+=1){var o=n[r];e[o]=t[o]}return e},Z}function J(){if(i)return r;function e(e,t){var n="",r=e.reason||"(unknown reason)";return e.mark?(e.mark.name&&(n+='in "'+e.mark.name+'" '),n+="("+(e.mark.line+1)+":"+(e.mark.column+1)+")",!t&&e.mark.snippet&&(n+="\n\n"+e.mark.snippet),r+" "+n):r}function t(t,n){Error.call(this),this.name="YAMLException",this.reason=t,this.mark=n,this.message=e(this,!1),Error.captureStackTrace?Error.captureStackTrace(this,this.constructor):this.stack=(new Error).stack||""}return i=1,t.prototype=Object.create(Error.prototype),t.prototype.constructor=t,t.prototype.toString=function(t){return this.name+": "+e(this,t)},r=t}function z(){if(u)return l;u=1;var e=J(),t=["kind","multi","resolve","construct","instanceOf","predicate","represent","representName","defaultStyle","styleAliases"],n=["scalar","sequence","mapping"];return l=function(r,i){var o,a;if(i=i||{},Object.keys(i).forEach(function(n){if(-1===t.indexOf(n))throw new e('Unknown option "'+n+'" is met in definition of "'+r+'" YAML type.')}),this.options=i,this.tag=r,this.kind=i.kind||null,this.resolve=i.resolve||function(){return!0},this.construct=i.construct||function(e){return e},this.instanceOf=i.instanceOf||null,this.predicate=i.predicate||null,this.represent=i.represent||null,this.representName=i.representName||null,this.defaultStyle=i.defaultStyle||null,this.multi=i.multi||!1,this.styleAliases=(o=i.styleAliases||null,a={},null!==o&&Object.keys(o).forEach(function(e){o[e].forEach(function(t){a[String(t)]=e})}),a),-1===n.indexOf(this.kind))throw new e('Unknown kind "'+this.kind+'" is specified for "'+r+'" YAML type.')}}function Q(){if(s)return c;s=1;var e=J(),t=z();function n(e,t){var n=[];return e[t].forEach(function(e){var t=n.length;n.forEach(function(n,r){n.tag===e.tag&&n.kind===e.kind&&n.multi===e.multi&&(t=r)}),n[t]=e}),n}function r(e){return this.extend(e)}return r.prototype.extend=function(i){var o=[],a=[];if(i instanceof t)a.push(i);else if(Array.isArray(i))a=a.concat(i);else{if(!i||!Array.isArray(i.implicit)&&!Array.isArray(i.explicit))throw new e("Schema.extend argument should be a Type, [ Type ], or a schema definition ({ implicit: [...], explicit: [...] })");i.implicit&&(o=o.concat(i.implicit)),i.explicit&&(a=a.concat(i.explicit))}o.forEach(function(n){if(!(n instanceof t))throw new e("Specified list of YAML types (or a single Type object) contains a non-Type object.");if(n.loadKind&&"scalar"!==n.loadKind)throw new e("There is a non-scalar type in the implicit list of a schema. Implicit resolving of such types is not supported.");if(n.multi)throw new e("There is a multi type in the implicit list of a schema. Multi tags can only be listed as explicit.")}),a.forEach(function(n){if(!(n instanceof t))throw new e("Specified list of YAML types (or a single Type object) contains a non-Type object.")});var l=Object.create(r.prototype);return l.implicit=(this.implicit||[]).concat(o),l.explicit=(this.explicit||[]).concat(a),l.compiledImplicit=n(l,"implicit"),l.compiledExplicit=n(l,"explicit"),l.compiledTypeMap=function(){var e={scalar:{},sequence:{},mapping:{},fallback:{},multi:{scalar:[],sequence:[],mapping:[],fallback:[]}};function t(t){t.multi?(e.multi[t.kind].push(t),e.multi.fallback.push(t)):e[t.kind][t.tag]=e.fallback[t.tag]=t}for(var n=0,r=arguments.length;n<r;n+=1)arguments[n].forEach(t);return e}(l.compiledImplicit,l.compiledExplicit),l},c=r}function X(){if(f)return p;f=1;var e=z();return p=new e("tag:yaml.org,2002:str",{kind:"scalar",construct:function(e){return null!==e?e:""}})}function ee(){if(h)return d;h=1;var e=z();return d=new e("tag:yaml.org,2002:seq",{kind:"sequence",construct:function(e){return null!==e?e:[]}})}function te(){if(g)return m;g=1;var e=z();return m=new e("tag:yaml.org,2002:map",{kind:"mapping",construct:function(e){return null!==e?e:{}}})}function ne(){if(v)return y;v=1;var e=Q();return y=new e({explicit:[X(),ee(),te()]})}function re(){if(A)return b;A=1;var e=z();return b=new e("tag:yaml.org,2002:null",{kind:"scalar",resolve:function(e){if(null===e)return!0;var t=e.length;return 1===t&&"~"===e||4===t&&("null"===e||"Null"===e||"NULL"===e)},construct:function(){return null},predicate:function(e){return null===e},represent:{canonical:function(){return"~"},lowercase:function(){return"null"},uppercase:function(){return"NULL"},camelcase:function(){return"Null"},empty:function(){return""}},defaultStyle:"lowercase"})}function ie(){if(w)return k;w=1;var e=z();return k=new e("tag:yaml.org,2002:bool",{kind:"scalar",resolve:function(e){if(null===e)return!1;var t=e.length;return 4===t&&("true"===e||"True"===e||"TRUE"===e)||5===t&&("false"===e||"False"===e||"FALSE"===e)},construct:function(e){return"true"===e||"True"===e||"TRUE"===e},predicate:function(e){return"[object Boolean]"===Object.prototype.toString.call(e)},represent:{lowercase:function(e){return e?"true":"false"},uppercase:function(e){return e?"TRUE":"FALSE"},camelcase:function(e){return e?"True":"False"}},defaultStyle:"lowercase"})}function oe(){if(C)return x;C=1;var e=V(),t=z();function n(e){return e>=48&&e<=57||e>=65&&e<=70||e>=97&&e<=102}function r(e){return e>=48&&e<=55}function i(e){return e>=48&&e<=57}function o(e){var t=e,n=1,r=t[0];if("-"!==r&&"+"!==r||("-"===r&&(n=-1),r=(t=t.slice(1))[0]),"0"===t)return 0;if("0"===r){if("b"===t[1])return n*parseInt(t.slice(2),2);if("x"===t[1])return n*parseInt(t.slice(2),16);if("o"===t[1])return n*parseInt(t.slice(2),8)}return n*parseInt(t,10)}return x=new t("tag:yaml.org,2002:int",{kind:"scalar",resolve:function(e){if(null===e)return!1;var t=e.length,a=0,l=!1;if(!t)return!1;var u=e[a];if("-"!==u&&"+"!==u||(u=e[++a]),"0"===u){if(a+1===t)return!0;if("b"===(u=e[++a])){for(a++;a<t;a++){if("0"!==(u=e[a])&&"1"!==u)return!1;l=!0}return l&&isFinite(o(e))}if("x"===u){for(a++;a<t;a++){if(!n(e.charCodeAt(a)))return!1;l=!0}return l&&isFinite(o(e))}if("o"===u){for(a++;a<t;a++){if(!r(e.charCodeAt(a)))return!1;l=!0}return l&&isFinite(o(e))}}for(;a<t;a++){if(!i(e.charCodeAt(a)))return!1;l=!0}return!!l&&isFinite(o(e))},construct:function(e){return o(e)},predicate:function(t){return"[object Number]"===Object.prototype.toString.call(t)&&t%1==0&&!e.isNegativeZero(t)},represent:{binary:function(e){return e>=0?"0b"+e.toString(2):"-0b"+e.toString(2).slice(1)},octal:function(e){return e>=0?"0o"+e.toString(8):"-0o"+e.toString(8).slice(1)},decimal:function(e){return e.toString(10)},hexadecimal:function(e){return e>=0?"0x"+e.toString(16).toUpperCase():"-0x"+e.toString(16).toUpperCase().slice(1)}},defaultStyle:"decimal",styleAliases:{binary:[2,"bin"],octal:[8,"oct"],decimal:[10,"dec"],hexadecimal:[16,"hex"]}})}function ae(){if(I)return S;I=1;var e=V(),t=z(),n=new RegExp("^(?:[-+]?(?:[0-9]+)(?:\\.[0-9]*)?(?:[eE][-+]?[0-9]+)?|\\.[0-9]+(?:[eE][-+]?[0-9]+)?|[-+]?\\.(?:inf|Inf|INF)|\\.(?:nan|NaN|NAN))$"),r=new RegExp("^(?:[-+]?\\.(?:inf|Inf|INF)|\\.(?:nan|NaN|NAN))$");var i=/^[-+]?[0-9]+e/;return S=new t("tag:yaml.org,2002:float",{kind:"scalar",resolve:function(e){return null!==e&&(!!n.test(e)&&(!!isFinite(parseFloat(e,10))||r.test(e)))},construct:function(e){var t=e.toLowerCase(),n="-"===t[0]?-1:1;return"+-".indexOf(t[0])>=0&&(t=t.slice(1)),".inf"===t?1===n?Number.POSITIVE_INFINITY:Number.NEGATIVE_INFINITY:".nan"===t?NaN:n*parseFloat(t,10)},predicate:function(t){return"[object Number]"===Object.prototype.toString.call(t)&&(t%1!=0||e.isNegativeZero(t))},represent:function(t,n){if(isNaN(t))switch(n){case"lowercase":return".nan";case"uppercase":return".NAN";case"camelcase":return".NaN"}else if(Number.POSITIVE_INFINITY===t)switch(n){case"lowercase":return".inf";case"uppercase":return".INF";case"camelcase":return".Inf"}else if(Number.NEGATIVE_INFINITY===t)switch(n){case"lowercase":return"-.inf";case"uppercase":return"-.INF";case"camelcase":return"-.Inf"}else if(e.isNegativeZero(t))return"-0.0";var r=t.toString(10);return i.test(r)?r.replace("e",".e"):r},defaultStyle:"lowercase"})}function le(){return O?T:(O=1,T=ne().extend({implicit:[re(),ie(),oe(),ae()]}))}function ue(){return M?j:(M=1,j=le())}function ce(){if(E)return F;E=1;var e=z(),t=new RegExp("^([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])$"),n=new RegExp("^([0-9][0-9][0-9][0-9])-([0-9][0-9]?)-([0-9][0-9]?)(?:[Tt]|[ \\t]+)([0-9][0-9]?):([0-9][0-9]):([0-9][0-9])(?:\\.([0-9]*))?(?:[ \\t]*(Z|([-+])([0-9][0-9]?)(?::([0-9][0-9]))?))?$");return F=new e("tag:yaml.org,2002:timestamp",{kind:"scalar",resolve:function(e){return null!==e&&(null!==t.exec(e)||null!==n.exec(e))},construct:function(e){var r=0,i=null,o=t.exec(e);if(null===o&&(o=n.exec(e)),null===o)throw new Error("Date resolve error");var a=+o[1],l=+o[2]-1,u=+o[3];if(!o[4])return new Date(Date.UTC(a,l,u));var c=+o[4],s=+o[5],p=+o[6];if(o[7]){for(r=o[7].slice(0,3);r.length<3;)r+="0";r=+r}o[9]&&(i=6e4*(60*+o[10]+ +(o[11]||0)),"-"===o[9]&&(i=-i));var f=new Date(Date.UTC(a,l,u,c,s,p,r));return i&&f.setTime(f.getTime()-i),f},instanceOf:Date,represent:function(e){return e.toISOString()}})}function se(){if(L)return N;L=1;var e=z();return N=new e("tag:yaml.org,2002:merge",{kind:"scalar",resolve:function(e){return"<<"===e||null===e}})}function pe(){if(D)return _;D=1;var e=z(),t="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r";return _=new e("tag:yaml.org,2002:binary",{kind:"scalar",resolve:function(e){if(null===e)return!1;for(var n=0,r=e.length,i=t,o=0;o<r;o++){var a=i.indexOf(e.charAt(o));if(!(a>64)){if(a<0)return!1;n+=6}}return n%8==0},construct:function(e){for(var n=e.replace(/[\r\n=]/g,""),r=n.length,i=t,o=0,a=[],l=0;l<r;l++)l%4==0&&l&&(a.push(o>>16&255),a.push(o>>8&255),a.push(255&o)),o=o<<6|i.indexOf(n.charAt(l));var u=r%4*6;return 0===u?(a.push(o>>16&255),a.push(o>>8&255),a.push(255&o)):18===u?(a.push(o>>10&255),a.push(o>>2&255)):12===u&&a.push(o>>4&255),new Uint8Array(a)},predicate:function(e){return"[object Uint8Array]"===Object.prototype.toString.call(e)},represent:function(e){for(var n="",r=0,i=e.length,o=t,a=0;a<i;a++)a%3==0&&a&&(n+=o[r>>18&63],n+=o[r>>12&63],n+=o[r>>6&63],n+=o[63&r]),r=(r<<8)+e[a];var l=i%3;return 0===l?(n+=o[r>>18&63],n+=o[r>>12&63],n+=o[r>>6&63],n+=o[63&r]):2===l?(n+=o[r>>10&63],n+=o[r>>4&63],n+=o[r<<2&63],n+=o[64]):1===l&&(n+=o[r>>2&63],n+=o[r<<4&63],n+=o[64],n+=o[64]),n}})}function fe(){if(q)return U;q=1;var e=z(),t=Object.prototype.hasOwnProperty,n=Object.prototype.toString;return U=new e("tag:yaml.org,2002:omap",{kind:"sequence",resolve:function(e){if(null===e)return!0;for(var r={},i=e,o=0,a=i.length;o<a;o+=1){var l=i[o],u=!1;if("[object Object]"!==n.call(l))return!1;var c=void 0;for(c in l)if(t.call(l,c)){if(u)return!1;u=!0}if(!u)return!1;if(t.call(r,c))return!1;Object.defineProperty(r,c,{value:!0})}return!0},construct:function(e){return null!==e?e:[]}})}function de(){if(K)return Y;K=1;var e=z(),t=Object.prototype.toString;return Y=new e("tag:yaml.org,2002:pairs",{kind:"sequence",resolve:function(e){if(null===e)return!0;for(var n=e,r=new Array(n.length),i=0,o=n.length;i<o;i+=1){var a=n[i];if("[object Object]"!==t.call(a))return!1;var l=Object.keys(a);if(1!==l.length)return!1;r[i]=[l[0],a[l[0]]]}return!0},construct:function(e){if(null===e)return[];for(var t=e,n=new Array(t.length),r=0,i=t.length;r<i;r+=1){var o=t[r],a=Object.keys(o);n[r]=[a[0],o[a[0]]]}return n}})}function he(){if(H)return R;H=1;var e=z(),t=Object.prototype.hasOwnProperty;return R=new e("tag:yaml.org,2002:set",{kind:"mapping",resolve:function(e){if(null===e)return!0;var n=e;for(var r in n)if(t.call(n,r)&&null!==n[r])return!1;return!0},construct:function(e){return null!==e?e:{}}})}function me(){return B?P:(B=1,P=ue().extend({implicit:[ce(),se()],explicit:[pe(),fe(),de(),he()]}))}function ge(){if(W)return G;function e(t){return(e="function"==typeof Symbol&&"symbol"==typeof Symbol.iterator?function(e){return typeof e}:function(e){return e&&"function"==typeof Symbol&&e.constructor===Symbol&&e!==Symbol.prototype?"symbol":typeof e})(t)}W=1;var t=V(),n=J(),r=function(){if(a)return o;a=1;var e=V();function t(e,t,n,r,i){var o="",a="",l=Math.floor(i/2)-1;return r-t>l&&(t=r-l+(o=" ... ").length),n-r>l&&(n=r+l-(a=" ...").length),{str:o+e.slice(t,n).replace(/\t/g,"→")+a,pos:r-t+o.length}}function n(t,n){return e.repeat(" ",n-t.length)+t}return o=function(r,i){if(i=Object.create(i||null),!r.buffer)return null;i.maxLength||(i.maxLength=79),"number"!=typeof i.indent&&(i.indent=1),"number"!=typeof i.linesBefore&&(i.linesBefore=3),"number"!=typeof i.linesAfter&&(i.linesAfter=2);for(var o,a=/\r?\n|\r|\0/g,l=[0],u=[],c=-1;o=a.exec(r.buffer);)u.push(o.index),l.push(o.index+o[0].length),r.position<=o.index&&c<0&&(c=l.length-2);c<0&&(c=l.length-1);for(var s="",p=Math.min(r.line+i.linesAfter,u.length).toString().length,f=i.maxLength-(i.indent+p+3),d=1;d<=i.linesBefore&&!(c-d<0);d++){var h=t(r.buffer,l[c-d],u[c-d],r.position-(l[c]-l[c-d]),f);s=e.repeat(" ",i.indent)+n((r.line-d+1).toString(),p)+" | "+h.str+"\n"+s}var m=t(r.buffer,l[c],u[c],r.position,f);s+=e.repeat(" ",i.indent)+n((r.line+1).toString(),p)+" | "+m.str+"\n",s+=e.repeat("-",i.indent+p+3+m.pos)+"^\n";for(var g=1;g<=i.linesAfter&&!(c+g>=u.length);g++){var y=t(r.buffer,l[c+g],u[c+g],r.position-(l[c]-l[c+g]),f);s+=e.repeat(" ",i.indent)+n((r.line+g+1).toString(),p)+" | "+y.str+"\n"}return s.replace(/\n$/,"")}}(),i=me(),l=Object.prototype.hasOwnProperty,u=/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x84\x86-\x9F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]/,c=/[\x85\u2028\u2029]/,s=/[,\[\]{}]/,p=/^(?:!|!!|![0-9A-Za-z-]+!)$/,f=/^(?:!|[^,\[\]{}])(?:%[0-9a-f]{2}|[0-9a-z\-#;/?:@&=+$,_.!~*'()\[\]])*$/i;function d(e){return Object.prototype.toString.call(e)}function h(e){return 10===e||13===e}function m(e){return 9===e||32===e}function g(e){return 9===e||32===e||10===e||13===e}function y(e){return 44===e||91===e||93===e||123===e||125===e}function v(e){if(e>=48&&e<=57)return e-48;var t=32|e;return t>=97&&t<=102?t-97+10:-1}function b(e){return 120===e?2:117===e?4:85===e?8:0}function A(e){return e>=48&&e<=57?e-48:-1}function k(e){switch(e){case 48:return"\0";case 97:return"";case 98:return"\b";case 116:case 9:return"\t";case 110:return"\n";case 118:return"\v";case 102:return"\f";case 114:return"\r";case 101:return"";case 32:return" ";case 34:return'"';case 47:return"/";case 92:return"\\";case 78:return"";case 95:return" ";case 76:return"\u2028";case 80:return"\u2029";default:return""}}function w(e){return e<=65535?String.fromCharCode(e):String.fromCharCode(55296+(e-65536>>10),56320+(e-65536&1023))}function x(e,t,n){"__proto__"===t?Object.defineProperty(e,t,{configurable:!0,enumerable:!0,writable:!0,value:n}):e[t]=n}for(var C=new Array(256),S=new Array(256),I=0;I<256;I++)C[I]=k(I)?1:0,S[I]=k(I);function T(e,t){this.input=e,this.filename=t.filename||null,this.schema=t.schema||i,this.onWarning=t.onWarning||null,this.legacy=t.legacy||!1,this.json=t.json||!1,this.listener=t.listener||null,this.maxDepth="number"==typeof t.maxDepth?t.maxDepth:100,this.maxTotalMergeKeys="number"==typeof t.maxTotalMergeKeys?t.maxTotalMergeKeys:1e4,this.implicitTypes=this.schema.compiledImplicit,this.typeMap=this.schema.compiledTypeMap,this.length=e.length,this.position=0,this.line=0,this.lineStart=0,this.lineIndent=0,this.depth=0,this.totalMergeKeys=0,this.firstTabInLine=-1,this.documents=[],this.anchorMapTransactions=[]}function O(e,t){var i={name:e.filename,buffer:e.input.slice(0,-1),position:e.position,line:e.line,column:e.position-e.lineStart};return i.snippet=r(i),new n(t,i)}function j(e,t){throw O(e,t)}function M(e,t){e.onWarning&&e.onWarning.call(null,O(e,t))}function F(e,t,n){var r=e.anchorMapTransactions;if(0!==r.length){var i=r[r.length-1];l.call(i,t)||(i[t]={existed:l.call(e.anchorMap,t),value:e.anchorMap[t]})}e.anchorMap[t]=n}function E(e){return{position:e.position,line:e.line,lineStart:e.lineStart,lineIndent:e.lineIndent,firstTabInLine:e.firstTabInLine,tag:e.tag,anchor:e.anchor,kind:e.kind,result:e.result}}function N(e,t){e.position=t.position,e.line=t.line,e.lineStart=t.lineStart,e.lineIndent=t.lineIndent,e.firstTabInLine=t.firstTabInLine,e.tag=t.tag,e.anchor=t.anchor,e.kind=t.kind,e.result=t.result}var L={YAML:function(e,t,n){null!==e.version&&j(e,"duplication of %YAML directive"),1!==n.length&&j(e,"YAML directive accepts exactly one argument");var r=/^([0-9]+)\.([0-9]+)$/.exec(n[0]);null===r&&j(e,"ill-formed argument of the YAML directive");var i=parseInt(r[1],10),o=parseInt(r[2],10);1!==i&&j(e,"unacceptable YAML version of the document"),e.version=n[0],e.checkLineBreaks=o<2,1!==o&&2!==o&&M(e,"unsupported YAML version of the document")},TAG:function(e,t,n){var r;2!==n.length&&j(e,"TAG directive accepts exactly two arguments");var i=n[0];r=n[1],p.test(i)||j(e,"ill-formed tag handle (first argument) of the TAG directive"),l.call(e.tagMap,i)&&j(e,'there is a previously declared suffix for "'+i+'" tag handle'),f.test(r)||j(e,"ill-formed tag prefix (second argument) of the TAG directive");try{r=decodeURIComponent(r)}catch(t){j(e,"tag prefix is malformed: "+r)}e.tagMap[i]=r}};function _(e,t,n,r){if(t<n){var i=e.input.slice(t,n);if(r)for(var o=0,a=i.length;o<a;o+=1){var l=i.charCodeAt(o);9===l||l>=32&&l<=1114111||j(e,"expected valid JSON character")}else u.test(i)&&j(e,"the stream contains non-printable characters");e.result+=i}}function D(e){e.totalMergeKeys++,-1!==e.maxTotalMergeKeys&&e.totalMergeKeys>e.maxTotalMergeKeys&&j(e,"merge keys exceeded maxTotalMergeKeys ("+e.maxTotalMergeKeys+")")}function U(e,n,r,i){t.isObject(r)||j(e,"cannot merge mappings; the provided source object is unacceptable"),D(e);for(var o=Object.keys(r),a=0,u=o.length;a<u;a+=1){var c=o[a];D(e),l.call(n,c)||(x(n,c,r[c]),i[c]=!0)}}function q(t,n,r,i,o,a,u,c,s){if(Array.isArray(o))for(var p=0,f=(o=Array.prototype.slice.call(o)).length;p<f;p+=1)Array.isArray(o[p])&&j(t,"nested arrays are not supported inside keys"),"object"===e(o)&&"[object Object]"===d(o[p])&&(o[p]="[object Object]");if("object"===e(o)&&"[object Object]"===d(o)&&(o="[object Object]"),o=String(o),null===n&&(n={}),"tag:yaml.org,2002:merge"===i)if(Array.isArray(a)){a.length>100&&j(t,"abnormal merge sequence size");for(var h=0,m=a.length;h<m;h+=1)U(t,n,a[h],r)}else U(t,n,a,r);else t.json||l.call(r,o)||!l.call(n,o)||(t.line=u||t.line,t.lineStart=c||t.lineStart,t.position=s||t.position,j(t,"duplicated mapping key")),x(n,o,a),delete r[o];return n}function Y(e){var t=e.input.charCodeAt(e.position);10===t?e.position++:13===t?(e.position++,10===e.input.charCodeAt(e.position)&&e.position++):j(e,"a line break is expected"),e.line+=1,e.lineStart=e.position,e.firstTabInLine=-1}function K(e,t,n){for(var r=0,i=e.input.charCodeAt(e.position);0!==i;){for(;m(i);)9===i&&-1===e.firstTabInLine&&(e.firstTabInLine=e.position),i=e.input.charCodeAt(++e.position);if(t&&35===i)do{i=e.input.charCodeAt(++e.position)}while(10!==i&&13!==i&&0!==i);if(!h(i))break;for(Y(e),i=e.input.charCodeAt(e.position),r++,e.lineIndent=0;32===i;)e.lineIndent++,i=e.input.charCodeAt(++e.position)}return-1!==n&&0!==r&&e.lineIndent<n&&M(e,"deficient indentation"),r}function R(e){var t=e.position,n=e.input.charCodeAt(t);return!(45!==n&&46!==n||n!==e.input.charCodeAt(t+1)||n!==e.input.charCodeAt(t+2)||(t+=3,0!==(n=e.input.charCodeAt(t))&&!g(n)))}function H(e,n){1===n?e.result+=" ":n>1&&(e.result+=t.repeat("\n",n-1))}function P(e,t){var n=e.tag,r=e.anchor,i=[],o=!1;if(-1!==e.firstTabInLine)return!1;null!==e.anchor&&F(e,e.anchor,i);for(var a=e.input.charCodeAt(e.position);0!==a&&(-1!==e.firstTabInLine&&(e.position=e.firstTabInLine,j(e,"tab characters must not be used in indentation")),45===a);){if(!g(e.input.charCodeAt(e.position+1)))break;if(o=!0,e.position++,K(e,!0,-1)&&e.lineIndent<=t)i.push(null),a=e.input.charCodeAt(e.position);else{var l=e.line;if(Q(e,t,3,!1,!0),i.push(e.result),K(e,!0,-1),a=e.input.charCodeAt(e.position),(e.line===l||e.lineIndent>t)&&0!==a)j(e,"bad indentation of a sequence entry");else if(e.lineIndent<t)break}}return!!o&&(e.tag=n,e.anchor=r,e.kind="sequence",e.result=i,!0)}function B(e,t,n){var r,i,o,a,l=e.tag,u=e.anchor,c={},s=Object.create(null),p=null,f=null,d=null,h=!1,y=!1;if(-1!==e.firstTabInLine)return!1;null!==e.anchor&&F(e,e.anchor,c);for(var v=e.input.charCodeAt(e.position);0!==v;){h||-1===e.firstTabInLine||(e.position=e.firstTabInLine,j(e,"tab characters must not be used in indentation"));var b=e.input.charCodeAt(e.position+1),A=e.line;if(63!==v&&58!==v||!g(b)){if(i=e.line,o=e.lineStart,a=e.position,!Q(e,n,2,!1,!0))break;if(e.line===A){for(v=e.input.charCodeAt(e.position);m(v);)v=e.input.charCodeAt(++e.position);if(58===v)g(v=e.input.charCodeAt(++e.position))||j(e,"a whitespace character is expected after the key-value separator within a block mapping"),h&&(q(e,c,s,p,f,null,i,o,a),p=f=d=null),y=!0,h=!1,r=!1,p=e.tag,f=e.result;else{if(!y)return e.tag=l,e.anchor=u,!0;j(e,"can not read an implicit mapping pair; a colon is missed")}}else{if(!y)return e.tag=l,e.anchor=u,!0;j(e,"can not read a block mapping entry; a multiline key may not be an implicit key")}}else 63===v?(h&&(q(e,c,s,p,f,null,i,o,a),p=f=d=null),y=!0,h=!0,r=!0):h?(h=!1,r=!0):j(e,"incomplete explicit mapping pair; a key node is missed; or followed by a non-tabulated empty line"),e.position+=1,v=b;if((e.line===A||e.lineIndent>t)&&(h&&(i=e.line,o=e.lineStart,a=e.position),Q(e,t,4,!0,r)&&(h?f=e.result:d=e.result),h||(q(e,c,s,p,f,d,i,o,a),p=f=d=null),K(e,!0,-1),v=e.input.charCodeAt(e.position)),(e.line===A||e.lineIndent>t)&&0!==v)j(e,"bad indentation of a mapping entry");else if(e.lineIndent<t)break}return h&&q(e,c,s,p,f,null,i,o,a),y&&(e.tag=l,e.anchor=u,e.kind="mapping",e.result=c),y}function $(e){var t,n,r=!1,i=!1,o=e.input.charCodeAt(e.position);if(33!==o)return!1;null!==e.tag&&j(e,"duplication of a tag property"),60===(o=e.input.charCodeAt(++e.position))?(r=!0,o=e.input.charCodeAt(++e.position)):33===o?(i=!0,t="!!",o=e.input.charCodeAt(++e.position)):t="!";var a=e.position;if(r){do{o=e.input.charCodeAt(++e.position)}while(0!==o&&62!==o);e.position<e.length?(n=e.input.slice(a,e.position),o=e.input.charCodeAt(++e.position)):j(e,"unexpected end of the stream within a verbatim tag")}else{for(;0!==o&&!g(o);)33===o&&(i?j(e,"tag suffix cannot contain exclamation marks"):(t=e.input.slice(a-1,e.position+1),p.test(t)||j(e,"named tag handle cannot contain such characters"),i=!0,a=e.position+1)),o=e.input.charCodeAt(++e.position);n=e.input.slice(a,e.position),s.test(n)&&j(e,"tag suffix cannot contain flow indicator characters")}n&&!f.test(n)&&j(e,"tag name cannot contain such characters: "+n);try{n=decodeURIComponent(n)}catch(t){j(e,"tag name is malformed: "+n)}return r?e.tag=n:l.call(e.tagMap,t)?e.tag=e.tagMap[t]+n:"!"===t?e.tag="!"+n:"!!"===t?e.tag="tag:yaml.org,2002:"+n:j(e,'undeclared tag handle "'+t+'"'),!0}function Z(e){var t=e.input.charCodeAt(e.position);if(38!==t)return!1;null!==e.anchor&&j(e,"duplication of an anchor property"),t=e.input.charCodeAt(++e.position);for(var n=e.position;0!==t&&!g(t)&&!y(t);)t=e.input.charCodeAt(++e.position);return e.position===n&&j(e,"name of an anchor node must contain at least one character"),e.anchor=e.input.slice(n,e.position),!0}function z(e,t,n,r){var i=E(e);return function(e){e.anchorMapTransactions.push(Object.create(null))}(e),N(e,t),e.tag=null,e.anchor=null,e.kind=null,e.result=null,B(e,n,r)&&"mapping"===e.kind?(function(e){var t=e.anchorMapTransactions.pop(),n=e.anchorMapTransactions;if(0!==n.length)for(var r=n[n.length-1],i=Object.keys(t),o=0,a=i.length;o<a;o+=1){var u=i[o];l.call(r,u)||(r[u]=t[u])}}(e),!0):(function(e){for(var t=e.anchorMapTransactions.pop(),n=Object.keys(t),r=n.length-1;r>=0;r-=1){var i=t[n[r]];i.existed?e.anchorMap[n[r]]=i.value:delete e.anchorMap[n[r]]}}(e),N(e,i),!1)}function Q(e,n,r,i,o){var a,u,c,s,p,f=1,d=!1,k=!1,x=null;e.depth>=e.maxDepth&&j(e,"nesting exceeded maxDepth ("+e.maxDepth+")"),e.depth+=1,null!==e.listener&&e.listener("open",e),e.tag=null,e.anchor=null,e.kind=null,e.result=null;var I=a=u=4===r||3===r;if(i&&K(e,!0,-1)&&(d=!0,e.lineIndent>n?f=1:e.lineIndent===n?f=0:e.lineIndent<n&&(f=-1)),1===f)for(;;){var T=e.input.charCodeAt(e.position),O=E(e);if(d&&(33===T&&null!==e.tag||38===T&&null!==e.anchor))break;if(!$(e)&&!Z(e))break;null===x&&(x=O),K(e,!0,-1)?(d=!0,u=I,e.lineIndent>n?f=1:e.lineIndent===n?f=0:e.lineIndent<n&&(f=-1)):u=!1}if(u&&(u=d||o),1===f||4===r)if(s=1===r||2===r?n:n+1,p=e.position-e.lineStart,1===f)if(u&&(P(e,p)||B(e,p,s))||function(e,t){var n,r,i,o,a,l,u,c,s,p,f,d=!0,h=e.tag,m=e.anchor,y=Object.create(null),v=e.input.charCodeAt(e.position);if(91===v)a=93,c=!1,o=[];else{if(123!==v)return!1;a=125,c=!0,o={}}for(null!==e.anchor&&F(e,e.anchor,o),v=e.input.charCodeAt(++e.position);0!==v;){if(K(e,!0,t),(v=e.input.charCodeAt(e.position))===a)return e.position++,e.tag=h,e.anchor=m,e.kind=c?"mapping":"sequence",e.result=o,!0;d?44===v&&j(e,"expected the node content, but found ','"):j(e,"missed comma between flow collection entries"),f=null,l=u=!1,63===v&&g(e.input.charCodeAt(e.position+1))&&(l=u=!0,e.position++,K(e,!0,t)),n=e.line,r=e.lineStart,i=e.position,Q(e,t,1,!1,!0),p=e.tag,s=e.result,K(e,!0,t),v=e.input.charCodeAt(e.position),!u&&e.line!==n||58!==v||(l=!0,v=e.input.charCodeAt(++e.position),K(e,!0,t),Q(e,t,1,!1,!0),f=e.result),c?q(e,o,y,p,s,f,n,r,i):l?o.push(q(e,null,y,p,s,f,n,r,i)):o.push(s),K(e,!0,t),44===(v=e.input.charCodeAt(e.position))?(d=!0,v=e.input.charCodeAt(++e.position)):d=!1}j(e,"unexpected end of the stream within a flow collection")}(e,s))k=!0;else{var M=e.input.charCodeAt(e.position);null!==x&&I&&!u&&124!==M&&62!==M&&z(e,x,x.position-x.lineStart,s)||a&&function(e,n){var r,i,o=1,a=!1,l=!1,u=n,c=0,s=!1,p=e.input.charCodeAt(e.position);if(124===p)r=!1;else{if(62!==p)return!1;r=!0}for(e.kind="scalar",e.result="";0!==p;)if(43===(p=e.input.charCodeAt(++e.position))||45===p)1===o?o=43===p?3:2:j(e,"repeat of a chomping mode identifier");else{if(!((i=A(p))>=0))break;0===i?j(e,"bad explicit indentation width of a block scalar; it cannot be less than one"):l?j(e,"repeat of an indentation width identifier"):(u=n+i-1,l=!0)}if(m(p)){do{p=e.input.charCodeAt(++e.position)}while(m(p));if(35===p)do{p=e.input.charCodeAt(++e.position)}while(!h(p)&&0!==p)}for(;0!==p;){for(Y(e),e.lineIndent=0,p=e.input.charCodeAt(e.position);(!l||e.lineIndent<u)&&32===p;)e.lineIndent++,p=e.input.charCodeAt(++e.position);if(!l&&e.lineIndent>u&&(u=e.lineIndent),h(p))c++;else{if(l||0!==u||j(e,"missing indentation for block scalar"),e.lineIndent<u){3===o?e.result+=t.repeat("\n",a?1+c:c):1===o&&a&&(e.result+="\n");break}r?m(p)?(s=!0,e.result+=t.repeat("\n",a?1+c:c)):s?(s=!1,e.result+=t.repeat("\n",c+1)):0===c?a&&(e.result+=" "):e.result+=t.repeat("\n",c):e.result+=t.repeat("\n",a?1+c:c),a=!0,l=!0,c=0;for(var f=e.position;!h(p)&&0!==p;)p=e.input.charCodeAt(++e.position);_(e,f,e.position,!1)}}return!0}(e,s)||function(e,t){var n,r,i=e.input.charCodeAt(e.position);if(39!==i)return!1;for(e.kind="scalar",e.result="",e.position++,n=r=e.position;0!==(i=e.input.charCodeAt(e.position));)if(39===i){if(_(e,n,e.position,!0),39!==(i=e.input.charCodeAt(++e.position)))return!0;n=e.position,e.position++,r=e.position}else h(i)?(_(e,n,r,!0),H(e,K(e,!1,t)),n=r=e.position):e.position===e.lineStart&&R(e)?j(e,"unexpected end of the document within a single quoted scalar"):(e.position++,m(i)||(r=e.position));j(e,"unexpected end of the stream within a single quoted scalar")}(e,s)||function(e,t){var n,r,i,o=e.input.charCodeAt(e.position);if(34!==o)return!1;for(e.kind="scalar",e.result="",e.position++,n=r=e.position;0!==(o=e.input.charCodeAt(e.position));){if(34===o)return _(e,n,e.position,!0),e.position++,!0;if(92===o){if(_(e,n,e.position,!0),h(o=e.input.charCodeAt(++e.position)))K(e,!1,t);else if(o<256&&C[o])e.result+=S[o],e.position++;else if((i=b(o))>0){for(var a=i,l=0;a>0;a--)(i=v(o=e.input.charCodeAt(++e.position)))>=0?l=(l<<4)+i:j(e,"expected hexadecimal character");e.result+=w(l),e.position++}else j(e,"unknown escape sequence");n=r=e.position}else h(o)?(_(e,n,r,!0),H(e,K(e,!1,t)),n=r=e.position):e.position===e.lineStart&&R(e)?j(e,"unexpected end of the document within a double quoted scalar"):(e.position++,m(o)||(r=e.position))}j(e,"unexpected end of the stream within a double quoted scalar")}(e,s)?k=!0:!function(e){var t=e.input.charCodeAt(e.position);if(42!==t)return!1;t=e.input.charCodeAt(++e.position);for(var n=e.position;0!==t&&!g(t)&&!y(t);)t=e.input.charCodeAt(++e.position);e.position===n&&j(e,"name of an alias node must contain at least one character");var r=e.input.slice(n,e.position);return l.call(e.anchorMap,r)||j(e,'unidentified alias "'+r+'"'),e.result=e.anchorMap[r],K(e,!0,-1),!0}(e)?function(e,t,n){var r,i,o,a,l,u,c=e.kind,s=e.result,p=e.input.charCodeAt(e.position);if(g(p)||y(p)||35===p||38===p||42===p||33===p||124===p||62===p||39===p||34===p||37===p||64===p||96===p)return!1;if(63===p||45===p){var f=e.input.charCodeAt(e.position+1);if(g(f)||n&&y(f))return!1}for(e.kind="scalar",e.result="",r=i=e.position,o=!1;0!==p;){if(58===p){var d=e.input.charCodeAt(e.position+1);if(g(d)||n&&y(d))break}else if(35===p){if(g(e.input.charCodeAt(e.position-1)))break}else{if(e.position===e.lineStart&&R(e)||n&&y(p))break;if(h(p)){if(a=e.line,l=e.lineStart,u=e.lineIndent,K(e,!1,-1),e.lineIndent>=t){o=!0,p=e.input.charCodeAt(e.position);continue}e.position=i,e.line=a,e.lineStart=l,e.lineIndent=u;break}}o&&(_(e,r,i,!1),H(e,e.line-a),r=i=e.position,o=!1),m(p)||(i=e.position+1),p=e.input.charCodeAt(++e.position)}return _(e,r,i,!1),!!e.result||(e.kind=c,e.result=s,!1)}(e,s,1===r)&&(k=!0,null===e.tag&&(e.tag="?")):(k=!0,null===e.tag&&null===e.anchor||j(e,"alias node should not have any properties")),null!==e.anchor&&F(e,e.anchor,e.result)}else 0===f&&(k=u&&P(e,p));if(null===e.tag)null!==e.anchor&&F(e,e.anchor,e.result);else if("?"===e.tag){null!==e.result&&"scalar"!==e.kind&&j(e,'unacceptable node kind for !<?> tag; it should be "scalar", not "'+e.kind+'"');for(var N=0,L=e.implicitTypes.length;N<L;N+=1)if((c=e.implicitTypes[N]).resolve(e.result)){e.result=c.construct(e.result),e.tag=c.tag,null!==e.anchor&&F(e,e.anchor,e.result);break}}else if("!"!==e.tag){if(l.call(e.typeMap[e.kind||"fallback"],e.tag))c=e.typeMap[e.kind||"fallback"][e.tag];else{c=null;for(var D=e.typeMap.multi[e.kind||"fallback"],U=0,W=D.length;U<W;U+=1)if(e.tag.slice(0,D[U].tag.length)===D[U].tag){c=D[U];break}}c||j(e,"unknown tag !<"+e.tag+">"),null!==e.result&&c.kind!==e.kind&&j(e,"unacceptable node kind for !<"+e.tag+'> tag; it should be "'+c.kind+'", not "'+e.kind+'"'),c.resolve(e.result,e.tag)?(e.result=c.construct(e.result,e.tag),null!==e.anchor&&F(e,e.anchor,e.result)):j(e,"cannot resolve a node with !<"+e.tag+"> explicit tag")}return null!==e.listener&&e.listener("close",e),e.depth-=1,null!==e.tag||null!==e.anchor||k}function X(e){var t,n=e.position,r=!1;for(e.version=null,e.checkLineBreaks=e.legacy,e.tagMap=Object.create(null),e.anchorMap=Object.create(null);0!==(t=e.input.charCodeAt(e.position))&&(K(e,!0,-1),t=e.input.charCodeAt(e.position),!(e.lineIndent>0||37!==t));){r=!0,t=e.input.charCodeAt(++e.position);for(var i=e.position;0!==t&&!g(t);)t=e.input.charCodeAt(++e.position);var o=e.input.slice(i,e.position),a=[];for(o.length<1&&j(e,"directive name must not be less than one character in length");0!==t;){for(;m(t);)t=e.input.charCodeAt(++e.position);if(35===t){do{t=e.input.charCodeAt(++e.position)}while(0!==t&&!h(t));break}if(h(t))break;for(i=e.position;0!==t&&!g(t);)t=e.input.charCodeAt(++e.position);a.push(e.input.slice(i,e.position))}0!==t&&Y(e),l.call(L,o)?L[o](e,o,a):M(e,'unknown document directive "'+o+'"')}K(e,!0,-1),0===e.lineIndent&&45===e.input.charCodeAt(e.position)&&45===e.input.charCodeAt(e.position+1)&&45===e.input.charCodeAt(e.position+2)?(e.position+=3,K(e,!0,-1)):r&&j(e,"directives end mark is expected"),Q(e,e.lineIndent-1,4,!1,!0),K(e,!0,-1),e.checkLineBreaks&&c.test(e.input.slice(n,e.position))&&M(e,"non-ASCII line breaks are interpreted as content"),e.documents.push(e.result),e.position===e.lineStart&&R(e)?46===e.input.charCodeAt(e.position)&&(e.position+=3,K(e,!0,-1)):e.position<e.length-1&&j(e,"end of the stream or a document separator is expected")}function ee(e,t){t=t||{},0!==(e=String(e)).length&&(10!==e.charCodeAt(e.length-1)&&13!==e.charCodeAt(e.length-1)&&(e+="\n"),65279===e.charCodeAt(0)&&(e=e.slice(1)));var n=new T(e,t),r=e.indexOf("\0");for(-1!==r&&(n.position=r,j(n,"null byte is not allowed in input")),n.input+="\0";32===n.input.charCodeAt(n.position);)n.lineIndent+=1,n.position+=1;for(;n.position<n.length-1;)X(n);return n.documents}return G.loadAll=function(t,n,r){null!==n&&"object"===e(n)&&void 0===r&&(r=n,n=null);var i=ee(t,r);if("function"!=typeof n)return i;for(var o=0,a=i.length;o<a;o+=1)n(i[o])},G.load=function(e,t){var r=ee(e,t);if(0!==r.length){if(1===r.length)return r[0];throw new n("expected a single document in the stream, but found more")}},G}var ye,ve,be={};function Ae(){if(ye)return be;function e(t){return(e="function"==typeof Symbol&&"symbol"==typeof Symbol.iterator?function(e){return typeof e}:function(e){return e&&"function"==typeof Symbol&&e.constructor===Symbol&&e!==Symbol.prototype?"symbol":typeof e})(t)}ye=1;var t=V(),n=J(),r=me(),i=Object.prototype.toString,o=Object.prototype.hasOwnProperty,a=65279,l={0:"\\0",7:"\\a",8:"\\b",9:"\\t",10:"\\n",11:"\\v",12:"\\f",13:"\\r",27:"\\e",34:'\\"',92:"\\\\",133:"\\N",160:"\\_",8232:"\\L",8233:"\\P"},u=["y","Y","yes","Yes","YES","on","On","ON","n","N","no","No","NO","off","Off","OFF"],c=/^[-+]?[0-9_]+(?::[0-9_]+)+(?:\.[0-9_]*)?$/;function s(e){var r,i,o=e.toString(16).toUpperCase();if(e<=255)r="x",i=2;else if(e<=65535)r="u",i=4;else{if(!(e<=4294967295))throw new n("code point within a string may not be greater than 0xFFFFFFFF");r="U",i=8}return"\\"+r+t.repeat("0",i-o.length)+o}function p(e){this.schema=e.schema||r,this.indent=Math.max(1,e.indent||2),this.noArrayIndent=e.noArrayIndent||!1,this.skipInvalid=e.skipInvalid||!1,this.flowLevel=t.isNothing(e.flowLevel)?-1:e.flowLevel,this.styleMap=function(e,t){if(null===t)return{};for(var n={},r=Object.keys(t),i=0,a=r.length;i<a;i+=1){var l=r[i],u=String(t[l]);"!!"===l.slice(0,2)&&(l="tag:yaml.org,2002:"+l.slice(2));var c=e.compiledTypeMap.fallback[l];c&&o.call(c.styleAliases,u)&&(u=c.styleAliases[u]),n[l]=u}return n}(this.schema,e.styles||null),this.sortKeys=e.sortKeys||!1,this.lineWidth=e.lineWidth||80,this.noRefs=e.noRefs||!1,this.noCompatMode=e.noCompatMode||!1,this.condenseFlow=e.condenseFlow||!1,this.quotingType='"'===e.quotingType?2:1,this.forceQuotes=e.forceQuotes||!1,this.replacer="function"==typeof e.replacer?e.replacer:null,this.implicitTypes=this.schema.compiledImplicit,this.explicitTypes=this.schema.compiledExplicit,this.tag=null,this.result="",this.duplicates=[],this.usedDuplicates=null}function f(e,n){for(var r=t.repeat(" ",n),i=0,o="",a=e.length;i<a;){var l=void 0,u=e.indexOf("\n",i);-1===u?(l=e.slice(i),i=a):(l=e.slice(i,u+1),i=u+1),l.length&&"\n"!==l&&(o+=r),o+=l}return o}function d(e,n){return"\n"+t.repeat(" ",e.indent*n)}function h(e){return 32===e||9===e}function m(e){return e>=32&&e<=126||e>=161&&e<=55295&&8232!==e&&8233!==e||e>=57344&&e<=65533&&e!==a||e>=65536&&e<=1114111}function g(e){return m(e)&&e!==a&&13!==e&&10!==e}function y(e,t,n){var r=g(e),i=r&&!h(e);return(n?r:r&&44!==e&&91!==e&&93!==e&&123!==e&&125!==e)&&35!==e&&!(58===t&&!i)||g(t)&&!h(t)&&35===e||58===t&&i}function v(e,t){var n,r=e.charCodeAt(t);return r>=55296&&r<=56319&&t+1<e.length&&(n=e.charCodeAt(t+1))>=56320&&n<=57343?1024*(r-55296)+n-56320+65536:r}function b(e){return/^\n* /.test(e)}function A(e,t,n,r,i,o,l,u){var c,s,p=0,f=null,d=!1,g=!1,A=-1!==r,k=-1,w=m(s=v(e,0))&&s!==a&&!h(s)&&45!==s&&63!==s&&58!==s&&44!==s&&91!==s&&93!==s&&123!==s&&125!==s&&35!==s&&38!==s&&42!==s&&33!==s&&124!==s&&61!==s&&62!==s&&39!==s&&34!==s&&37!==s&&64!==s&&96!==s&&function(e){return!h(e)&&58!==e}(v(e,e.length-1));if(t||l)for(c=0;c<e.length;p>=65536?c+=2:c++){if(!m(p=v(e,c)))return 5;w=w&&y(p,f,u),f=p}else{for(c=0;c<e.length;p>=65536?c+=2:c++){if(10===(p=v(e,c)))d=!0,A&&(g=g||c-k-1>r&&" "!==e[k+1],k=c);else if(!m(p))return 5;w=w&&y(p,f,u),f=p}g=g||A&&c-k-1>r&&" "!==e[k+1]}return d||g?n>9&&b(e)?5:l?2===o?5:2:g?4:3:!w||l||i(e)?2===o?5:2:1}function k(e,t,r,i,o){e.dump=function(){if(0===t.length)return 2===e.quotingType?'""':"''";if(!e.noCompatMode&&(-1!==u.indexOf(t)||c.test(t)))return 2===e.quotingType?'"'+t+'"':"'"+t+"'";var a=e.indent*Math.max(1,r),p=-1===e.lineWidth?-1:Math.max(Math.min(e.lineWidth,40),e.lineWidth-a),d=i||e.flowLevel>-1&&r>=e.flowLevel;switch(A(t,d,e.indent,p,function(t){return function(e,t){for(var n=0,r=e.implicitTypes.length;n<r;n+=1)if(e.implicitTypes[n].resolve(t))return!0;return!1}(e,t)},e.quotingType,e.forceQuotes&&!i,o)){case 1:return t;case 2:return"'"+t.replace(/'/g,"''")+"'";case 3:return"|"+w(t,e.indent)+x(f(t,a));case 4:return">"+w(t,e.indent)+x(f(function(e,t){var n,r,i=/(\n+)([^\n]*)/g,o=(l=e.indexOf("\n"),l=-1!==l?l:e.length,i.lastIndex=l,C(e.slice(0,l),t)),a="\n"===e[0]||" "===e[0];var l;for(;r=i.exec(e);){var u=r[1],c=r[2];n=" "===c[0],o+=u+(a||n||""===c?"":"\n")+C(c,t),a=n}return o}(t,p),a));case 5:return'"'+function(e){for(var t="",n=0,r=0;r<e.length;n>=65536?r+=2:r++){n=v(e,r);var i=l[n];!i&&m(n)?(t+=e[r],n>=65536&&(t+=e[r+1])):t+=i||s(n)}return t}(t)+'"';default:throw new n("impossible error: invalid scalar style")}}()}function w(e,t){var n=b(e)?String(t):"",r="\n"===e[e.length-1];return n+(r&&("\n"===e[e.length-2]||"\n"===e)?"+":r?"":"-")+"\n"}function x(e){return"\n"===e[e.length-1]?e.slice(0,-1):e}function C(e,t){if(""===e||" "===e[0])return e;for(var n,r,i=/ [^ ]/g,o=0,a=0,l=0,u="";n=i.exec(e);)(l=n.index)-o>t&&(r=a>o?a:l,u+="\n"+e.slice(o,r),o=r+1),a=l;return u+="\n",e.length-o>t&&a>o?u+=e.slice(o,a)+"\n"+e.slice(a+1):u+=e.slice(o),u.slice(1)}function S(e,t,n,r){for(var i="",o=e.tag,a=0,l=n.length;a<l;a+=1){var u=n[a];e.replacer&&(u=e.replacer.call(n,String(a),u)),(T(e,t+1,u,!0,!0,!1,!0)||void 0===u&&T(e,t+1,null,!0,!0,!1,!0))&&(r&&""===i||(i+=d(e,t)),e.dump&&10===e.dump.charCodeAt(0)?i+="-":i+="- ",i+=e.dump)}e.tag=o,e.dump=i||"[]"}function I(t,r,a){for(var l=a?t.explicitTypes:t.implicitTypes,u=0,c=l.length;u<c;u+=1){var s=l[u];if((s.instanceOf||s.predicate)&&(!s.instanceOf||"object"===e(r)&&r instanceof s.instanceOf)&&(!s.predicate||s.predicate(r))){if(a?s.multi&&s.representName?t.tag=s.representName(r):t.tag=s.tag:t.tag="?",s.represent){var p=t.styleMap[s.tag]||s.defaultStyle,f=void 0;if("[object Function]"===i.call(s.represent))f=s.represent(r,p);else{if(!o.call(s.represent,p))throw new n("!<"+s.tag+'> tag resolver accepts not "'+p+'" style');f=s.represent[p](r,p)}t.dump=f}return!0}}return!1}function T(e,t,r,o,a,l,u){e.tag=null,e.dump=r,I(e,r,!1)||I(e,r,!0);var c=i.call(e.dump),s=o;o&&(o=e.flowLevel<0||e.flowLevel>t);var p,f,h="[object Object]"===c||"[object Array]"===c;if(h&&(f=-1!==(p=e.duplicates.indexOf(r))),(null!==e.tag&&"?"!==e.tag||f||2!==e.indent&&t>0)&&(a=!1),f&&e.usedDuplicates[p])e.dump="*ref_"+p;else{if(h&&f&&!e.usedDuplicates[p]&&(e.usedDuplicates[p]=!0),"[object Object]"===c)o&&0!==Object.keys(e.dump).length?(!function(e,t,r,i){var o="",a=e.tag,l=Object.keys(r);if(!0===e.sortKeys)l.sort();else if("function"==typeof e.sortKeys)l.sort(e.sortKeys);else if(e.sortKeys)throw new n("sortKeys must be a boolean or a function");for(var u=0,c=l.length;u<c;u+=1){var s="";i&&""===o||(s+=d(e,t));var p=l[u],f=r[p];if(e.replacer&&(f=e.replacer.call(r,p,f)),T(e,t+1,p,!0,!0,!0)){var h=null!==e.tag&&"?"!==e.tag||e.dump&&e.dump.length>1024;h&&(e.dump&&10===e.dump.charCodeAt(0)?s+="?":s+="? "),s+=e.dump,h&&(s+=d(e,t)),T(e,t+1,f,!0,h)&&(e.dump&&10===e.dump.charCodeAt(0)?s+=":":s+=": ",o+=s+=e.dump)}}e.tag=a,e.dump=o||"{}"}(e,t,e.dump,a),f&&(e.dump="&ref_"+p+e.dump)):(!function(e,t,n){for(var r="",i=e.tag,o=Object.keys(n),a=0,l=o.length;a<l;a+=1){var u="";""!==r&&(u+=", "),e.condenseFlow&&(u+='"');var c=o[a],s=n[c];e.replacer&&(s=e.replacer.call(n,c,s)),T(e,t,c,!1,!1)&&(e.dump.length>1024&&(u+="? "),u+=e.dump+(e.condenseFlow?'"':"")+":"+(e.condenseFlow?"":" "),T(e,t,s,!1,!1)&&(r+=u+=e.dump))}e.tag=i,e.dump="{"+r+"}"}(e,t,e.dump),f&&(e.dump="&ref_"+p+" "+e.dump));else if("[object Array]"===c)o&&0!==e.dump.length?(e.noArrayIndent&&!u&&t>0?S(e,t-1,e.dump,a):S(e,t,e.dump,a),f&&(e.dump="&ref_"+p+e.dump)):(!function(e,t,n){for(var r="",i=e.tag,o=0,a=n.length;o<a;o+=1){var l=n[o];e.replacer&&(l=e.replacer.call(n,String(o),l)),(T(e,t,l,!1,!1)||void 0===l&&T(e,t,null,!1,!1))&&(""!==r&&(r+=","+(e.condenseFlow?"":" ")),r+=e.dump)}e.tag=i,e.dump="["+r+"]"}(e,t,e.dump),f&&(e.dump="&ref_"+p+" "+e.dump));else{if("[object String]"!==c){if("[object Undefined]"===c)return!1;if(e.skipInvalid)return!1;throw new n("unacceptable kind of an object to dump "+c)}"?"!==e.tag&&k(e,e.dump,t,l,s)}if(null!==e.tag&&"?"!==e.tag){var m=encodeURI("!"===e.tag[0]?e.tag.slice(1):e.tag).replace(/!/g,"%21");m="!"===e.tag[0]?"!"+m:"tag:yaml.org,2002:"===m.slice(0,18)?"!!"+m.slice(18):"!<"+m+">",e.dump=m+" "+e.dump}}return!0}function O(e,t){var n=[],r=[];j(e,n,r);for(var i=r.length,o=0;o<i;o+=1)t.duplicates.push(n[r[o]]);t.usedDuplicates=new Array(i)}function j(t,n,r){if(null!==t&&"object"===e(t)){var i=n.indexOf(t);if(-1!==i)-1===r.indexOf(i)&&r.push(i);else if(n.push(t),Array.isArray(t))for(var o=0,a=t.length;o<a;o+=1)j(t[o],n,r);else for(var l=Object.keys(t),u=0,c=l.length;u<c;u+=1)j(t[l[u]],n,r)}}return be.dump=function(e,t){var n=new p(t=t||{});n.noRefs||O(e,n);var r=e;return n.replacer&&(r=n.replacer.call({"":r},"",r)),T(n,0,r,!0,!0)?n.dump+"\n":""},be}var ke=t(function(){if(ve)return $;ve=1;var e=ge(),t=Ae();function n(e,t){return function(){throw new Error("Function yaml."+e+" is removed in js-yaml 4. Use yaml."+t+" instead, which is now safe by default.")}}return $.Type=z(),$.Schema=Q(),$.FAILSAFE_SCHEMA=ne(),$.JSON_SCHEMA=le(),$.CORE_SCHEMA=ue(),$.DEFAULT_SCHEMA=me(),$.load=e.load,$.loadAll=e.loadAll,$.dump=t.dump,$.YAMLException=J(),$.types={binary:pe(),float:ae(),map:te(),null:re(),pairs:de(),set:he(),timestamp:ce(),bool:ie(),int:oe(),merge:se(),omap:fe(),seq:ee(),str:X()},$.safeLoad=n("safeLoad","load"),$.safeLoadAll=n("safeLoadAll","loadAll"),$.safeDump=n("safeDump","dump"),$}()),we=ke.Type,xe=ke.Schema,Ce=ke.FAILSAFE_SCHEMA,Se=ke.JSON_SCHEMA,Ie=ke.CORE_SCHEMA,Te=ke.DEFAULT_SCHEMA,Oe=ke.load,je=ke.loadAll,Me=ke.dump,Fe=ke.YAMLException,Ee=ke.types,Ne=ke.safeLoad,Le=ke.safeLoadAll,_e=ke.safeDump;e.CORE_SCHEMA=Ie,e.DEFAULT_SCHEMA=Te,e.FAILSAFE_SCHEMA=Ce,e.JSON_SCHEMA=Se,e.Schema=xe,e.Type=we,e.YAMLException=Fe,e.default=ke,e.dump=Me,e.load=Oe,e.loadAll=je,e.safeDump=_e,e.safeLoad=Ne,e.safeLoadAll=Le,e.types=Ee,Object.defineProperty(e,"__esModule",{value:!0})});
+//# sourceMappingURL=js-yaml.min.js.map
+
+</script>
+<script>
+// Access control models for the lessons of level 5: a small RBAC decision with an ownership rule (step 16) and a model of
+// Kubernetes RBAC's documented rules (step 18). Pure JavaScript with no DOM.
+// Kubernetes semantics follow kubernetes.io "Using RBAC Authorization": permissions are purely additive (no deny rules);
+// a Role is namespaced and a ClusterRole is not; a RoleBinding grants within its namespace and a ClusterRoleBinding cluster-wide;
+// an empty resourceNames means everything is allowed.
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.IAAuthz = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  // ---------------------------------------------------------------- RBAC with an ownership rule
+  // model: { roles: { name: ['todos:read', 'todos:delete:own', ...] }, users: { alice: ['editor'] } }
+  // request: { user, perm: 'todos:delete', owner: 'alice' | undefined }
+  // A permission ending in ':own' applies only when the resource's owner is the caller.
+  function decide(model, req) {
+    const roles = (model.users && model.users[req.user]) || [];
+    const via = [];
+    for (const r of roles) {
+      const perms = (model.roles && model.roles[r]) || [];
+      if (perms.includes(req.perm)) via.push({ role: r, perm: req.perm });
+      else if (perms.includes(req.perm + ':own') && req.owner !== undefined && req.owner === req.user) via.push({ role: r, perm: req.perm + ':own' });
+    }
+    if (via.length) return { allow: true, via, why: `Allowed: role ${via[0].role} grants ${via[0].perm}.` };
+    const near = roles.find((r) => ((model.roles && model.roles[r]) || []).includes(req.perm + ':own'));
+    if (near) return { allow: false, via: [], why: `Denied: role ${near} grants ${req.perm} only on the caller's own resources, and this one belongs to ${req.owner === undefined ? 'nobody' : req.owner}.` };
+    return { allow: false, via: [], why: roles.length ? `Denied: none of ${roles.join(', ')} grants ${req.perm}. Access is denied by default.` : `Denied: ${req.user} has no role. Access is denied by default.` };
+  }
+
+  // ---------------------------------------------------------------- Kubernetes RBAC
+  const subjectName = (s) => (s.kind === 'ServiceAccount' ? `system:serviceaccount:${s.namespace || 'default'}:${s.name}` : s.name);
+  function ruleMatches(rule, a) {
+    const has = (list, v) => Array.isArray(list) && (list.includes(v) || list.includes('*'));
+    if (!has(rule.apiGroups, a.group)) return false;
+    if (!has(rule.resources, a.resource)) return false;
+    if (!has(rule.verbs, a.verb)) return false;
+    if (rule.resourceNames && rule.resourceNames.length && !rule.resourceNames.includes(a.name)) return false;
+    return true;
+  }
+  // world: { roles: [ { kind: 'Role'|'ClusterRole', name, namespace?, rules: [...] } ], bindings: [ { kind, namespace?, roleRef: { kind, name }, subjects: [...] } ] }
+  // who: { kind: 'User'|'ServiceAccount'|'Group', name, namespace?, groups?: [] }; a: { verb, resource, group ('' = core), namespace, name? }
+  function k8sCan(world, who, a) {
+    const me = subjectName(who);
+    for (const b of world.bindings || []) {
+      const mine = (b.subjects || []).some((s) => (s.kind === 'Group' ? (who.groups || []).includes(s.name) : subjectName(s) === me && s.kind === who.kind));
+      if (!mine) continue;
+      if (b.kind === 'RoleBinding' && b.namespace !== a.namespace) continue;       // a RoleBinding grants within its own namespace only
+      const role = (world.roles || []).find((r) => r.kind === b.roleRef.kind && r.name === b.roleRef.name && (r.kind === 'ClusterRole' || r.namespace === b.namespace));
+      if (!role) continue;
+      for (const rule of role.rules || []) if (ruleMatches(rule, a)) return { allow: true, via: `${b.kind} ${b.namespace ? b.namespace + '/' : ''}${b.roleRef.name}` };
+    }
+    return { allow: false, via: null };
+  }
+  return { decide, k8sCan, ruleMatches, subjectName };
 });
 
 </script>
@@ -8766,14 +9181,15 @@ IA.cmdFlags = {
 //   attack   { kind, prompt, lab (id in attacklab.js) }                               answer: { worked, fixedRejected }
 // Every exercise may have hints: [html], after: html (shown when it is passed).
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.IAEngine = factory();
-})(typeof self !== 'undefined' ? self : this, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./authz.js'));
+  else root.IAEngine = factory(root.IAAuthz);
+})(typeof self !== 'undefined' ? self : this, function (AZ) {
   'use strict';
   const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
 
   function judge(ex, answer) {
     switch (ex.kind) {
+      case 'scenario':
       case 'quiz': {
         const want = ex.options.map((o, i) => (o.ok ? i : -1)).filter((i) => i >= 0);
         const got = Array.isArray(answer) ? answer : [];
@@ -8802,6 +9218,22 @@ IA.cmdFlags = {
         const ok = parts.every((p) => p.ok);
         return { ok, parts, items: [], message: ok ? 'All correct.' : `${parts.filter((p) => p.ok).length} of ${parts.length} questions are right.` };
       }
+      case 'rbac': {
+        // answer: { roles: { editor: [perm, ...] } }. Every case must come out as expected.
+        const model = { roles: (answer && answer.roles) || {}, users: ex.users };
+        const items = ex.cases.map((c) => { const r = AZ.decide(model, { user: c.user, perm: c.perm, owner: c.owner }); return { ok: r.allow === c.expect, got: r.allow, why: r.why }; });
+        const ok = items.every((x) => x.ok);
+        return { ok, items, message: ok ? 'Every case comes out right.' : `${items.filter((x) => x.ok).length} of ${items.length} cases are right.` };
+      }
+      case 'k8srole': {
+        // answer: { role: { rules: [...] } } (a parsed Role). The cases are checked against the documented RBAC rules.
+        const role = answer && answer.role;
+        if (!role || !Array.isArray(role.rules)) return { ok: false, items: [], message: 'Write a Role with a rules list.' };
+        const world = { roles: [{ kind: 'Role', name: 'target', namespace: ex.namespace, rules: role.rules }], bindings: [{ kind: 'RoleBinding', namespace: ex.namespace, roleRef: { kind: 'Role', name: 'target' }, subjects: [ex.subject] }] };
+        const items = ex.cases.map((c) => { const r = AZ.k8sCan(world, ex.subject, c.request); return { ok: r.allow === c.expect, got: r.allow }; });
+        const ok = items.every((x) => x.ok);
+        return { ok, items, message: ok ? 'Every case comes out right.' : `${items.filter((x) => x.ok).length} of ${items.length} cases are right.` };
+      }
       case 'attack': {
         const a = answer && typeof answer === 'object' ? answer : {};
         const ok = !!(a.worked && a.fixedRejected);
@@ -8812,22 +9244,28 @@ IA.cmdFlags = {
   }
   function solution(ex) {
     switch (ex.kind) {
+      case 'scenario':
       case 'quiz': return ex.options.map((o, i) => (o.ok ? i : -1)).filter((i) => i >= 0);
       case 'order': return ex.items.map((_, i) => i);
       case 'sort': return ex.items.map((it) => it.g);
       case 'inspect': return ex.parts.map(solution);
       case 'attack': return { worked: true, fixedRejected: true };
+      case 'rbac': return { roles: ex.answer };
+      case 'k8srole': return { role: ex.answer };
       default: throw new Error('unknown exercise kind ' + ex.kind);
     }
   }
   // A wrong answer for each exercise, used by the tests to prove that the check can fail.
   function wrongAnswer(ex) {
     switch (ex.kind) {
+      case 'scenario':
       case 'quiz': { const want = solution(ex); const all = ex.options.map((_, i) => i); const other = all.filter((i) => !want.includes(i)); return other.length ? [other[0]] : want.slice(1); }
       case 'order': { const a = ex.items.map((_, i) => i); [a[0], a[1]] = [a[1], a[0]]; return a; }
       case 'sort': return ex.items.map((it) => (it.g + 1) % ex.groups.length);
       case 'inspect': return ex.parts.map((p, i) => (i === 0 ? wrongAnswer(p) : solution(p)));
       case 'attack': return { worked: true, fixedRejected: false };
+      case 'rbac': return { roles: {} };
+      case 'k8srole': return { role: { rules: [] } };
       default: throw new Error('unknown exercise kind ' + ex.kind);
     }
   }
@@ -9388,6 +9826,193 @@ IA.cmds = IA.cmds || {};
     ] };
 })();
 
+// ---- exercises/05-authz.js
+// Exercises for steps 16 to 18 (access models, broken access control, Kubernetes RBAC).
+// IA.scenarios: each broken and fixed C# snippet is compiled and called over HTTP by tests/identity.test.js.
+(function () {
+  var IA = window.IA, X = IA.exercises;
+  IA.scenarios = IA.scenarios || [];
+  var CTX = 'Context for every snippet: the caller is signed in and the token has already been validated (step 20). <code>user</code> is the <code>ClaimsPrincipal</code>, <code>sub</code> is the caller\'s id, and <code>Db</code> holds <code>Todos</code> (each with an <code>Owner</code>) and <code>Users</code>.';
+
+  function scenario(id, o) {
+    IA.scenarios.push({ id: id, base: o.base, broken: o.broken, fixed: o.fixed, probes: o.probes });
+    X[id] = { kind: 'scenario', intro: o.intro, broken: o.broken.replace(/\{base\}/g, ''), fixed: o.fixed.replace(/\{base\}/g, ''), question: o.question, options: o.options, explain: o.explain, hints: o.hints || [] };
+  }
+
+  // ---------------- 17
+  scenario('a17-idor', { base: 's1',
+    intro: 'Read a todo by its id. ' + CTX,
+    broken: 'app.MapGet("{base}/todos/{id:int}", (int id) =>\n    Db.Todos.FirstOrDefault(t => t.Id == id) is { } t ? Results.Ok(t) : Results.NotFound())\n   .RequireAuthorization();',
+    fixed: 'app.MapGet("{base}/todos/{id:int}", (int id, ClaimsPrincipal user) =>\n{\n    var me = user.FindFirst("sub")!.Value;\n    return Db.Todos.FirstOrDefault(t => t.Id == id && t.Owner == me) is { } t ? Results.Ok(t) : Results.NotFound();\n}).RequireAuthorization();',
+    question: 'Alice is signed in. She asks for <code>/todos/2</code>, which belongs to Bob. What happens, and why?',
+    options: [{ t: 'She gets Bob\'s todo. The endpoint checks that she is signed in, never that the todo is hers.', ok: true, why: 'Authentication happened, authorization to <em>this object</em> did not. This is an insecure direct object reference (OWASP API1, BOLA).' }, { t: 'She gets a 403, because <code>RequireAuthorization()</code> blocks other users\' data.', ok: false, why: '<code>RequireAuthorization()</code> only demands a signed-in user.' }, { t: 'She gets a 404, because ids are unique per user.', ok: false, why: 'The ids are global in the store.' }],
+    explain: 'Query by id <em>and</em> owner, so a todo that is not yours is indistinguishable from one that does not exist.',
+    probes: [{ as: 'alice', method: 'GET', path: '/todos/2', broken: { status: 200, body: /Pay rent/ }, fixed: { status: 404 } }, { as: 'alice', method: 'GET', path: '/todos/1', broken: { status: 200 }, fixed: { status: 200, body: /Buy milk/ } }] });
+  scenario('a17-admin', { base: 's2',
+    intro: 'Delete a user. The Angular UI only shows the "Delete user" button to admins. ' + CTX,
+    broken: 'app.MapDelete("{base}/admin/users/{id}", (string id) =>\n{\n    Db.Users.RemoveAll(u => u.Id == id);\n    return Results.NoContent();\n}).RequireAuthorization();',
+    fixed: 'app.MapDelete("{base}/admin/users/{id}", (string id) =>\n{\n    Db.Users.RemoveAll(u => u.Id == id);\n    return Results.NoContent();\n}).RequireAuthorization("Admin");   // policy: RequireRole("admin")',
+    question: 'Alice is a normal user. She calls <code>DELETE /admin/users/ghost</code> directly, with <code>curl</code>. What does the broken API answer?',
+    options: [{ t: '204: any signed-in user can call it. Hiding the button was the only control.', ok: true, why: 'The UI is a convenience. Only the server can enforce (OWASP: "access control is only effective in trusted server-side code").' }, { t: '403: the route starts with <code>/admin</code>, so ASP.NET Core treats it as protected.', ok: false, why: 'Route names mean nothing to authorization.' }, { t: '401: she is not an admin so she is not authenticated.', ok: false, why: 'She is authenticated. She is not authorized.' }],
+    explain: 'Require the role on the endpoint itself, with a named policy, and let the server answer 403 to everyone else.',
+    probes: [{ as: 'alice', method: 'DELETE', path: '/admin/users/ghost', broken: { status: 204 }, fixed: { status: 403 } }, { as: 'root', roles: 'admin', method: 'DELETE', path: '/admin/users/ghost2', broken: { status: 204 }, fixed: { status: 204 } }] });
+  scenario('a17-owner', { base: 's3',
+    intro: 'Create a todo. The client sends the owner it wants. ' + CTX,
+    broken: 'app.MapPost("{base}/todos", (NewTodo input) =>\n{\n    var t = new Todo(Db.Todos.Count + 100, input.Owner, input.Title);\n    Db.Todos.Add(t);\n    return Results.Created("/todos/" + t.Id, t);\n}).RequireAuthorization();\n\nrecord NewTodo(string Owner, string Title);',
+    fixed: 'app.MapPost("{base}/todos", (NewTodo input, ClaimsPrincipal user) =>\n{\n    var me = user.FindFirst("sub")!.Value;          // the owner comes from the token, never the body\n    var t = new Todo(Db.Todos.Count + 100, me, input.Title);\n    Db.Todos.Add(t);\n    return Results.Created("/todos/" + t.Id, t);\n}).RequireAuthorization();\n\nrecord NewTodo(string Title);',
+    question: 'Alice posts <code>{"owner":"bob","title":"Pay Alice"}</code>. What is wrong?',
+    options: [{ t: 'The identity comes from the request body, so any caller can create data in anyone\'s name.', ok: true, why: 'Who the caller is must come from the validated token, and never from something the caller types.' }, { t: 'Nothing: the body is JSON, and JSON is validated by the framework.', ok: false, why: 'Binding validates shape, not meaning.' }, { t: 'The id is predictable.', ok: false, why: 'Predictable ids are a smaller problem. The owner field is the flaw.' }],
+    explain: 'Take the owner from the token. Remove the field from the input type, so it cannot be supplied.',
+    probes: [{ as: 'alice', method: 'POST', path: '/todos', body: '{"owner":"bob","title":"x"}', broken: { status: 201, body: /"owner":"bob"/ }, fixed: { status: 201, body: /"owner":"alice"/ } }] });
+  scenario('a17-overpost', { base: 's4',
+    intro: 'Let a user change their own profile. ' + CTX,
+    broken: 'app.MapPut("{base}/users/me", (AppUser input, ClaimsPrincipal user) =>\n{\n    var me = Db.Users.First(u => u.Id == user.FindFirst("sub")!.Value);\n    me.Name = input.Name;\n    me.IsAdmin = input.IsAdmin;\n    return Results.Ok(me);\n}).RequireAuthorization();',
+    fixed: 'app.MapPut("{base}/users/me", (ProfileUpdate input, ClaimsPrincipal user) =>\n{\n    var me = Db.Users.First(u => u.Id == user.FindFirst("sub")!.Value);\n    me.Name = input.Name;                            // only what the caller may change\n    return Results.Ok(me);\n}).RequireAuthorization();\n\nrecord ProfileUpdate(string Name);',
+    question: 'Alice sends <code>{"name":"Alice","isAdmin":true}</code>. What does the broken endpoint do?',
+    options: [{ t: 'It makes her an administrator: the whole <code>AppUser</code> is bound from the body, including the field she must not control.', ok: true, why: 'This is mass assignment (over-posting): OWASP API3, broken object property level authorization.' }, { t: 'It ignores <code>isAdmin</code> because she is not an admin.', ok: false, why: 'Nothing in the code checks that.' }, { t: 'It rejects the request because the JSON has an unknown field.', ok: false, why: 'The field is known: <code>AppUser</code> has it.' }],
+    explain: 'Bind to a type that has only the fields the caller may change.',
+    probes: [{ as: 'alice', method: 'PUT', path: '/users/me', body: '{"name":"Alice","isAdmin":true}', broken: { status: 200, body: /"isAdmin":true/ }, fixed: { status: 200, body: /"isAdmin":false/ } }] });
+  scenario('a17-verb', { base: 's5',
+    intro: 'Read and rename a todo. ' + CTX,
+    broken: 'app.MapGet("{base}/todos/{id:int}/title", (int id) => Db.Todos.FirstOrDefault(t => t.Id == id)?.Title ?? "")\n   .RequireAuthorization();\n\napp.MapPut("{base}/todos/{id:int}/title", (int id, TitleUpdate input) =>\n{\n    var i = Db.Todos.FindIndex(t => t.Id == id);\n    if (i < 0) return Results.NotFound();\n    Db.Todos[i] = Db.Todos[i] with { Title = input.Title };\n    return Results.NoContent();\n});\n\nrecord TitleUpdate(string Title);',
+    fixed: 'var todos = app.MapGroup("{base}/todos/{id:int}/title").RequireAuthorization();   // one rule for the whole group\n\ntodos.MapGet("", (int id) => Db.Todos.FirstOrDefault(t => t.Id == id)?.Title ?? "");\n\ntodos.MapPut("", (int id, TitleUpdate input) =>\n{\n    var i = Db.Todos.FindIndex(t => t.Id == id);\n    if (i < 0) return Results.NotFound();\n    Db.Todos[i] = Db.Todos[i] with { Title = input.Title };\n    return Results.NoContent();\n});\n\nrecord TitleUpdate(string Title);',
+    question: 'An anonymous caller (no token at all) sends <code>PUT /todos/3/title</code>. What happens?',
+    options: [{ t: 'It succeeds. The author protected the GET and forgot the PUT: there is no deny-by-default.', ok: true, why: 'An API that lists endpoints one at a time is one omission away from an open door. OWASP: deny by default.' }, { t: '401: the framework protects every endpoint that has an authorized sibling.', ok: false, why: 'Each endpoint is separate.' }, { t: '403: PUT needs a stronger role than GET.', ok: false, why: 'No role is checked anywhere.' }],
+    explain: 'Protect the group, so the rule applies to everything inside it, and add a fallback policy so that a new endpoint is closed until someone opens it (step 20).',
+    probes: [{ as: null, method: 'PUT', path: '/todos/3/title', body: '{"title":"hacked"}', broken: { status: 204 }, fixed: { status: 401 } }] });
+  scenario('a17-role', { base: 's6',
+    intro: 'A stats endpoint for admins. ' + CTX,
+    broken: 'app.MapGet("{base}/admin/stats", (HttpContext c) =>\n    c.Request.Headers["X-Role"] == "admin"\n        ? Results.Ok(new { todos = Db.Todos.Count })\n        : Results.Forbid())\n   .RequireAuthorization();',
+    fixed: 'app.MapGet("{base}/admin/stats", () => Results.Ok(new { todos = Db.Todos.Count }))\n   .RequireAuthorization("Admin");   // the role is in the validated token',
+    question: 'Alice (role <code>user</code>) adds the header <code>X-Role: admin</code> to her request. What happens?',
+    options: [{ t: 'It returns the stats. The role was read from a header the caller controls.', ok: true, why: 'Anything in the request that the caller can set is not a credential. The role must come from the validated token.' }, { t: 'It returns 403, because her token says <code>user</code>.', ok: false, why: 'The code never looks at the token\'s role.' }, { t: 'It returns 400, an unknown header.', ok: false, why: 'Unknown headers are ignored.' }],
+    explain: 'Use the framework\'s role or policy check, which reads the roles from the validated token.',
+    probes: [{ as: 'alice', hdr: { 'X-Role': 'admin' }, method: 'GET', path: '/admin/stats', broken: { status: 200, body: /"todos"/ }, fixed: { status: 403 } }] });
+  scenario('a17-leak', { base: 's7',
+    intro: 'Read a todo, and say why you cannot. ' + CTX,
+    broken: 'app.MapGet("{base}/todos/{id:int}", (int id, ClaimsPrincipal user) =>\n{\n    var t = Db.Todos.FirstOrDefault(x => x.Id == id);\n    if (t is null) return Results.NotFound();\n    return t.Owner == user.FindFirst("sub")!.Value ? Results.Ok(t) : Results.Forbid();\n}).RequireAuthorization();',
+    fixed: 'app.MapGet("{base}/todos/{id:int}", (int id, ClaimsPrincipal user) =>\n{\n    var me = user.FindFirst("sub")!.Value;\n    var t = Db.Todos.FirstOrDefault(x => x.Id == id && x.Owner == me);\n    return t is null ? Results.NotFound() : Results.Ok(t);   // not yours looks the same as not there\n}).RequireAuthorization();',
+    question: 'This one blocks other users\' todos. What does it still give away?',
+    options: [{ t: 'It tells an attacker which ids exist: 403 means "there is one, not yours", 404 means "no such id".', ok: true, why: 'RFC 9110 lets a server answer 404 to hide a resource from someone who may not know of it.' }, { t: 'Nothing: 403 is the correct code for "not allowed".', ok: false, why: 'It is correct as a code, but it confirms the object exists.' }, { t: 'It leaks the owner\'s name in the 403.', ok: false, why: 'Nothing in the response names the owner.' }],
+    explain: 'For objects, make "not yours" and "not there" the same answer. Use 403 for <em>functions</em> a caller may not use, where nothing is revealed.',
+    probes: [{ as: 'alice', method: 'GET', path: '/todos/2', broken: { status: 403 }, fixed: { status: 404 } }, { as: 'alice', method: 'GET', path: '/todos/999', broken: { status: 404 }, fixed: { status: 404 } }] });
+  scenario('a17-list', { base: 's8',
+    intro: 'List my todos. ' + CTX,
+    broken: 'app.MapGet("{base}/todos", () => Db.Todos).RequireAuthorization();',
+    fixed: 'app.MapGet("{base}/todos", (ClaimsPrincipal user) =>\n{\n    var me = user.FindFirst("sub")!.Value;\n    return Db.Todos.Where(t => t.Owner == me);\n}).RequireAuthorization();',
+    question: 'Alice calls <code>GET /todos</code>. What does she get?',
+    options: [{ t: 'Everyone\'s todos. The list has no filter by owner.', ok: true, why: 'The same mistake as the single-object version, in the list. OWASP: model access controls should enforce record ownership.' }, { t: 'Only her todos: the endpoint is called "my todos".', ok: false, why: 'Names do not filter data.' }, { t: 'An empty list, because she has no role.', ok: false, why: 'No role is checked.' }],
+    explain: 'Filter every query by the owner taken from the token, so a forgotten check cannot widen the result.',
+    probes: [{ as: 'alice', method: 'GET', path: '/todos', broken: { status: 200, body: /Pay rent/ }, fixed: { status: 200, body: /Buy milk/, notBody: /Pay rent/ } }] });
+
+  // ---------------- 16: access models
+  X['a16-rules'] = { kind: 'sort', prompt: '<p>Which model is each rule an example of?</p>',
+    groups: ['ACL (a list on the resource)', 'RBAC (by role)', 'ABAC (by attributes)', 'ReBAC (by relationship)'],
+    items: [
+      { t: 'This document lists alice, bob and carol as the people who may open it.', g: 0, why: 'The resource carries its own list of who may do what.' },
+      { t: 'Members of the <code>editor</code> role may create todos.', g: 1, why: 'Permissions belong to a role, and people are given the role.' },
+      { t: 'A manager may approve an expense if it is under 500 and in their own department.', g: 2, why: 'The decision depends on attributes of the user, the object and the request.' },
+      { t: 'Anyone who is a member of the team that owns the folder may edit the files in it.', g: 3, why: 'Access follows a relationship: member of team, team owns folder, folder contains file.' },
+      { t: 'Access to the payroll report is allowed on weekdays from the office network only.', g: 2, why: 'An environmental attribute (time, network) is part of the rule.' },
+    ] };
+  X['a16-scopes'] = { kind: 'quiz', prompt: '<p>Alice (role <code>admin</code>) uses a third-party app. The app\'s access token has the scope <code>todos.read</code> only. The app calls <code>DELETE /todos/5</code>. What should the API do?</p>',
+    options: [
+      { t: 'Allow it: Alice is an admin, so any token for Alice may delete.', ok: false, why: 'The token is limited to what the user delegated to <em>this app</em>.' },
+      { t: 'Refuse it: the token\'s scope does not include deleting, even though Alice\'s role would allow it. Both the user\'s permissions and the token\'s scope must allow the call.', ok: true, why: 'The effective permission is the intersection of what the user may do and what the token was granted.' },
+      { t: 'Allow it if the scope is <code>openid</code>.', ok: false, why: '<code>openid</code> is about identity, not about deleting todos.' },
+    ] };
+  X['a16-rbac'] = { kind: 'rbac', prompt: '<p>Design the permissions of three roles so that every case below comes out as shown. The user-to-role assignments are fixed. A permission ending in <code>:own</code> applies only to todos the caller owns.</p>',
+    roleNames: ['viewer', 'editor', 'admin'], perms: ['todos:read', 'todos:create', 'todos:delete', 'todos:delete:own', 'users:manage'],
+    users: { vera: ['viewer'], erin: ['editor'], adam: ['admin'], nell: [] },
+    cases: [
+      { label: '<b>vera</b> reads a todo', user: 'vera', perm: 'todos:read', expect: true },
+      { label: '<b>vera</b> creates a todo', user: 'vera', perm: 'todos:create', expect: false },
+      { label: '<b>erin</b> creates a todo', user: 'erin', perm: 'todos:create', expect: true },
+      { label: '<b>erin</b> deletes her own todo', user: 'erin', perm: 'todos:delete', owner: 'erin', expect: true },
+      { label: '<b>erin</b> deletes vera\'s todo', user: 'erin', perm: 'todos:delete', owner: 'vera', expect: false },
+      { label: '<b>adam</b> deletes vera\'s todo', user: 'adam', perm: 'todos:delete', owner: 'vera', expect: true },
+      { label: '<b>adam</b> manages users', user: 'adam', perm: 'users:manage', expect: true },
+      { label: '<b>erin</b> manages users', user: 'erin', perm: 'users:manage', expect: false },
+      { label: '<b>nell</b> (no role) reads a todo', user: 'nell', perm: 'todos:read', expect: false },
+    ],
+    answer: { viewer: ['todos:read'], editor: ['todos:read', 'todos:create', 'todos:delete:own'], admin: ['todos:read', 'todos:create', 'todos:delete', 'users:manage'] },
+    hints: ['Start with the cases that must be allowed, and give each role only what those cases need.', 'Erin may delete only her own todos: that is <code>todos:delete:own</code>, not <code>todos:delete</code>.'] };
+  X['a16-sod'] = { kind: 'quiz', prompt: '<p>In a payments system, one person may <b>create</b> a payment and another must <b>approve</b> it. Two roles exist: <code>clerk</code> (create) and <code>approver</code> (approve). A user is given both. What principle does that break, and how is it normally handled?</p>',
+    options: [
+      { t: 'Separation of duty. The system should forbid one person approving a payment they created, whichever roles they hold.', ok: true, why: 'Roles alone cannot say "not the same person". It needs a rule that looks at the object: attribute or relationship based.' },
+      { t: 'Least privilege. Remove the <code>approver</code> role from everyone.', ok: false, why: 'Least privilege is about not granting more than needed. The point here is the combination, and the same person.' },
+      { t: 'Nothing, a user may hold any combination of roles.', ok: false, why: 'Combinations of roles are exactly where fraud lives.' },
+    ] };
+
+  // ---------------- 18: Kubernetes
+  X['a18-role'] = { kind: 'k8srole', prompt: '<p>The service account <code>todo-reporter</code> in the namespace <code>todo</code> must be able to <b>list and get pods</b> in <code>todo</code> and <b>read the one ConfigMap named <code>todo-settings</code></b>. It must do nothing else. Write the Role (the binding already exists).</p>',
+    namespace: 'todo', subject: { kind: 'ServiceAccount', name: 'todo-reporter', namespace: 'todo' },
+    starter: 'apiVersion: rbac.authorization.k8s.io/v1\nkind: Role\nmetadata:\n  name: reporter\n  namespace: todo\nrules:\n  - apiGroups: [""]\n    resources: []\n    verbs: []\n',
+    cases: [
+      { label: '<code>get pods</code> in todo', request: { verb: 'get', resource: 'pods', group: '', namespace: 'todo' }, expect: true },
+      { label: '<code>list pods</code> in todo', request: { verb: 'list', resource: 'pods', group: '', namespace: 'todo' }, expect: true },
+      { label: '<code>delete pods</code> in todo', request: { verb: 'delete', resource: 'pods', group: '', namespace: 'todo' }, expect: false },
+      { label: '<code>get configmaps todo-settings</code> in todo', request: { verb: 'get', resource: 'configmaps', group: '', namespace: 'todo', name: 'todo-settings' }, expect: true },
+      { label: '<code>get configmaps other</code> in todo', request: { verb: 'get', resource: 'configmaps', group: '', namespace: 'todo', name: 'other' }, expect: false },
+      { label: '<code>get secrets db</code> in todo', request: { verb: 'get', resource: 'secrets', group: '', namespace: 'todo', name: 'db' }, expect: false },
+      { label: '<code>list pods</code> in <b>kube-system</b>', request: { verb: 'list', resource: 'pods', group: '', namespace: 'kube-system' }, expect: false },
+      { label: '<code>get deployments</code> (apps) in todo', request: { verb: 'get', resource: 'deployments', group: 'apps', namespace: 'todo' }, expect: false },
+    ],
+    answer: { rules: [{ apiGroups: [''], resources: ['pods'], verbs: ['get', 'list'] }, { apiGroups: [''], resources: ['configmaps'], resourceNames: ['todo-settings'], verbs: ['get'] }] },
+    answerYaml: 'apiVersion: rbac.authorization.k8s.io/v1\nkind: Role\nmetadata:\n  name: reporter\n  namespace: todo\nrules:\n  - apiGroups: [""]\n    resources: ["pods"]\n    verbs: ["get", "list"]\n  - apiGroups: [""]\n    resources: ["configmaps"]\n    resourceNames: ["todo-settings"]\n    verbs: ["get"]\n',
+    hints: ['Two rules: one for pods and one for the ConfigMap.', 'To limit a rule to one object, add <code>resourceNames: ["todo-settings"]</code>.', 'The core API group is written as the empty string <code>""</code>.'] };
+  X['a18-binding'] = { kind: 'sort', prompt: '<p>The cluster has a <b>ClusterRole</b> <code>pod-reader</code>. What can a subject do after each kind of binding?</p>',
+    groups: ['Read pods in one namespace only', 'Read pods in every namespace'],
+    items: [
+      { t: 'A <b>RoleBinding</b> in namespace <code>todo</code> that refers to the ClusterRole <code>pod-reader</code>.', g: 0, why: 'A RoleBinding grants permissions only inside its own namespace, even when it refers to a ClusterRole.' },
+      { t: 'A <b>ClusterRoleBinding</b> to the ClusterRole <code>pod-reader</code>.', g: 1, why: 'A ClusterRoleBinding grants access cluster-wide.' },
+      { t: 'A <b>RoleBinding</b> in namespace <code>staging</code> to the same ClusterRole.', g: 0, why: 'Same: only the namespace of the binding.' },
+    ] };
+  X['a18-additive'] = { kind: 'quiz', prompt: '<p>A user has a RoleBinding that grants <code>get secrets</code> in <code>todo</code>. You add a second Role that "denies" <code>get secrets</code> for them. What happens?</p>',
+    options: [
+      { t: 'The deny wins, because it was added last.', ok: false, why: 'There are no deny rules in Kubernetes RBAC.' },
+      { t: 'There is no way to write a deny. Permissions are purely additive, so the user can still get secrets until the first binding is removed.', ok: true, why: 'The documentation says it exactly: permissions are purely additive; there are no "deny" rules.' },
+      { t: 'The API rejects the second Role as a conflict.', ok: false, why: 'Roles never conflict, because they only add.' },
+    ] };
+  X['a18-escalate'] = { kind: 'quiz', prompt: '<p>The user <code>dev-lead</code> may create Roles in the namespace <code>todo</code>, but has no permission to read Secrets there. They try to create a Role that grants <code>get secrets</code> and bind it to themselves. What does Kubernetes do?</p>',
+    options: [
+      { t: 'It refuses: a role can only be created or updated by someone who already holds every permission in it (or has the <code>escalate</code> verb), at the same scope.', ok: true, why: 'This is privilege escalation prevention, enforced by the RBAC API itself.' },
+      { t: 'It allows it, because creating Roles is the permission they were given.', ok: false, why: 'Creating Roles does not let you grant what you do not hold.' },
+      { t: 'It allows the Role but ignores the binding.', ok: false, why: 'The Role itself is refused.' },
+    ] };
+  X['a18-sa'] = { kind: 'inspect', prompt: '<p>A pod\'s projected service account token (made-up values), decoded. Answer.</p>',
+    artifact: '{\n  "iss": "https://oidc.eks.eu-west-1.amazonaws.com/id/EXAMPLED539D4633E53DE1B71EXAMPLE",\n  "sub": "system:serviceaccount:todo:todo-reporter",\n  "aud": ["sts.amazonaws.com"],\n  "exp": 1791897600,\n  "iat": 1791894000,\n  "kubernetes.io": {\n    "namespace": "todo",\n    "serviceaccount": { "name": "todo-reporter" },\n    "pod": { "name": "reporter-7d9c5" }\n  }\n}',
+    parts: [
+      { kind: 'quiz', prompt: 'Who is this token about?', options: [{ t: 'The service account <code>todo-reporter</code> in the namespace <code>todo</code>.', ok: true, why: 'That is the <code>sub</code>: <code>system:serviceaccount:&lt;namespace&gt;:&lt;name&gt;</code>.' }, { t: 'The node the pod runs on.', ok: false, why: 'The subject is the service account.' }] },
+      { kind: 'quiz', prompt: 'Who is the token <em>for</em>?', options: [{ t: 'AWS STS: <code>aud</code> is <code>sts.amazonaws.com</code>.', ok: true, why: 'A token with the right audience for AWS is useless to the Kubernetes API server, and the reverse.' }, { t: 'The Kubernetes API server.', ok: false, why: 'The default audience is the API server, but this token was asked for another audience.' }] },
+      { kind: 'quiz', prompt: 'What must AWS check before giving temporary credentials?', options: [{ t: 'That the token is signed by the cluster\'s OIDC issuer, and that <code>iss</code>, <code>aud</code> and <code>sub</code> match the role\'s trust policy.', ok: true, why: 'The same checks as step 10, against the cluster\'s published keys.' }, { t: 'Nothing: tokens from inside a cluster are trusted.', ok: false, why: 'Anyone can run a cluster. AWS trusts only the issuer you registered.' }] },
+    ] };
+
+  X['a17-concept'] = { kind: 'quiz', prompt: '<p>A team keeps shipping endpoints with no authorization check, because it is easy to forget. Which single change makes the <em>default</em> safe?</p>',
+    options: [
+      { t: 'Add a code review checklist item reminding people to add <code>[Authorize]</code>.', ok: false, why: 'A reminder depends on remembering, which is what failed.' },
+      { t: 'Set a fallback authorization policy that requires an authenticated user, so an endpoint with no policy is closed until someone opens it on purpose.', ok: true, why: 'Deny by default. A forgotten check becomes a visible 401, not a hidden hole.' },
+      { t: 'Hide the endpoints that matter from the Swagger page.', ok: false, why: 'Hiding is not access control. Anyone can send the request.' },
+    ] };
+  function drill(id, prompt, specs, answer, hints, after) { IA.cmds[id] = { prompt: prompt, specs: specs, answer: answer, hints: hints || [], after: after || '', run: { noRun: 'needs a cluster' } }; }
+  var S = function (cmd, o) { return window.IACmdSpec.spec(IA.cmdFlags, cmd, o); };
+  var pos = function (re, label, what, hint) { return { match: re, label: label, what: what, hint: hint }; };
+  var SA = /^system:serviceaccount:todo:todo-reporter$/;
+  IA.cmds = IA.cmds || {};
+  drill('a18-canI', '<p>Ask whether the service account <code>todo-reporter</code> (namespace <code>todo</code>) may <b>list pods</b> in the namespace <code>todo</code>, without becoming it.</p>',
+    S('kubectl auth can-i', { what: 'ask the API server whether an action is allowed', need: { '--as': { value: SA, what: 'ask as this identity', bad: function () { return 'A service account is named <code>system:serviceaccount:&lt;namespace&gt;:&lt;name&gt;</code>.'; } }, '--namespace': { value: /^todo$/, what: 'in this namespace' } }, pos: [pos(/^list$/, 'the verb', 'what action', 'list'), pos(/^pods$/, 'the resource', 'on what', 'pods')] }),
+    'kubectl auth can-i list pods --as system:serviceaccount:todo:todo-reporter --namespace todo',
+    ['The command is <code>kubectl auth can-i VERB RESOURCE</code>.', 'A service account\'s user name is <code>system:serviceaccount:todo:todo-reporter</code>. Pass it with <code>--as</code>.'], 'It answers <code>yes</code> or <code>no</code> (and sets the exit code). Run it for the actions that must be refused too.');
+  drill('a18-list', '<p>List <b>everything</b> that <code>todo-reporter</code> may do in the namespace <code>todo</code>.</p>',
+    S('kubectl auth can-i', { what: 'ask the API server what is allowed', need: { '--list': { value: false, what: 'list every allowed action' }, '--as': { value: SA, what: 'ask as this identity' }, '--namespace': { value: /^todo$/, what: 'in this namespace' } } }),
+    'kubectl auth can-i --list --as system:serviceaccount:todo:todo-reporter --namespace todo',
+    ['Instead of a verb and a resource, one flag lists them all.'], 'Read the table as a review: anything you did not expect is a grant to question.');
+  drill('a18-create', '<p>Create the Role <code>reporter</code> from the command line, in the namespace <code>todo</code>, allowing the verbs <code>get</code> and <code>list</code> on <code>pods</code>.</p>',
+    S('kubectl create role', { what: 'create a Role', need: { '--verb': { value: true, repeat: true, what: 'an allowed verb', each: [{ match: /^get(,list)?$|^get$/, missing: 'Allow <code>get</code>: <code>--verb=get</code>.' }, { match: /^list$|^get,list$|^list,get$/, missing: 'Allow <code>list</code> too: <code>--verb=list</code>.' }] }, '--resource': { value: /^pods$/, what: 'on this kind of object' }, '--namespace': { value: /^todo$/, what: 'in this namespace' } }, pos: [pos(/^reporter$/, 'the Role name', 'what to call it', 'reporter')] }),
+    'kubectl create role reporter --verb=get --verb=list --resource=pods --namespace todo',
+    ['<code>kubectl create role NAME --verb=… --resource=…</code>. The verb flag can be repeated.'], 'Add <code>--dry-run=client -o yaml</code> to print the YAML instead of creating it: a quick way to start a manifest.');
+})();
+
 </script>
 <script>
 // The page code of the Identity and Access Lab: mounts exercises ([data-ex]) and tools ([data-tool]), keeps the step ticks
@@ -9529,6 +10154,64 @@ IA.cmds = IA.cmds || {};
         get: function () { return state; },
         set: async function () { if (!env) env = await envPromise; var t = await A.forge(ex.lab, env); $('.atk-tok', wrap) || ready(env); $('.atk-tok', wrap).value = t; await send(false); await send(true); },
         show: function () {},
+      };
+    },
+
+    rbac: function (ex, box) {
+      var roles = {}; ex.roleNames.forEach(function (r) { roles[r] = (ex.start && ex.start[r]) ? ex.start[r].slice() : []; });
+      var tbl = el('div', 'table-wrap'), t = el('table', 'rbac-grid');
+      var head = '<thead><tr><th>Permission</th>' + ex.roleNames.map(function (r) { return '<th>' + esc(r) + '</th>'; }).join('') + '</tr></thead>';
+      var rows = ex.perms.map(function (p) { return '<tr><td><code>' + esc(p) + '</code></td>' + ex.roleNames.map(function (r) { return '<td><input type="checkbox" data-role="' + esc(r) + '" data-perm="' + esc(p) + '" aria-label="' + esc(r) + ' has ' + esc(p) + '"' + (roles[r].indexOf(p) >= 0 ? ' checked' : '') + '></td>'; }).join('') + '</tr>'; }).join('');
+      t.innerHTML = head + '<tbody>' + rows + '</tbody>'; tbl.appendChild(t); box.appendChild(tbl);
+      box.appendChild(el('p', 'tool-note', 'Users: ' + Object.keys(ex.users).map(function (u) { return '<b>' + esc(u) + '</b> is ' + (ex.users[u].length ? ex.users[u].map(function (r) { return '<code>' + esc(r) + '</code>'; }).join(' + ') : 'in no role'); }).join('; ') + '.'));
+      var ct = el('div', 'table-wrap'); box.appendChild(ct);
+      function cases(res) {
+        ct.innerHTML = '<table><thead><tr><th></th><th>Case</th><th>Should be</th><th>Yours</th></tr></thead><tbody>' + ex.cases.map(function (c, i) {
+          var it = res && res.items && res.items[i];
+          return '<tr class="' + (it ? (it.ok ? 'ok' : 'bad') : '') + '"><td>' + (it ? (it.ok ? '✓' : '✗') : '') + '</td><td>' + c.label + '</td><td>' + (c.expect ? 'allow' : 'deny') + '</td><td>' + (it ? (it.got ? 'allow' : 'deny') : '') + '</td></tr>';
+        }).join('') + '</tbody></table>';
+      }
+      cases(null);
+      function read() { var out = {}; ex.roleNames.forEach(function (r) { out[r] = $$('input[data-role="' + r + '"]', t).filter(function (i) { return i.checked; }).map(function (i) { return i.getAttribute('data-perm'); }); }); return out; }
+      return {
+        get: function () { return { roles: read() }; },
+        set: function (a) { $$('input', t).forEach(function (i) { i.checked = ((a.roles || {})[i.getAttribute('data-role')] || []).indexOf(i.getAttribute('data-perm')) >= 0; }); },
+        show: function (res) { cases(res); },
+      };
+    },
+    k8srole: function (ex, box) {
+      var ta = el('textarea', 'cmd-in mono'); ta.rows = 12; ta.spellcheck = false; ta.value = ex.starter || ''; ta.setAttribute('aria-label', 'Role YAML'); box.appendChild(ta);
+      var err = el('div', 'ex-why'); err.hidden = true; box.appendChild(err);
+      var ct = el('div', 'table-wrap'); box.appendChild(ct);
+      function cases(res) {
+        ct.innerHTML = '<table><thead><tr><th></th><th>Request</th><th>Should be</th><th>Yours</th></tr></thead><tbody>' + ex.cases.map(function (c, i) {
+          var it = res && res.items && res.items[i];
+          return '<tr class="' + (it ? (it.ok ? 'ok' : 'bad') : '') + '"><td>' + (it ? (it.ok ? '✓' : '✗') : '') + '</td><td>' + c.label + '</td><td>' + (c.expect ? 'allow' : 'deny') + '</td><td>' + (it ? (it.got ? 'allow' : 'deny') : '') + '</td></tr>';
+        }).join('') + '</tbody></table>';
+      }
+      cases(null);
+      function parse() {
+        err.hidden = true;
+        try { var d = window.jsyaml.load(ta.value); if (!d || typeof d !== 'object') throw new Error('Write a Role as YAML.'); return { role: d }; }
+        catch (e) { err.hidden = false; err.textContent = 'YAML problem: ' + e.message; return { role: null }; }
+      }
+      return {
+        get: function () { var r = parse(); if (r.role && (r.role.kind !== 'Role' || (r.role.metadata || {}).namespace !== ex.namespace)) { err.hidden = false; err.textContent = 'It should be a Role (kind: Role) in the namespace ' + ex.namespace + '.'; return { role: null }; } return r; },
+        set: function () { ta.value = ex.answerYaml; },
+        show: function (res) { cases(res); },
+      };
+    },
+    scenario: function (ex, box, id) {
+      var code = el('pre', 'ex-art code-cs'); code.textContent = ex.broken; box.appendChild(el('p', 'tool-note', ex.intro)); box.appendChild(code);
+      var q = el('div', 'ex-q', ex.question); box.appendChild(q);
+      var inner = builders.quiz(ex, box, id);
+      var fixed = el('div', 'scn-fix'); fixed.hidden = true; box.appendChild(fixed);
+      return {
+        get: inner.get, set: inner.set,
+        show: function (res) {
+          inner.show(res);
+          if (res.ok) { fixed.hidden = false; fixed.innerHTML = '<p><b>The fix.</b> ' + ex.explain + '</p><pre class="ex-art code-cs"></pre>'; $('pre', fixed).textContent = ex.fixed; }
+        },
       };
     },
     inspect: function (ex, box, id) {
@@ -9996,7 +10679,38 @@ IA.cmds = IA.cmds || {};
     }
   }
 
-  var TOOLS = { flow: toolFlow, grant: toolGrant, google: toolGoogle, jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp, cookie: toolCookie, crypto: toolCrypto };
+
+  function toolRbac(root) {
+    var AZ = window.IAAuthz;
+    root.innerHTML = '';
+    var q = el('div', 'tool rbac');
+    var perms = ['todos:read', 'todos:create', 'todos:delete', 'todos:delete:own', 'users:manage'];
+    var roles = { viewer: ['todos:read'], editor: ['todos:read', 'todos:create', 'todos:delete:own'], admin: ['todos:read', 'todos:create', 'todos:delete', 'users:manage'] };
+    var users = { alice: ['editor'], bob: ['viewer'], carol: ['admin'], dan: [] };
+    var cases = [
+      { user: 'alice', perm: 'todos:read' }, { user: 'alice', perm: 'todos:delete', owner: 'alice' }, { user: 'alice', perm: 'todos:delete', owner: 'bob' },
+      { user: 'bob', perm: 'todos:create' }, { user: 'carol', perm: 'todos:delete', owner: 'alice' }, { user: 'carol', perm: 'users:manage' }, { user: 'dan', perm: 'todos:read' },
+    ];
+    q.innerHTML = '<p class="tool-note">Tick which role grants which permission, assign roles to people, and watch the decisions. A permission ending in <code>:own</code> applies only to things the caller owns.</p><div class="table-wrap"><table class="rbac-grid"></table></div><div class="rb-users ck-form"></div><div class="table-wrap rb-cases"></div>';
+    root.appendChild(q);
+    var grid = $('.rbac-grid', q), usersBox = $('.rb-users', q);
+    function renderGrid() {
+      var rn = Object.keys(roles);
+      grid.innerHTML = '<thead><tr><th>Permission</th>' + rn.map(function (r) { return '<th>' + esc(r) + '</th>'; }).join('') + '</tr></thead><tbody>' + perms.map(function (p) { return '<tr><td><code>' + esc(p) + '</code></td>' + rn.map(function (r) { return '<td><input type="checkbox" data-role="' + r + '" data-perm="' + p + '"' + (roles[r].indexOf(p) >= 0 ? ' checked' : '') + ' aria-label="' + r + ' has ' + p + '"></td>'; }).join('') + '</tr>'; }).join('') + '</tbody>';
+      usersBox.innerHTML = Object.keys(users).map(function (u) { return '<label>' + esc(u) + ' <select data-user="' + u + '"><option value="">no role</option>' + rn.map(function (r) { return '<option' + (users[u][0] === r ? ' selected' : '') + '>' + r + '</option>'; }).join('') + '</select></label>'; }).join('');
+      $$('input', grid).forEach(function (i) { i.addEventListener('change', function () { var r = i.getAttribute('data-role'), p = i.getAttribute('data-perm'); var a = roles[r], k = a.indexOf(p); if (i.checked && k < 0) a.push(p); if (!i.checked && k >= 0) a.splice(k, 1); decide(); }); });
+      $$('select', usersBox).forEach(function (s) { s.addEventListener('change', function () { users[s.getAttribute('data-user')] = s.value ? [s.value] : []; decide(); }); });
+    }
+    function decide() {
+      $('.rb-cases', q).innerHTML = '<table><thead><tr><th>Request</th><th>Decision</th><th>Why</th></tr></thead><tbody>' + cases.map(function (c) {
+        var r = AZ.decide({ roles: roles, users: users }, c);
+        return '<tr class="' + (r.allow ? 'sent' : 'blocked') + '"><td><b>' + esc(c.user) + '</b> → <code>' + esc(c.perm) + '</code>' + (c.owner ? ' on a todo owned by <b>' + esc(c.owner) + '</b>' : '') + '</td><td>' + (r.allow ? '✓ allow' : '✗ deny') + '</td><td>' + esc(r.why) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    }
+    renderGrid(); decide();
+  }
+
+  var TOOLS = { rbac: toolRbac, flow: toolFlow, grant: toolGrant, google: toolGoogle, jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp, cookie: toolCookie, crypto: toolCrypto };
   function mountTool(root) { var f = TOOLS[root.getAttribute('data-tool')]; if (f) f(root); }
 
   function init() {

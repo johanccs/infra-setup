@@ -1,0 +1,332 @@
+    <!-- ============ 16 ============ -->
+    <section class="step" id="models" data-step data-level="Intermediate">
+      <div class="step-head"><span class="num">16</span><h2>Access models: ACL, RBAC, ABAC, ReBAC</h2><span class="lvl-chip">Intermediate</span></div>
+      <p class="goal"><b>Goal:</b> explain each model in one sentence, design roles for an app, and say when roles alone are not enough.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Authentication tells you who. Then every system needs rules for what that person may do, and the shape of those rules decides how easy the system is to run, to audit and to get wrong. Four models cover nearly everything. Real systems mix them.</p>
+        <p>This lesson builds on step 01 (authorization) and step 11 (scopes).</p>
+      </div>
+      <div class="what-is"><h4>What is it? An access control model</h4><dl>
+        <dt>What it is</dt><dd>A way of writing down who may do what to which thing. Every rule has the same parts: a <b>subject</b> (who), an <b>action</b> (what), a <b>resource</b> (to which) and sometimes a <b>context</b> (when, from where).</dd>
+        <dt>The problem it solves</dt><dd>Without a model, access rules are scattered <code>if</code> statements that nobody can list, review or change safely.</dd>
+        <dt>Everyday comparison</dt><dd>The rules of a building: a guest list on the door, badges by job, "managers on the 4th floor after 6", "anyone on the team that rents this office".</dd>
+        <dt>What it is not</dt><dd>Not authentication, and not the code that enforces it. A model is the <em>rules</em>; they still have to be checked on every request.</dd>
+        <dt>Where you meet it</dt><dd>Roles in Keycloak, Kubernetes RBAC (step 18), cloud permission policies, a sharing dialog.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? RBAC</h4><dl>
+        <dt>What it is</dt><dd>Role-based access control: permissions are granted to <em>roles</em>, and people are given roles. Alice is an <code>editor</code>, and <code>editor</code> may create todos.</dd>
+        <dt>The problem it solves</dt><dd>You manage a few roles instead of thousands of person-by-permission grants. Joining a team is one assignment, and leaving is one removal.</dd>
+        <dt>Everyday comparison</dt><dd>Job titles: the title says what the badge opens.</dd>
+        <dt>What it is not</dt><dd>Not able to say "only your own": a role covers every object of a kind. And not a scope: a scope limits <em>a token</em>, a role describes <em>a user</em> (step 11).</dd>
+        <dt>Where you meet it</dt><dd><code>[Authorize(Roles = "admin")]</code>, Keycloak realm roles, Kubernetes Roles.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? ABAC and ReBAC</h4><dl>
+        <dt>What it is</dt><dd><b>ABAC</b> (attribute-based) decides by evaluating attributes of the subject, the object, the requested operation and sometimes the environment against policy (NIST SP 800-162). <b>ReBAC</b> (relationship-based) decides by a relationship between the user and the object: member of the team that owns the folder. Google's Zanzibar system, described at USENIX ATC 2019, stores and evaluates such lists globally for its services.</dd>
+        <dt>The problem it solves</dt><dd>Roles cannot express "only your own", "only under 500", "only from the office network", or "anyone on the owning team".</dd>
+        <dt>Everyday comparison</dt><dd>ABAC: "managers may approve expenses under 500 in their own department". ReBAC: "you can edit a file if you are in the team that owns its folder".</dd>
+        <dt>What they are not</dt><dd>Not replacements for roles. Most systems use roles for features and an ownership or attribute rule for individual objects.</dd>
+        <dt>Where you meet them</dt><dd>Cloud policy conditions, document-sharing systems, <code>resource.Owner == user.Id</code> in your own code.</dd>
+      </dl></div>
+
+      <h3>Four models, one example each</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Model</th><th>Rule looks like</th><th>Strength</th><th>Weakness</th></tr></thead>
+        <tbody>
+          <tr><td><b>ACL</b> (access control list)</td><td>This document: alice read, bob read and write.</td><td>Simple, per object.</td><td>Hard to see "what can Alice access?" and to change at scale.</td></tr>
+          <tr><td><b>RBAC</b></td><td>editor may <code>todos:create</code>. Alice is an editor.</td><td>Few things to manage and audit.</td><td>Role explosion when every special case becomes a role. Cannot say "own".</td></tr>
+          <tr><td><b>ABAC</b></td><td>Allow if <code>user.dept == doc.dept</code> and <code>doc.amount &lt; 500</code>.</td><td>Fine-grained, contextual.</td><td>Rules are harder to read and test as a set.</td></tr>
+          <tr><td><b>ReBAC</b></td><td>Allow if user is a member of the team that owns the folder that holds the file.</td><td>Follows how people actually share.</td><td>Needs a store of relationships and a way to walk them.</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Principles that apply to all of them</h3>
+      <ul>
+        <li><b>Deny by default.</b> Anything not allowed is refused. OWASP lists the opposite as the first common weakness.</li>
+        <li><b>Least privilege.</b> Give each role, token and service only what it needs.</li>
+        <li><b>Separation of duty.</b> The person who creates a payment is not the one who approves it. Roles alone cannot say "not the same person"; it needs a rule about the object.</li>
+        <li><b>Enforce on the server, on every request.</b> The decision can live in a library or a policy engine, but the check must be where the data is.</li>
+        <li><b>Mind how fresh a role is.</b> A role carried in a token is as old as the token. Changing a user's role does not change tokens already issued.</li>
+      </ul>
+      <h3>Scopes, roles, permissions and claims</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th>Describes</th><th>Lives in</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>Role</b></td><td>What a <em>user</em> is, in this system</td><td>The identity provider or the app</td><td><code>admin</code></td></tr>
+          <tr><td><b>Permission</b></td><td>One allowed action on a kind of thing</td><td>The app's rules</td><td><code>todos:delete</code></td></tr>
+          <tr><td><b>Scope</b></td><td>What <em>this token</em> may be used for</td><td>The token</td><td><code>todos.read</code></td></tr>
+          <tr><td><b>Claim</b></td><td>A statement in a token that <em>carries</em> any of the above</td><td>The token</td><td><code>"roles": ["admin"]</code></td></tr>
+        </tbody>
+      </table></div>
+      <p>A call is allowed when <b>both</b> the user's permissions and the token's scopes allow it: the effective permission is the intersection. That is how a third-party app with a read-only token cannot delete, even though the user could.</p>
+      <h3>Policy as code</h3>
+      <p>As rules grow, they move out of scattered <code>if</code> statements into one place that can be read, tested and reviewed. <b>Open Policy Agent</b> (the language is Rego) and <b>Cedar</b> (a policy language created at AWS) are two open-source examples for applications, and <b>Kyverno</b> (Part 4) does it for Kubernetes admission. Whichever one you use, the split is the same: a <em>decision</em> (allow or deny, from a request and some data) and an <em>enforcement</em> point that asks and obeys.</p>
+      <figure class="anim" aria-label="Animated diagram: an RBAC decision with an ownership rule">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="A request from Erin to delete a todo reaches the policy. The policy looks up her role, editor, then the permissions of that role. The editor role has delete only on own resources, so the decision depends on who owns the todo.">
+<rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 80 H300"/><path class="a-route" data-k="r2" d="M450 80 H560"/><path class="a-route" data-k="r3" d="M635 120 V200"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="req"><rect x="24" y="40" width="176" height="80" rx="8"/><text class="a-t" x="112" y="70">Request</text><text class="a-s" x="112" y="90">erin: delete todo 7</text></g>
+<g class="a-node" data-k="role"><rect x="300" y="40" width="150" height="80" rx="8"/><text class="a-t" x="375" y="70">Her role</text><text class="a-s" x="375" y="90">editor</text></g>
+<g class="a-node" data-k="perm"><rect x="560" y="40" width="176" height="80" rx="8"/><text class="a-t" x="648" y="70">Role grants</text><text class="a-s" x="648" y="90">todos:delete:own</text></g>
+<g class="a-node" data-k="own"><rect x="560" y="200" width="176" height="70" rx="8"/><text class="a-t" x="648" y="240">Owner of todo 7?</text></g>
+<text class="a-badge good" data-k="ok" x="300" y="250">allow: it is her todo</text><text class="a-badge bad" data-k="no" x="300" y="250">deny: it is vera's todo</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "req", "off": "r1 r2 r3 role perm own ok no", "text": "<b>A request.</b> Who is asking (from the validated token), what they want to do, and to which thing."},
+          {"on": "req r1 role", "off": "r2 r3 perm own ok no", "path": [[206, 80], [294, 80]], "text": "<b>Role.</b> The policy looks up the caller's roles. Users do not hold permissions directly: they hold roles."},
+          {"on": "role r2 perm", "off": "r1 r3 own ok no", "path": [[456, 80], [554, 80]], "text": "<b>Permissions.</b> The role grants <code>todos:delete:own</code>: delete, but only on things the caller owns."},
+          {"on": "perm r3 own ok", "good": "own ok", "off": "r1 r2 no", "path": [[635, 126], [635, 194]], "text": "<b>The ownership rule.</b> The todo's owner is Erin, so the rule is met: allowed."},
+          {"on": "perm r3 own no", "bad": "own no", "off": "r1 r2 ok", "path": [[635, 126], [635, 194]], "text": "<b>Same role, another todo.</b> The owner is Vera, so the same request is denied. A role alone could not express this."}
+        ]</script>
+      </figure>
+
+      <h3>Play with RBAC</h3>
+      <p>Tick which role grants which permission, and give each person a role. A permission ending in <code>:own</code> applies only to todos the caller owns. Watch which decisions change, and read the reason given for each.</p>
+      <div data-tool="rbac"></div>
+
+      <h3>Practice</h3>
+      <div data-ex="a16-rules"></div>
+      <div data-ex="a16-rbac"></div>
+      <div data-ex="a16-scopes"></div>
+      <div data-ex="a16-sod"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Every rule is subject, action, resource and sometimes context. ACL lists on the object, RBAC by role, ABAC by attributes, ReBAC by relationship.</li>
+        <li>RBAC manages few things but cannot say "own". Real systems pair roles with an ownership or attribute rule.</li>
+        <li>Deny by default, least privilege, separation of duty, and enforce on the server.</li>
+        <li>A role describes a user, a scope limits a token; a call needs both.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 17 ============ -->
+    <section class="step" id="bac" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">17</span><h2>Broken access control, and how to close it</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> recognise the common access-control flaws in code and fix each one in ASP.NET Core.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Broken access control is first in the OWASP Top 10 for 2025. The 2025 edition reports that 100% of the applications tested had some form of it. The flaws are not clever: they are checks that someone forgot. The way to learn to see them is to read real-looking code and be asked "what happens if".</p>
+        <p>This lesson builds on steps 01, 16 and 10. The code is C# for the Todo API you secure in level 6.</p>
+      </div>
+      <div class="what-is"><h4>What is it? Broken access control</h4><dl>
+        <dt>What it is</dt><dd>Failures that let users act outside their intended permissions. OWASP lists, among others: access that should be denied by default but is open, changing a URL or request to reach someone else's data, missing checks on POST, PUT and DELETE, acting as another user, and tampering with a token or cookie.</dd>
+        <dt>The problem it causes</dt><dd>Information disclosure, modification or destruction of data, or business functions used beyond a user's limits.</dd>
+        <dt>Everyday comparison</dt><dd>A hotel that checks you have a key card but not which room the card is for.</dd>
+        <dt>What it is not</dt><dd>Not an authentication failure: the user usually <em>is</em> signed in. The system simply never asks whether <em>this</em> user may do <em>this</em>.</dd>
+        <dt>Where you meet it</dt><dd>Everywhere. API1, API3 and API5 of the OWASP API Security Top 10 (2023) are its three object, property and function forms.</dd>
+      </dl></div>
+      <h3>The three forms in the API list</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>OWASP API (2023)</th><th>In plain words</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><b>API1: Broken Object Level Authorization</b></td><td>The caller can reach another user's <em>object</em> by changing an id.</td><td><code>GET /todos/2</code> returns Bob's todo.</td></tr>
+          <tr><td><b>API3: Broken Object Property Level Authorization</b></td><td>The caller can read or write a <em>field</em> they should not.</td><td>Setting <code>isAdmin</code> in a profile update.</td></tr>
+          <tr><td><b>API5: Broken Function Level Authorization</b></td><td>The caller can use a <em>function</em> reserved for others.</td><td>A normal user calls the admin endpoint.</td></tr>
+        </tbody>
+      </table></div>
+      <figure class="anim" aria-label="Animated diagram: an insecure direct object reference and its fix">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="Alice is signed in and requests todo 2 by changing the id in the address. The broken endpoint returns Bob's todo because it only checks that she is signed in. The fixed endpoint queries by id and owner, and answers not found.">
+<rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 100 H340"/><path class="a-route" data-k="r2" d="M540 100 H590"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="alice"><rect x="24" y="50" width="176" height="100" rx="8"/><text class="a-t" x="112" y="80">Alice</text><text class="a-s" x="112" y="100">signed in</text><text class="a-s" x="112" y="118">GET /todos/2</text></g>
+<g class="a-node" data-k="api"><rect x="340" y="40" width="200" height="200" rx="8"/><text class="a-t" x="440" y="120">API</text><text class="a-s" x="440" y="140">knows who she is</text><text class="a-s" x="440" y="158">which todo is hers?</text></g>
+<g class="a-node" data-k="db"><rect x="590" y="60" width="146" height="80" rx="8"/><text class="a-t" x="663" y="90">Todo 2</text><text class="a-s" x="663" y="110">owner: bob</text></g>
+<text class="a-badge bad" data-k="bad" x="663" y="190">200: Bob's todo returned</text><text class="a-badge good" data-k="good" x="663" y="190">404: not found for her</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "alice r1 api", "off": "r2 db bad good", "path": [[206, 100], [334, 100]], "text": "<b>Alice changes the number.</b> She is signed in and asks for <code>/todos/2</code>, a todo that is not hers."},
+          {"on": "api r2 db bad", "bad": "db bad", "off": "r1 alice good", "path": [[546, 100], [584, 100]], "text": "<b>The flaw.</b> The broken endpoint checked that she is signed in, and nothing about <em>this object</em>. It returns Bob's todo."},
+          {"on": "api good", "good": "api good", "off": "r1 r2 alice db bad", "text": "<b>The fix.</b> Query by id <em>and</em> owner, taken from the token. A todo that is not hers is not found, which does not even reveal that it exists."}
+        ]</script>
+      </figure>
+      <h3>Eight to find</h3>
+      <p>Each snippet is the endpoint with the flaw. Work out what happens before you answer. A correct answer shows the fixed code. Every snippet here, broken and fixed, is built and called over HTTP by the tests, so what they claim is what the code does.</p>
+      <div data-ex="a17-idor"></div>
+      <div data-ex="a17-admin"></div>
+      <div data-ex="a17-owner"></div>
+      <div data-ex="a17-overpost"></div>
+      <div data-ex="a17-verb"></div>
+      <div data-ex="a17-role"></div>
+      <div data-ex="a17-leak"></div>
+      <div data-ex="a17-list"></div>
+
+      <h3>The patterns that close them</h3>
+      <ul>
+        <li><b>Deny by default.</b> A <em>fallback policy</em> requires an authenticated user for every endpoint that has no policy of its own, so a forgotten endpoint is closed, not open. Public endpoints opt out with <code>[AllowAnonymous]</code>.</li>
+        <li><b>Named policies for functions.</b> <code>RequireAuthorization("Admin")</code>, defined once with <code>AddAuthorizationBuilder().AddPolicy(...)</code>.</li>
+        <li><b>Identity only from the validated token.</b> Never from the body, a header or a query string.</li>
+        <li><b>Ownership in the query.</b> Every query that returns or changes an object is filtered by the owner from the token, so a forgotten check cannot widen the result.</li>
+        <li><b>Resource-based authorization</b> when the rule needs the loaded object. An attribute runs before the data is loaded, so the check has to be called from the handler:</li>
+      </ul>
+      <figure class="code"><figcaption>src/api/TodoOwnerAuthorization.cs</figcaption><pre><code>using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Infrastructure;
+
+class TodoOwnerHandler : AuthorizationHandler&lt;OperationAuthorizationRequirement, Todo&gt;
+{
+    protected override Task HandleRequirementAsync(
+        AuthorizationHandlerContext context, OperationAuthorizationRequirement requirement, Todo resource)
+    {
+        var me = context.User.FindFirst("sub")?.Value;
+        if (me is not null &amp;&amp; resource.Owner == me)
+            context.Succeed(requirement);                       // the owner may do anything to their own todo
+        else if (requirement.Name == "Read" &amp;&amp; context.User.IsInRole("admin"))
+            context.Succeed(requirement);                       // an admin may read any todo
+        return Task.CompletedTask;
+    }
+}
+
+// Program.cs
+builder.Services.AddSingleton&lt;IAuthorizationHandler, TodoOwnerHandler&gt;();
+
+app.MapDelete("/todos/{id:int}", async (int id, ClaimsPrincipal user, IAuthorizationService authz) =&gt;
+{
+    var todo = Db.Todos.FirstOrDefault(t =&gt; t.Id == id);
+    if (todo is null) return Results.NotFound();
+    var result = await authz.AuthorizeAsync(user, todo, new OperationAuthorizationRequirement { Name = "Delete" });
+    if (!result.Succeeded) return Results.NotFound();           // not yours looks the same as not there
+    Db.Todos.Remove(todo);
+    return Results.NoContent();
+}).RequireAuthorization();</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the resource handler</summary><div><dl>
+        <dt><code>AuthorizationHandler&lt;OperationAuthorizationRequirement, Todo&gt;</code></dt><dd>A handler for requirements about one kind of resource, here a <code>Todo</code>. <code>OperationAuthorizationRequirement</code> is the framework's helper for "an operation named X", so one handler serves Read, Update and Delete.</dd>
+        <dt><code>context.Succeed(requirement)</code></dt><dd>Says this requirement is met. If no handler succeeds, the answer is no: deny by default.</dd>
+        <dt><code>authz.AuthorizeAsync(user, todo, requirement)</code></dt><dd>Asks the framework: may this user do this operation to this object? It is called after the object is loaded.</dd>
+        <dt><code>return Results.NotFound()</code></dt><dd>For an object, the same answer for "no such todo" and "not yours", so the response reveals nothing.</dd>
+      </dl></div></details>
+      <h3>Test it, always</h3>
+      <p>OWASP: developers and QA should include functional access control in unit and integration tests. A small table is enough: for each endpoint, who may and who may not, and the status code each gets. Step 21 gives you the table for the Todo API.</p>
+
+      <h3>Practice</h3>
+      <div data-ex="a17-concept"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Most access control bugs are a missing check: for the object, the field, or the function.</li>
+        <li>Identity comes from the validated token. Ownership belongs in the query. Roles belong on the endpoint.</li>
+        <li>Deny by default with a fallback policy, so a forgotten endpoint is closed.</li>
+        <li>For objects, "not yours" and "not there" give the same answer.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 18 ============ -->
+    <section class="step" id="k8s" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">18</span><h2>Access control around the platform</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> write a Kubernetes Role, test it with <code>kubectl auth can-i</code>, and explain how a pod gets cloud credentials with no stored secret.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>The same ideas that protect your API protect the platform under it: who may read Secrets in a namespace, which pod may touch which cloud resource. In Part 4 you restricted what pods <em>can do</em>. Here you decide what <em>identities</em> may do.</p>
+        <p>This lesson builds on steps 09 and 16, and on Part 1's cluster and Part 4's service accounts.</p>
+      </div>
+      <div class="what-is"><h4>What is it? A service account</h4><dl>
+        <dt>What it is</dt><dd>An identity for processes that run in a pod. A process inside a pod can use it to authenticate to the cluster's API server.</dd>
+        <dt>The problem it solves</dt><dd>Programs need an identity too, and a human's login is the wrong one.</dd>
+        <dt>Everyday comparison</dt><dd>A staff badge for a robot, which opens only the doors the robot needs.</dd>
+        <dt>What it is not</dt><dd>Not a user: it exists inside the cluster, in a namespace, and its token is short-lived and bound to a pod.</dd>
+        <dt>Where you meet it</dt><dd>The <code>serviceAccountName</code> of a pod, and the subject of a RoleBinding.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? Workload identity</h4><dl>
+        <dt>What it is</dt><dd>Letting a workload prove who it is to a cloud, with a token its platform issues, instead of a stored key. In Kubernetes the cluster is an OpenID Connect identity provider and the cloud is a relying party.</dd>
+        <dt>The problem it solves</dt><dd>Long-lived cloud keys in config files and environment variables leak. A short-lived, signed, audience-bound token does not need to be stored.</dd>
+        <dt>Everyday comparison</dt><dd>A visitor pass that the building's reception issues, which another building accepts because it trusts that reception.</dd>
+        <dt>What it is not</dt><dd>Not a boundary between containers: Amazon's own documentation says containers are not a security boundary, and that this does not change it.</dd>
+        <dt>Where you meet it</dt><dd>IAM roles for service accounts (IRSA) on EKS; the GitHub Actions OIDC trust in the Actions Lab is the same idea.</dd>
+      </dl></div>
+
+      <h3>Kubernetes RBAC</h3>
+      <p>Kubernetes authenticates a request, then authorizes it with RBAC (among other authorizers). Its rules, from the documentation:</p>
+      <ul>
+        <li>A <b>Role</b> sets permissions within one namespace. A <b>ClusterRole</b> is not namespaced.</li>
+        <li>A <b>RoleBinding</b> grants a Role or ClusterRole to subjects within a namespace. A <b>ClusterRoleBinding</b> grants it cluster-wide. A RoleBinding that points at a ClusterRole still grants only inside its own namespace.</li>
+        <li><b>Permissions are purely additive: there are no "deny" rules.</b> To take access away, remove the grant.</li>
+        <li>A rule names <code>apiGroups</code> (the core group is <code>""</code>), <code>resources</code>, <code>verbs</code>, and optionally <code>resourceNames</code> to limit it to specific objects.</li>
+        <li><b>Escalation is prevented:</b> you may create or update a Role only if you already hold every permission in it at that scope, or you have the <code>escalate</code> verb. Binding follows a similar rule.</li>
+      </ul>
+      <figure class="code"><figcaption>infra/rbac/todo-reporter.yaml</figcaption><pre><code>apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: reporter
+  namespace: todo
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["todo-settings"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: reporter
+  namespace: todo
+subjects:
+  - kind: ServiceAccount
+    name: todo-reporter
+    namespace: todo
+roleRef:
+  kind: Role
+  name: reporter
+  apiGroup: rbac.authorization.k8s.io</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the Role and its binding</summary><div><dl>
+        <dt><code>rules[0]</code></dt><dd>May <code>get</code> and <code>list</code> pods in the namespace <code>todo</code> (and nothing else about pods: no <code>delete</code>, no <code>create</code>).</dd>
+        <dt><code>rules[1]</code> with <code>resourceNames</code></dt><dd>May <code>get</code> only the ConfigMap called <code>todo-settings</code>. Without <code>resourceNames</code>, a rule covers every object of the kind.</dd>
+        <dt><code>subjects</code></dt><dd>Who receives the Role: here the service account <code>todo-reporter</code> in <code>todo</code>.</dd>
+        <dt><code>roleRef</code></dt><dd>Which Role. It cannot be changed after creation: to point somewhere else you replace the binding.</dd>
+      </dl></div></details>
+      <div data-ex="a18-role"></div>
+      <p>Test what an identity can do without becoming it. <code>kubectl auth can-i</code> asks the API server's authorization layer; add <code>--as</code> to ask for someone else, and <code>--list</code> to list everything.</p>
+      <div data-cmd="a18-canI"></div>
+      <div data-cmd="a18-list"></div>
+      <div data-cmd="a18-create"></div>
+      <h4>Dangerous permissions</h4>
+      <p><code>get</code> or <code>list</code> on <b>secrets</b> reads every secret in the namespace. <code>create</code> on pods or deployments lets someone run code under any service account in the namespace. <code>escalate</code> and <code>bind</code> let a person grant what they do not hold. Give them to very few identities, and review bindings the way you would review a firewall rule.</p>
+
+      <h3>Service account tokens</h3>
+      <p>Since Kubernetes 1.22 a pod gets a short-lived, automatically rotating token by the <code>TokenRequest</code> API, mounted as a projected volume. The token is a JWT, bound to the pod, and by default its audience is the Kubernetes API server. A token requested for another audience is useless to the API server, and the reverse. Opt out of mounting credentials with <code>automountServiceAccountToken: false</code> for pods that never call the API.</p>
+      <div data-ex="a18-sa"></div>
+
+      <h3>Workload identity</h3>
+      <p>Kubernetes can act as an OpenID Connect provider: with token projection on and an <code>https</code> issuer, the API server serves a discovery document at <code>/.well-known/openid-configuration</code> and its keys at <code>/openid/v1/jwks</code>, so an outside system can verify service account tokens. Amazon EKS hosts such an endpoint for each cluster. In IAM roles for service accounts (IRSA) you register the cluster as an OIDC provider once, associate an IAM role with a service account, and the pod's token is exchanged with the AWS Security Token Service (<code>AssumeRoleWithWebIdentity</code>) for temporary credentials.</p>
+      <figure class="anim" aria-label="Animated diagram: workload identity federation, a pod exchanging its Kubernetes token for cloud credentials">
+        <div class="anim-stage"><svg viewBox="0 0 760 330" role="img" aria-label="A pod has a short-lived projected service account token signed by the cluster. It sends the token to the cloud security token service. The cloud service has the cluster as a trusted identity provider and checks the signature, issuer, audience and subject against the role trust policy, then returns temporary credentials.">
+<rect class="a-zone" x="8" y="8" width="744" height="314" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 90 H340"/><path class="a-route" data-k="r2" d="M540 110 H590"/><path class="a-route" data-k="r3" d="M340 160 H200"/><path class="a-route" data-k="r4" d="M440 190 V240"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="pod"><rect x="24" y="50" width="176" height="140" rx="8"/><text class="a-t" x="112" y="100">Pod</text><text class="a-s" x="112" y="120">service account</text><text class="a-s" x="112" y="138">todo-reporter</text></g>
+<g class="a-node" data-k="sts"><rect x="340" y="50" width="200" height="140" rx="8"/><text class="a-t" x="440" y="100">Cloud token service</text><text class="a-s" x="440" y="120">trusts the cluster's</text><text class="a-s" x="440" y="138">OIDC issuer</text></g>
+<g class="a-node" data-k="keys"><rect x="590" y="60" width="146" height="100" rx="8"/><text class="a-t" x="663" y="100">Cluster keys</text><text class="a-s" x="663" y="120">public JWKS</text></g>
+<g class="a-node" data-k="cred"><rect x="340" y="240" width="200" height="70" rx="8"/><text class="a-t" x="440" y="280">Temporary credentials</text></g>
+<text class="a-lbl" data-k="r1" x="270" y="78">1. token (aud, sub)</text><text class="a-lbl" data-k="r3" x="270" y="148">3. temporary credentials</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "pod", "off": "r1 r2 r3 r4 sts keys cred", "text": "<b>The pod has an identity.</b> Kubernetes issues its service account a short-lived, signed token (a JWT) and mounts it into the pod. No cloud secret is stored anywhere."},
+          {"on": "pod r1 sts", "off": "r2 r3 r4 keys cred", "path": [[206, 90], [334, 90]], "text": "<b>1. Present it.</b> The pod sends the token to the cloud's security token service and asks to assume a role."},
+          {"on": "sts r2 keys", "off": "r1 r3 r4 pod cred", "path": [[546, 110], [584, 110]], "text": "<b>2. Check it.</b> The service trusts the cluster as an identity provider. It reads the cluster's published keys and verifies the signature, then checks the issuer, the audience and the subject against the role's trust policy."},
+          {"on": "sts r3 pod r4 cred", "good": "cred pod", "off": "r1 r2 keys", "path": [[334, 160], [206, 160]], "text": "<b>3. Credentials.</b> If everything matches, the pod gets short-lived credentials for that role only. The same checks as step 10, applied to a machine."}
+        ]</script>
+      </figure>
+      <p>The cloud's trust policy is where the least privilege is written: which issuer, and which service account in which namespace, may assume which role. It is the access control of step 16 applied to a machine, with the token checks of step 10.</p>
+
+      <h3>Practice</h3>
+      <div data-ex="a18-binding"></div>
+      <div data-ex="a18-additive"></div>
+      <div data-ex="a18-escalate"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Kubernetes RBAC: Roles and bindings, namespaced or cluster-wide, purely additive, with resourceNames to narrow a rule and escalation prevented.</li>
+        <li><code>kubectl auth can-i --as … --list</code> tests an identity without being it.</li>
+        <li>Service account tokens are short-lived, bound JWTs. A cloud can trust the cluster's issuer and swap a token for temporary credentials, with no stored key.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
