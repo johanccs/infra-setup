@@ -183,6 +183,46 @@ Sources: [kind](https://kind.sigs.k8s.io/) · [Floci (author's blog)](https://he
 
 ---
 
+## What to add next: platform engineering, enterprise development and enterprise systems
+
+Written 13 October 2026. The tutorials so far cover CI/CD, fix and setup, Git, monitoring, security, scaling, Terraform and (planned) auth. The three biggest gaps are **self-service (portal and templates), messaging, and data**. This comes from comparing what exists with CNCF's list of platform capabilities, its platform engineer exam, DORA's capabilities and Microsoft's cloud design patterns.
+
+| Area | Module | What you would learn | Why it belongs |
+|---|---|---|---|
+| Platform engineering | **Golden paths and self-service** | A `dotnet new` service template, a developer portal (Backstage), platform APIs with custom resources | A quarter of the CNCF platform engineer exam, and Phase 6 of the existing learning roadmap has no tutorial yet |
+| | **Progressive delivery** | Canary and blue-green releases, feature flags, automatic rollback on metrics | Part of the exam's largest domain; builds on the Argo CD work |
+| | **Reliability (SRE)** | SLOs and error budgets, incident response, postmortems, chaos drills, backup and restore | The exam's operations domain; the monitoring part stops at alerts |
+| | **Environments, tenancy and cost** | Dev to UAT to prod, a preview environment per pull request, quotas, cost per team | In the exam's architecture domain; one 2026 survey links preview environments and cost control to better delivery |
+| Enterprise systems | **Messaging and events** | Queues and topics, outbox, idempotent consumers, sagas, dead-letter queues | A CNCF platform capability, and many of Microsoft's 44 cloud patterns are messaging patterns |
+| | **Data in production** | Schema changes without downtime, restore drills, replication, caching | A CNCF capability; "database change management" is a core DORA capability |
+| | **Resilience between services** | Timeouts, retry, circuit breaker, rate limiting, tracing a request across services | Microsoft's reliability patterns; needs a second service, which messaging adds |
+| Enterprise development | **Architecture and API design** | Modular monolith versus microservices, API versioning and contracts, replacing a legacy system step by step | The design decisions the patterns above depend on |
+| | **Testing strategy** | Integration tests against real dependencies, contract tests, test data | "Test automation" and "test data management" are core DORA capabilities |
+
+One optional extra is running AI workloads on the platform. The 2026 industry surveys are dominated by it, but they are vendor-sponsored.
+
+### Suggested order
+
+After the Identity and Access Lab:
+
+1. **Golden paths and self-service**, because it is what turns the earlier parts into a platform other developers can use.
+2. **Messaging and events**, because it adds a second service, which resilience, tracing and sagas all need.
+3. **Data in production**.
+
+The other six can follow in any order.
+
+Sources, read on 13 October 2026:
+
+Read on 13 October 2026.
+
+- [CNCF Platforms white paper](https://tag-app-delivery.cncf.io/whitepapers/platforms/): its 13 platform capabilities.
+- [CNCF Certified Cloud Native Platform Engineer (CNPE)](https://www.cncf.io/training/certification/cnpe/) and the [Linux Foundation CNPE page](https://training.linuxfoundation.org/certification/certified-cloud-native-platform-engineer-cnpe/): the five exam domains and their weights.
+- [DORA capabilities](https://dora.dev/capabilities/): the 34 capabilities, including the core ones named above.
+- [Microsoft cloud design patterns](https://learn.microsoft.com/en-us/azure/architecture/patterns/): the 44-pattern catalog.
+- [Puppet State of DevOps: Platform Engineering Edition 2026](https://www.puppet.com/resources/2026-state-of-platform-engineering), [Perforce 2026 platform engineering report](https://www.perforce.com/press-releases/state-of-platform-engineering-2026) and [State of Platform Engineering Vol. 4](https://platformengineering.org/blog/announcing-the-state-of-platform-engineering-vol-4): the 2026 surveys. Vendor-sponsored or small samples.
+
+---
+
 ## Habits that matter more than courses
 
 1. **Volunteer for platform work at your job.** Ask for shared pipeline templates and cluster work.
