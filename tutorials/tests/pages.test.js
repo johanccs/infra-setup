@@ -372,12 +372,15 @@ async function pageTests(browser, spec) {
     const local = (page) => page.evaluate((k) => localStorage.getItem(k), NK);
     const ids = (v) => (v ? JSON.parse(v).map((n) => n.id).sort().join() : '');
     await pg.goto(`${BASE}/${spec.file}`); await pg.waitForSelector('#rail-list li');
-    await pg.waitForFunction(() => /Backed up/.test(document.getElementById('backup-state').textContent), null, { timeout: 4000 }).catch(() => {});
-    check(/Backed up/.test(await pg.textContent('#backup-state')), `${spec.name}: the toolbar says the backup is on`);
+    await pg.waitForFunction(() => /Saved/.test(document.getElementById('backup-state').textContent), null, { timeout: 4000 }).catch(() => {});
+    check(/Saved/.test(await pg.textContent('#backup-state')), `${spec.name}: the toolbar says the backup is on`);
     const A = { id: 'nA', sec: 'overview', offset: 0, quote: 'zz', text: 'note from browser one', ts: 1000 };
+    const t0 = Date.now();
     await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [NK, JSON.stringify([A])]);
     let s = await waitServer((st) => st.notes);
+    const took = Date.now() - t0;
     check(s.notes && ids(s.notes.value) === 'nA', `${spec.name}: a saved note reaches the database`);
+    check(took < 400, `${spec.name}: it reaches the database at once, not after a delay (${took} ms)`);
     await pg.evaluate(() => localStorage.clear());
     await pg.reload(); await pg.waitForSelector('#rail-list li');
     check(ids(await local(pg)) === 'nA', `${spec.name}: with the browser's data wiped, the note comes back from the database`);
@@ -403,8 +406,8 @@ async function pageTests(browser, spec) {
     // server not answering: the badge says so, changes stay local, and they are sent once it is back
     await pg.route('**/api/state', (r) => (r.request().method() === 'PUT' ? r.abort() : r.continue()));
     await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [NK, JSON.stringify([C])]);
-    await pg.waitForFunction(() => /Backup off/.test(document.getElementById('backup-state').textContent), null, { timeout: 4000 });
-    check(ids(await local(pg)) === 'nC', `${spec.name}: with the server unreachable the badge says "Backup off" and the note stays in the browser`);
+    await pg.waitForFunction(() => /Not saved/.test(document.getElementById('backup-state').textContent), null, { timeout: 4000 });
+    check(ids(await local(pg)) === 'nC', `${spec.name}: with the server unreachable the badge says "Not saved" and the note stays in the browser`);
     await pg.unroute('**/api/state');
     errs.splice(0, errs.length, ...errs.filter((e) => !/ERR_FAILED/.test(e)));   // the aborted request above is the test's doing
     await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [NK, JSON.stringify([C])]);
