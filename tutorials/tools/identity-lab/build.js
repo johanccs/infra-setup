@@ -16,7 +16,14 @@ const meta = {
   stack: ['TLS', 'X.509 certificates', 'JWT', 'OAuth 2.0', 'OpenID Connect', 'RBAC', 'Keycloak', 'ASP.NET Core', 'Angular', 'Kubernetes'],
 };
 
-const body = fs.readdirSync(path.join(HERE, 'body')).filter((f) => /\.html$/.test(f)).sort().map((f) => read(HERE, 'body', f).replace(/\s+$/, '')).join('\n\n');
+let body = fs.readdirSync(path.join(HERE, 'body')).filter((f) => /\.html$/.test(f)).sort().map((f) => read(HERE, 'body', f).replace(/\s+$/, '')).join('\n\n');
+// the source ledger, as a table for step 31
+const ledger = JSON.parse(read(HERE, 'sources.json')).entries;
+const escH = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const ledgerHtml = '<div class="table-wrap"><table class="ledger"><thead><tr><th>Step</th><th>Source</th><th>Section</th><th>Status</th><th>Checked</th></tr></thead><tbody>' +
+  ledger.slice().sort((a, b) => a.step - b.step).map((e) => `<tr><td>${String(e.step).padStart(2, '0')}</td><td><a href="${escH(e.url)}" target="_blank" rel="noopener">${escH(e.doc)}</a>${e.rfc ? ' (RFC ' + e.rfc + ')' : ''}</td><td>${escH(e.section)}</td><td>${escH(e.status || '')}</td><td>${escH(e.checked)}</td></tr>`).join('') +
+  '</tbody></table></div>';
+body = body.replace('<div data-ledger></div>', () => ledgerHtml);
 const exerciseFiles = fs.existsSync(path.join(HERE, 'exercises')) ? fs.readdirSync(path.join(HERE, 'exercises')).filter((f) => /\.js$/.test(f)).sort().map((f) => `// ---- exercises/${f}\n` + read(HERE, 'exercises', f)).join('\n') : '';
 const scripts = [
   '<script>\n' + read(HERE, 'crypto.js') + '\n</script>',

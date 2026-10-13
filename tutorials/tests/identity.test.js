@@ -24,7 +24,7 @@ function parity() {
   }
   check(read(PAGE) === before, 'the page in docs/ is the build of tools/identity-lab/ (run build.js, sync-menu.js and sync-backup.js after editing a source)');
   const html = read(PAGE);
-  const missing = fs.readdirSync(path.join(LAB, 'body')).filter((f) => /\.html$/.test(f)).filter((f) => !html.includes(read(path.join(LAB, 'body', f)).replace(/\s+$/, '')));
+  const missing = fs.readdirSync(path.join(LAB, 'body')).filter((f) => /\.html$/.test(f)).filter((f) => !read(path.join(LAB, 'body', f)).replace(/\s+$/, '').split('<div data-ledger></div>').every((part) => html.includes(part)));   // the ledger table is generated into step 31
   check(missing.length === 0, 'the page contains every lesson file in tools/identity-lab/body/', missing.join(', '));
   check(read(path.join(T, 'tools', 'pages.json')).includes('identity-and-access-tutorial.html'), 'the page is listed in tools/pages.json (the Tutorials menu)');
   return html;
@@ -995,6 +995,36 @@ async function toolsInBrowser(browser, base) {
   await pk.locator('.p-txt').fill('hello?>'); check(await pk.locator('.p-enc').inputValue() === 'aGVsbG8_Pg', 'PKCE helper: base64url uses - and _ and no padding');
   // TOTP
   check(/^\d{3} \d{3}$/.test((await pg.locator('#tool-totp .t-code').textContent()).trim()), 'TOTP demo: shows a six digit code');
+  // passkey demo, with a virtual authenticator standing in for the person's device
+  const cdp = await pg.context().newCDPSession(pg);
+  await cdp.send('WebAuthn.enable');
+  await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+  const pkd = pg.locator('[data-tool="passkey"]').first();
+  await pkd.scrollIntoViewIfNeeded();
+  await pkd.locator('.pk-reg').click();
+  await pg.waitForFunction(() => /Registration, as the server checks it/.test(document.querySelector('[data-tool="passkey"] .pk-out')?.textContent || ''), null, { timeout: 8000 }).catch(() => {});
+  const regTxt = await pkd.locator('.pk-out').textContent();
+  check(/Registration, as the server checks it/.test(regTxt) && !/✗/.test(regTxt), 'passkey demo: registers a passkey and every server check passes', regTxt.slice(0, 200));
+  await pkd.locator('.pk-get').click();
+  await pg.waitForFunction(() => /Sign-in, as the server checks it/.test(document.querySelector('[data-tool="passkey"] .pk-out')?.textContent || ''), null, { timeout: 8000 }).catch(() => {});
+  const getTxt = await pkd.locator('.pk-out').textContent();
+  check(/Sign-in, as the server checks it/.test(getTxt) && !/✗/.test(getTxt) && /signature over authenticator data/.test(getTxt), 'passkey demo: signs in and the signature verifies with the stored public key', getTxt.slice(0, 200));
+  await pkd.locator('.pk-origin').fill('https://phish.example.test');
+  await pkd.locator('.pk-get').click();
+  await pg.waitForFunction(() => /✗/.test(document.querySelector('[data-tool="passkey"] .pk-out')?.textContent || ''), null, { timeout: 8000 }).catch(() => {});
+  check(/✗ origin is/.test(await pkd.locator('.pk-out').textContent()), 'passkey demo: an origin the server does not expect is flagged (what a phishing site gets)');
+  // DPoP tool
+  const dp = pg.locator('[data-tool="dpop"]').first();
+  await dp.scrollIntoViewIfNeeded();
+  await pg.waitForFunction(() => document.querySelector('[data-tool="dpop"] .dp-out')?.textContent.length > 10, null, { timeout: 8000 });
+  check(!/✗/.test(await dp.locator('.dp-out').textContent()) && /"typ": "dpop\+jwt"/.test(await dp.locator('.dp-proof').textContent()), 'DPoP tool: a proof for the request the server receives passes every check');
+  await dp.locator('.dp-u2').fill('https://api.example.test/api/admin/todos'); await pg.waitForTimeout(400);
+  check(/✗/.test(await dp.locator('.dp-out').textContent()), 'DPoP tool: a proof replayed at another URL fails');
+  await dp.locator('.dp-u2').fill('https://api.example.test/api/todos');
+  await dp.locator('.dp-k').check(); await pg.waitForTimeout(400);
+  check(/✗/.test(await dp.locator('.dp-out').textContent()), 'DPoP tool: a proof signed with another key fails (the token is bound to a key)');
+  await dp.locator('.dp-k').uncheck(); await dp.locator('.dp-r').check(); await pg.waitForTimeout(400);
+  check(/✗/.test(await dp.locator('.dp-out').textContent()), 'DPoP tool: the same proof sent twice is refused (jti seen before)');
   check(errs.length === 0, 'no console errors while using the exercises and tools', errs.join(' | '));
   await pg.context().close();
 }

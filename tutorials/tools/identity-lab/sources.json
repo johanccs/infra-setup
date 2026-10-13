@@ -1309,6 +1309,237 @@
       "rfc": 8705,
       "status": "PROPOSED STANDARD",
       "checked": "2026-10-13"
+    },
+    {
+      "id": "s25-webauthn",
+      "step": 25,
+      "claim": "A passkey is a public-key credential scoped to a relying party ID; the authenticator signs the challenge together with clientDataJSON, which carries the origin the browser saw, so a look-alike site gets no usable assertion.",
+      "doc": "W3C Web Authentication Level 3",
+      "section": "Registration and authentication ceremonies; origin and rpId checks",
+      "url": "https://www.w3.org/TR/webauthn-3/",
+      "rfc": null,
+      "status": "W3C Recommendation, 25 August 2026",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s25-nist",
+      "step": 25,
+      "claim": "Phishing resistance means authentication secrets and valid outputs cannot be disclosed to an impostor verifier without relying on the claimant; email is not allowed for out-of-band authentication; the public telephone network is restricted; syncable authenticators are allowed at AAL2.",
+      "doc": "NIST SP 800-63B-4: Authentication and Authenticator Management",
+      "section": "Phishing resistance; out-of-band authenticators; syncable authenticators",
+      "url": "https://pages.nist.gov/800-63-4/sp800-63b.html",
+      "rfc": null,
+      "status": "Final (July 2025)",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s25-totp",
+      "step": 25,
+      "claim": "TOTP is HMAC over a time-step counter (30 s by default) truncated to 6 to 8 digits; the appendix gives the SHA-1, SHA-256 and SHA-512 test values the lab checks.",
+      "doc": "RFC 6238: TOTP: Time-Based One-Time Password Algorithm",
+      "section": "Section 4 and Appendix B",
+      "url": "https://www.rfc-editor.org/rfc/rfc6238",
+      "rfc": 6238,
+      "status": "INFORMATIONAL",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s25-hotp",
+      "step": 25,
+      "claim": "HOTP is the counter-based algorithm that TOTP builds on, with the dynamic truncation both use.",
+      "doc": "RFC 4226: HOTP: An HMAC-Based One-Time Password Algorithm",
+      "section": "Section 5",
+      "url": "https://www.rfc-editor.org/rfc/rfc4226",
+      "rfc": 4226,
+      "status": "INFORMATIONAL",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s25-stepup",
+      "step": 25,
+      "claim": "A resource server answers 401 with WWW-Authenticate: Bearer error=\"insufficient_user_authentication\" plus acr_values or max_age; the client repeats the authorization request with them.",
+      "doc": "RFC 9470: OAuth 2.0 Step Up Authentication Challenge Protocol",
+      "section": "Sections 3 and 4",
+      "url": "https://www.rfc-editor.org/rfc/rfc9470",
+      "rfc": 9470,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s26-dpop",
+      "step": 26,
+      "claim": "A DPoP proof is a JWT of typ dpop+jwt carrying the public key in its header and htm, htu, iat, jti (and ath for resource requests); the access token carries cnf.jkt, the JWK thumbprint; the example proof is the one the lab checks.",
+      "doc": "RFC 9449: OAuth 2.0 Demonstrating Proof of Possession (DPoP)",
+      "section": "Sections 4 and 6; Appendix B",
+      "url": "https://www.rfc-editor.org/rfc/rfc9449",
+      "rfc": 9449,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s26-jkt",
+      "step": 26,
+      "claim": "The thumbprint is the SHA-256 of the JWK with only its required members, in lexicographic order, without whitespace.",
+      "doc": "RFC 7638: JSON Web Key (JWK) Thumbprint",
+      "section": "Sections 3 and 3.1",
+      "url": "https://www.rfc-editor.org/rfc/rfc7638",
+      "rfc": 7638,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s26-par",
+      "step": 26,
+      "claim": "The client posts the authorization parameters to the PAR endpoint over the back channel and receives a request_uri, which is all the browser carries.",
+      "doc": "RFC 9126: OAuth 2.0 Pushed Authorization Requests",
+      "section": "Sections 2 and 4",
+      "url": "https://www.rfc-editor.org/rfc/rfc9126",
+      "rfc": 9126,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s26-iss",
+      "step": 26,
+      "claim": "The authorization response carries an iss parameter that the client compares with the server it started the flow with, which defeats mix-up attacks.",
+      "doc": "RFC 9207: OAuth 2.0 Authorization Server Issuer Identification",
+      "section": "Section 2",
+      "url": "https://www.rfc-editor.org/rfc/rfc9207",
+      "rfc": 9207,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s26-resource",
+      "step": 26,
+      "claim": "The client names the target API with a resource parameter so that the server can narrow the token audience to it.",
+      "doc": "RFC 8707: Resource Indicators for OAuth 2.0",
+      "section": "Section 2",
+      "url": "https://www.rfc-editor.org/rfc/rfc8707",
+      "rfc": 8707,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s26-prm",
+      "step": 26,
+      "claim": "A resource publishes metadata at /.well-known/oauth-protected-resource that lists the authorization servers it trusts.",
+      "doc": "RFC 9728: OAuth 2.0 Protected Resource Metadata",
+      "section": "Sections 2 and 3",
+      "url": "https://www.rfc-editor.org/rfc/rfc9728",
+      "rfc": 9728,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s26-mtls",
+      "step": 26,
+      "claim": "A certificate-bound token carries cnf.x5t#S256, the thumbprint of the client certificate that must be used with it.",
+      "doc": "RFC 8705: OAuth 2.0 Mutual-TLS Client Authentication and Certificate-Bound Access Tokens",
+      "section": "Section 3",
+      "url": "https://www.rfc-editor.org/rfc/rfc8705",
+      "rfc": 8705,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s26-bcp",
+      "step": 26,
+      "claim": "Refresh tokens of public clients must be sender-constrained or rotated; a replayed refresh token is a theft signal; access tokens should be audience-restricted.",
+      "doc": "RFC 9700: Best Current Practice for OAuth 2.0 Security",
+      "section": "Sections 2.2.2, 4.14 and 4.8",
+      "url": "https://www.rfc-editor.org/rfc/rfc9700",
+      "rfc": 9700,
+      "status": "BEST CURRENT PRACTICE",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s26-jwtauth",
+      "step": 26,
+      "claim": "A client can authenticate with a signed JWT (private_key_jwt) instead of a shared secret.",
+      "doc": "RFC 7523: JSON Web Token (JWT) Profile for OAuth 2.0 Client Authentication and Authorization Grants",
+      "section": "Section 2.2",
+      "url": "https://www.rfc-editor.org/rfc/rfc7523",
+      "rfc": 7523,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s26-oauth21",
+      "step": 26,
+      "claim": "The code flow requires PKCE, redirect URIs are matched exactly, the implicit and password grants are removed, bearer tokens are not allowed in the query string, and refresh tokens for public clients are sender-constrained or rotated. Still an Internet-Draft.",
+      "doc": "The OAuth 2.1 Authorization Framework, draft-ietf-oauth-v2-1-16",
+      "section": "Appendix / Section 10: changes from OAuth 2.0",
+      "url": "https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/",
+      "rfc": null,
+      "status": "Internet-Draft, revision 16, September 2026",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s26-fapi2",
+      "step": 26,
+      "claim": "FAPI 2.0 requires PKCE, pushed authorization requests, sender-constrained access tokens (DPoP or mutual TLS) and private-key client authentication.",
+      "doc": "FAPI 2.0 Security Profile (OpenID Foundation)",
+      "section": "Sections 5.3 and 5.4",
+      "url": "https://openid.net/specs/fapi-security-profile-2_0-final.html",
+      "rfc": null,
+      "status": "Final, 22 February 2025",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s27-commands",
+      "step": 27,
+      "claim": "Every flag used in the command drills exists in the real tool; flag tables are generated from the installed tools (tools/identity-lab/vendor/cmd-flags.json).",
+      "doc": "curl, openssl, kubectl, dotnet command-line references",
+      "section": "Option lists",
+      "url": "https://curl.se/docs/manpage.html",
+      "rfc": null,
+      "status": "generated from the tools and tested",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s28-capstone",
+      "step": 28,
+      "claim": "The capstone faults are drawn from the lessons they link to; each fault is a case already sourced in its own step.",
+      "doc": "OWASP Top 10:2025 A01 and OWASP ASVS 5.0",
+      "section": "A01 Broken Access Control; V6, V7, V9, V10",
+      "url": "https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/",
+      "rfc": null,
+      "status": "secondary source; faults tested as cases",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s29-toolbox",
+      "step": 29,
+      "claim": "The toolbox repeats the tools of earlier steps; each is checked against the RFC examples cited there (RFC 7515, 7519, 7636, 7638, 6238, 9449).",
+      "doc": "Tests of the Identity and Access Lab",
+      "section": "tests/identity.test.js",
+      "url": "https://www.rfc-editor.org/rfc/rfc7515",
+      "rfc": null,
+      "status": "tested",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s30-breaks",
+      "step": 30,
+      "claim": "Each symptom, its cause and its check were reproduced against the real tools in tests/identity-app.test.js or tests/identity.test.js.",
+      "doc": "Observed behaviour: Keycloak 26.8.1, ASP.NET Core 10, curl, openssl",
+      "section": "Symptom table",
+      "url": "https://learn.microsoft.com/en-us/aspnet/core/security/authentication/",
+      "rfc": null,
+      "status": "observed and tested",
+      "checked": "2026-10-13"
+    },
+    {
+      "id": "s31-ledger",
+      "step": 31,
+      "claim": "The sources table on the page is generated from the ledger; the test re-checks every cited RFC number and status against the RFC Editor.",
+      "doc": "This ledger (tools/identity-lab/sources.json)",
+      "section": "All entries",
+      "url": "https://www.rfc-editor.org/",
+      "rfc": null,
+      "status": "generated and tested",
+      "checked": "2026-10-13"
     }
   ]
 }
