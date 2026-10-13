@@ -358,10 +358,12 @@ try {
 @media (max-width: 700px) { .bk-state .t { display: none; } }
 </style>
 <script>
-// Backup. The page keeps notes, bookmarks, your place and ticked steps in this browser (localStorage), and also sends each
-// change to server.js, which keeps them in a SQLite file (data/tutorial.db). When a page opens, the newer copy wins, so a
-// new browser, or a browser whose site data was cleared, gets everything back. A browser that never synced before keeps
-// its own notes and ticks and adds the server's (nothing is dropped). Without the server the page works as before.
+// The database is where notes, bookmarks, your place and ticked steps are kept. Every change is sent to server.js, which
+// stores it in a SQLite file (data/tutorial.db), at once and not after a delay. localStorage in this browser is only a
+// cache that the page reads from: it is what makes the page instant and lets it work while the server is off. When a page
+// opens, the newer copy wins, so a new browser, or one whose site data was cleared, gets everything back from the
+// database. A browser that never synced before keeps its own notes and ticks and adds the server's (nothing is dropped).
+// If the server cannot be reached the badge says "Not saved" and the change is sent as soon as it can be.
 (function () {
   if (!/^https?:$/.test(location.protocol) || !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return;
   var PAGE = location.pathname.split('/').pop() || 'code-to-cluster-tutorial.html';
@@ -408,7 +410,7 @@ try {
   });
 
   // Send every later change.
-  function changed(k) { var s = shortOf(k); if (!s || state === 'none') return; setTs(s, Date.now()); dirty[s] = true; schedule(500); }
+  function changed(k) { var s = shortOf(k); if (!s || state === 'none') return; setTs(s, Date.now()); dirty[s] = true; schedule(0); }
   Storage.prototype.setItem = function (k, v) { rawSet.call(this, k, v); if (this === ls) changed(k); };
   Storage.prototype.removeItem = function (k) { rawRemove.call(this, k); if (this === ls) changed(k); };
   function schedule(ms) { clearTimeout(timer); timer = setTimeout(push, ms); if (state === 'ok') { state = 'saving'; show(); } }
@@ -421,7 +423,7 @@ try {
         body: JSON.stringify({ page: PAGE, key: s, value: ls.getItem(KEYS[s]), updated: ts[s] || Date.now() }) })
         .then(function (r) { if (r.status === 503) { state = 'none'; return; } if (!r.ok) throw new Error(String(r.status)); });
     })).then(function () { if (state !== 'none') { state = 'ok'; lastOk = Date.now(); } show(); }, function () {
-      keys.forEach(function (s) { dirty[s] = true; }); state = 'off'; show(); schedule(15000);
+      keys.forEach(function (s) { dirty[s] = true; }); state = 'off'; show(); schedule(5000);
     });
   }
   addEventListener('pagehide', function () { if (Object.keys(dirty).length) push(); });
@@ -431,13 +433,13 @@ try {
   function show() {
     var el = document.getElementById('backup-state'); if (!el) return;
     el.hidden = false;
-    var txt = { ok: 'Backed up', saving: 'Saving…', off: 'Backup off', none: 'Backup off' }[state];
+    var txt = { ok: 'Saved', saving: 'Saving…', off: 'Not saved', none: 'Not saved' }[state];
     el.className = 'bk-state' + (state === 'ok' ? '' : state === 'saving' ? ' saving' : ' off');
     el.innerHTML = '<span class="t"></span>'; el.firstChild.textContent = txt;
-    el.title = state === 'ok' ? 'Your notes, bookmarks, place and ticks are saved in data/tutorial.db (last saved ' + new Date(lastOk).toLocaleTimeString() + ').'
-      : state === 'saving' ? 'Sending your latest changes to data/tutorial.db.'
-      : state === 'none' ? 'The tutorial server has no SQLite support (it needs Node.js 22.13 or newer), so nothing is backed up. Your changes stay in this browser.'
-      : 'The tutorial server is not answering. Your changes stay in this browser and are sent when it is back.';
+    el.title = state === 'ok' ? 'Your notes, bookmarks, place and ticks are saved in the database, data/tutorial.db (last saved ' + new Date(lastOk).toLocaleTimeString() + ').'
+      : state === 'saving' ? 'Saving your latest change to the database, data/tutorial.db.'
+      : state === 'none' ? 'The tutorial server has no SQLite support (it needs Node.js 22.13 or newer), so nothing can be saved to the database. Your changes are kept in this browser only.'
+      : 'The tutorial server is not answering, so your latest change is NOT in the database yet. It is kept in this browser and is sent as soon as the server is back. Do not clear this browser\'s site data until the badge says Saved.';
   }
   document.addEventListener('DOMContentLoaded', show);
   window.__backup = { state: function () { return state; } };
