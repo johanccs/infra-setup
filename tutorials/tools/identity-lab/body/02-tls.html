@@ -10,7 +10,7 @@
       <div class="what-is"><h4>What is it? TLS</h4><dl>
         <dt>What it is</dt><dd>Transport Layer Security: a protocol that lets two programs talk over the Internet in a way designed to prevent eavesdropping, tampering and message forgery (RFC 9846). The current version is TLS 1.3.</dd>
         <dt>The problem it solves</dt><dd>A request crosses many machines owned by strangers. Without TLS any of them can read it, change it, or pretend to be the server.</dd>
-        <dt>Everyday comparison</dt><dd>A sealed armoured van with a guard who checks the receiving office's identity papers before the doors open. Contents, seals and addressee are all protected.</dd>
+        <dt>Everyday comparison</dt><dd>A sealed armored van with a guard who checks the receiving office's identity papers before the doors open. Contents, seals and addressee are all protected.</dd>
         <dt>What it is not</dt><dd>Not protection once the data arrives: the server sees everything in clear. Not proof that the <em>site</em> is honest, only that you are talking to whoever holds the certificate's key. Not the same as a login.</dd>
         <dt>Where you meet it</dt><dd>Every <code>https://</code> address, database connections, service-to-service calls, email servers.</dd>
       </dl></div>
@@ -120,7 +120,7 @@
         <dt>Where you meet it</dt><dd>Every HTTPS site, API gateways, mutual TLS between services, code signing, container registries.</dd>
       </dl></div>
       <div class="what-is"><h4>What is it? A certificate authority</h4><dl>
-        <dt>What it is</dt><dd>An organisation that others trust to create and sign certificates after checking that the requester controls the name.</dd>
+        <dt>What it is</dt><dd>An organization that others trust to create and sign certificates after checking that the requester controls the name.</dd>
         <dt>The problem it solves</dt><dd>Nobody can check every site themselves. A few trusted authorities do it, and everybody relies on their signature.</dd>
         <dt>Everyday comparison</dt><dd>The passport office.</dd>
         <dt>What it is not</dt><dd>Not one company: your operating system and browser each ship a list of trusted roots, and you can add your own (step 06).</dd>
@@ -189,7 +189,7 @@
       </dl></div></details>
 
       <h3>Kinds of certificate</h3>
-      <p>The CA/Browser Forum's Baseline Requirements define policy identifiers for what a CA checked: <b>domain validated</b> (DV, <code>2.23.140.1.2.1</code>: the requester controls the domain), <b>organization validated</b> (OV, <code>2.23.140.1.2.2</code>: the organisation's identity was checked too) and <b>individual validated</b> (<code>2.23.140.1.2.3</code>). A <b>wildcard</b> such as <code>*.example.com</code> covers exactly one label, so <code>shop.example.com</code> but not <code>a.shop.example.com</code> and not <code>example.com</code> itself.</p>
+      <p>The CA/Browser Forum's Baseline Requirements define policy identifiers for what a CA checked: <b>domain validated</b> (DV, <code>2.23.140.1.2.1</code>: the requester controls the domain), <b>organization validated</b> (OV, <code>2.23.140.1.2.2</code>: the organization's identity was checked too) and <b>individual validated</b> (<code>2.23.140.1.2.3</code>). A <b>wildcard</b> such as <code>*.example.com</code> covers exactly one label, so <code>shop.example.com</code> but not <code>a.shop.example.com</code> and not <code>example.com</code> itself.</p>
 
       <h3>The commands</h3>
       <div data-cmd="t5-text"></div>
@@ -553,7 +553,7 @@ extendedKeyUsage = clientAuth</code></pre></figure>
       <div data-cmd="t8-sign"></div>
       <h3>Require it in Kestrel</h3>
       <p>Certificate authentication is not in the shared ASP.NET Core framework, so add its package to the API project first:</p>
-      <figure class="code"><figcaption>bash: in src/api/</figcaption><pre><code>dotnet add package Microsoft.AspNetCore.Authentication.Certificate --version 10.0.12</code></pre></figure>
+      <figure class="code"><figcaption>bash: in src/api/</figcaption><pre><code>dotnet add package Microsoft.AspNetCore.Authentication.Certificate --version 10.0.13</code></pre></figure>
       <p>Tell Kestrel to demand a client certificate, and tell ASP.NET Core to authenticate with it. Remember to call <code>app.UseAuthentication()</code> and <code>app.UseAuthorization()</code>, and add <code>.RequireAuthorization()</code> to the endpoints that need a caller:</p>
       <figure class="code"><figcaption>src/api/Program.cs (replace the Kestrel lines from step 06)</figcaption><pre><code>var root = X509CertificateLoader.LoadCertificateFromFile("root.pem");
 

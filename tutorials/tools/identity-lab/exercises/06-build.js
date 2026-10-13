@@ -79,7 +79,7 @@
   quiz('a20-log', 'The API returns <code>WWW-Authenticate: Bearer error="invalid_token", error_description="The signature is invalid"</code>. Where is it safe to show the description?', [
     ['In your development console and logs. A stranger should only see a plain 401.', true, 'The description tells an attacker which check failed, and so what to try next.'],
     ['In the response to anyone who calls, because a clear message helps honest client developers find their mistake quickly.', false, 'Helpful to attackers too.'],
-    ['Nowhere: always send a bare <code>Bearer</code> header, even in development, so that behaviour never differs.', false, 'The RFC defines <code>error</code> for clients, and it is useful in development. Control exposure, do not remove the mechanism.'],
+    ['Nowhere: always send a bare <code>Bearer</code> header, even in development, so that behavior never differs.', false, 'The RFC defines <code>error</code> for clients, and it is useful in development. Control exposure, do not remove the mechanism.'],
     ['In the page of your Angular app.', false, 'It is for developers, not for users.']]);
 
   // ---------------- 21
@@ -119,7 +119,7 @@
     ['Yes: the cookie is HttpOnly, so this should be impossible.', false, 'HttpOnly stops <em>reading</em> the cookie, not using it.'],
     ['No: SameSite=Strict blocks it.', false, 'The request is same-site, so Strict allows it.'],
     ['Yes: tokens are in the page.', false, 'There are none.']]);
-  quiz('a22-csrf', 'A page on <code>evil.example</code> contains a form that posts to <code>http://localhost:4200/api/todos</code>. With the BFF, which defences stop it?', [
+  quiz('a22-csrf', 'A page on <code>evil.example</code> contains a form that posts to <code>http://localhost:4200/api/todos</code>. With the BFF, which defenses stop it?', [
     ['SameSite=Strict (the cookie is not sent from another site) and the missing <code>X-Todo-Csrf</code> header (a form cannot set it).', true, 'Two independent layers. Observed: a forged form post added nothing to the list.'],
     ['Only HttpOnly: the cookie cannot be read by the other site\'s script, so the post is harmless.', false, 'HttpOnly does not stop the browser from sending the cookie.'],
     ['Only the audience check on the API, which makes sure the request was meant for this service.', false, 'That is for bearer tokens, not cookies.'],

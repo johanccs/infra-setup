@@ -63,7 +63,7 @@
   // ---------------- 28
   quiz('a28-flaws', 'Tick every statement about Notely that is a <b>flaw</b>. Leave the sound ones.', [
     ['Access and refresh tokens are kept in <code>localStorage</code>.', true, 'Step 22: script can read them. Use a BFF or at least keep them out of storage.'],
-    ['The sign-in has no PKCE, a fixed <code>state</code> and a wildcard redirect URI.', true, 'Steps 12 and 22: every one of those removes a defence of the code flow.'],
+    ['The sign-in has no PKCE, a fixed <code>state</code> and a wildcard redirect URI.', true, 'Steps 12 and 22: every one of those removes a defense of the code flow.'],
     ['The app identifies the user by the ID token\'s <code>email</code> and does not check <code>nonce</code>.', true, 'Steps 14 and 15: the key is issuer plus <code>sub</code>, and the nonce binds the token to the session.'],
     ['The API accepts any <code>alg</code>, does not check <code>aud</code>, allows five minutes of skew and tokens live 24 hours.', true, 'Steps 10 and 20.'],
     ['The session cookie has <code>Domain=notely.example</code> and is shared with the marketing site.', true, 'Step 03 and 22: use <code>__Host-</code>, HttpOnly, Secure and SameSite.'],

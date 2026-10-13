@@ -19,7 +19,7 @@
           <tr><td><b>2 HTTPS, TLS, certificates</b></td><td>04 to 08</td><td>Walk through the TLS handshake, read any certificate, build your own certificate authority, and explain how public certificates are issued and renewed.</td></tr>
           <tr><td><b>3 Tokens</b></td><td>09 to 10</td><td>Decode a JWT by hand, list the checks it must pass, and carry out (then block) the classic attacks on it.</td></tr>
           <tr><td><b>4 OAuth and OpenID Connect</b></td><td>11 to 15</td><td>Write every message of the authorization code flow with PKCE, choose the right grant, validate an ID token and run "Log in with Google" by hand.</td></tr>
-          <tr><td><b>5 Authorization</b></td><td>16 to 18</td><td>Design roles and rules, recognise broken access control in code, and write a Kubernetes Role.</td></tr>
+          <tr><td><b>5 Authorization</b></td><td>16 to 18</td><td>Design roles and rules, recognize broken access control in code, and write a Kubernetes Role.</td></tr>
           <tr><td><b>6 Build it</b></td><td>19 to 24</td><td>Run Keycloak, protect the .NET API, sign in from the Angular app, add Google and call the API from another service.</td></tr>
           <tr><td><b>7 Expert</b></td><td>25 to 31</td><td>Compare sign-in methods by phishing resistance, harden tokens, and review a whole login system for flaws.</td></tr>
         </tbody>
@@ -68,7 +68,7 @@
         <tbody>
           <tr><td><b>OAuth 2.0</b></td><td>A framework that lets an app obtain limited access to a service, on someone's behalf or on its own.</td><td>Not a login protocol. It says what an app may do, not who signed in.</td></tr>
           <tr><td><b>OpenID Connect</b></td><td>A simple identity layer on top of OAuth 2.0. It lets an app verify who signed in.</td><td>Not a separate system: it uses OAuth 2.0's messages and adds an ID token.</td></tr>
-          <tr><td><b>SAML 2.0</b></td><td>An OASIS standard (15 March 2005) that carries sign-in information between organisations as XML assertions. Its main use case is web single sign-on.</td><td>Not built on OAuth. It does a similar job to OpenID Connect in a different format.</td></tr>
+          <tr><td><b>SAML 2.0</b></td><td>An OASIS standard (15 March 2005) that carries sign-in information between organizations as XML assertions. Its main use case is web single sign-on.</td><td>Not built on OAuth. It does a similar job to OpenID Connect in a different format.</td></tr>
           <tr><td><b>Role</b></td><td>A named set of permissions given to people inside a system, such as <code>admin</code>.</td><td>Not the same as a scope.</td></tr>
           <tr><td><b>Scope</b></td><td>A named permission an app asks for when it requests a token, such as <code>openid</code>.</td><td>Not a role: the server may grant less than was asked.</td></tr>
           <tr><td><b>Claim</b></td><td>A statement inside a token, such as who issued it or when it expires.</td><td>Not a permission by itself. A role or a scope can <em>travel</em> as a claim.</td></tr>
@@ -95,7 +95,7 @@
         <dt>TLS</dt><dd>Transport Layer Security: the protocol that lets two programs talk over the Internet in a way designed to prevent eavesdropping, tampering and message forgery.</dd>
         <dt>HTTPS</dt><dd>HTTP carried over a TLS connection that has been secured for it. Its addresses start with <code>https://</code>.</dd>
         <dt>Certificate</dt><dd>A signed document that ties a public key to a name. Internet certificates follow the X.509 format.</dd>
-        <dt>Certificate authority</dt><dd>An organisation that others trust to create and sign certificates.</dd>
+        <dt>Certificate authority</dt><dd>An organization that others trust to create and sign certificates.</dd>
       </dl>
 
       <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>

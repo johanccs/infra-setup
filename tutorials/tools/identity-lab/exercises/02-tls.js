@@ -196,7 +196,7 @@
   X['t8-who'] = { kind: 'quiz', prompt: '<p>Service A calls the Todo API. The API must know <b>which service</b> is calling, and there is no user. Which fits best?</p>',
     options: [
       { t: 'Ask service A to send a username and password in a header.', ok: false, why: 'A shared secret in a configuration file can be copied, and the API cannot tell copies apart.' },
-      { t: 'Mutual TLS: service A has a certificate from the organisation\'s CA, and proves its private key.', ok: true, why: 'The key never leaves service A, and the certificate names it.' },
+      { t: 'Mutual TLS: service A has a certificate from the organization\'s CA, and proves its private key.', ok: true, why: 'The key never leaves service A, and the certificate names it.' },
       { t: 'Let anyone on the internal network call it.', ok: false, why: 'Network position is not identity.' },
     ] };
   X['t8-fail'] = { kind: 'quiz', prompt: '<p>The API requires a client certificate. A caller sends none. What does it get?</p>',

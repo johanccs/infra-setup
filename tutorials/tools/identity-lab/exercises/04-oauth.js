@@ -124,7 +124,7 @@
       { t: 'Send it to the token endpoint to get a new access token.', g: 2, why: 'Only the authorization server ever sees it.' },
       { t: 'Check <code>nonce</code> and <code>aud</code> against what this client sent.', g: 0, why: 'ID token validation.' },
     ] };
-  X['o14-key'] = { kind: 'quiz', prompt: '<p>What should the Todo app use to recognise a returning user from an ID token?</p>',
+  X['o14-key'] = { kind: 'quiz', prompt: '<p>What should the Todo app use to recognize a returning user from an ID token?</p>',
     options: [
       { t: 'The <code>email</code> claim: it is easy to read and unique.', ok: false, why: 'Emails change and may be reassigned. Google says plainly not to use it as the identifier.' },
       { t: 'The pair <code>iss</code> and <code>sub</code>.', ok: true, why: '<code>sub</code> is unique and never reassigned within an issuer, so the pair is a stable key.' },
@@ -147,7 +147,7 @@
     ] };
   X['o15-hd'] = { kind: 'quiz', prompt: '<p>You add <code>hd=example.com</code> to the authorization request, so that the Google account chooser only offers company accounts. Is that enough to keep other people out?</p>',
     options: [
-      { t: 'Yes, Google refuses other domains.', ok: false, why: 'It is a user interface optimisation, and request parameters can be edited by the client.' },
-      { t: 'No. Check the <code>hd</code> claim of the verified ID token on your server.', ok: true, why: 'Google: do not rely on this optimisation to control access.' },
+      { t: 'Yes, Google refuses other domains.', ok: false, why: 'It is a user interface optimization, and request parameters can be edited by the client.' },
+      { t: 'No. Check the <code>hd</code> claim of the verified ID token on your server.', ok: true, why: 'Google: do not rely on this optimization to control access.' },
     ] };
 })();

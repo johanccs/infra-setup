@@ -65,7 +65,7 @@
         <thead><tr><th>Code</th><th>Means</th><th>Use it when</th></tr></thead>
         <tbody>
           <tr><td><code>401</code> Unauthorized</td><td>The request lacks valid authentication credentials for the resource. The server must send a <code>WWW-Authenticate</code> header with at least one challenge.</td><td>There is no token, or it is expired, malformed or not signed by someone you trust.</td></tr>
-          <tr><td><code>403</code> Forbidden</td><td>The server understood the request and refuses to fulfil it. If credentials were given, they are not enough, and sending the same ones again will not help.</td><td>The caller is known and is not permitted.</td></tr>
+          <tr><td><code>403</code> Forbidden</td><td>The server understood the request and refuses to fulfill it. If credentials were given, they are not enough, and sending the same ones again will not help.</td><td>The caller is known and is not permitted.</td></tr>
           <tr><td><code>404</code> Not Found</td><td>No representation was found, <em>or</em> the server is not willing to disclose that one exists.</td><td>Someone asks for another user's todo. Answering 404 instead of 403 does not reveal that it exists.</td></tr>
         </tbody>
       </table></div>
@@ -295,7 +295,7 @@
         <dt>The problem it creates</dt><dd>Your site cannot tell a forged request from one the user chose to make. It sees a valid cookie.</dd>
         <dt>Everyday comparison</dt><dd>Someone slips a pre-filled bank form into your hand while you are logged in at the counter, and the clerk accepts it because you are standing there.</dd>
         <dt>What it is not</dt><dd>Not cross-site scripting (XSS): the attacker does not run code in your page and cannot read the response. They only cause a request.</dd>
-        <dt>What stops it</dt><dd>Never change state on GET. Use <code>SameSite</code> cookies as one layer, and a real defence on top: anti-forgery tokens, or a custom request header that a plain cross-site form cannot send, or checking <code>Origin</code> and <code>Sec-Fetch-Site</code>. OWASP calls SameSite a defence in depth that does not replace a proper CSRF defence in most deployments.</dd>
+        <dt>What stops it</dt><dd>Never change state on GET. Use <code>SameSite</code> cookies as one layer, and a real defense on top: anti-forgery tokens, or a custom request header that a plain cross-site form cannot send, or checking <code>Origin</code> and <code>Sec-Fetch-Site</code>. OWASP calls SameSite a defense in depth that does not replace a proper CSRF defense in most deployments.</dd>
       </dl></div>
 
       <h3>Practice</h3>
@@ -309,7 +309,7 @@
         <li>A login happens once. A session and its cookie carry it afterwards, so protect the cookie as you would the password.</li>
         <li>Store passwords with a slow, salted function (Argon2id first). Never a fast hash, never encryption.</li>
         <li>Set <code>Secure</code>, <code>HttpOnly</code> and <code>SameSite</code>, prefer <code>__Host-</code>, issue a new id at login, and end sessions on the server.</li>
-        <li>CSRF abuses the browser attaching cookies by itself. Use SameSite plus a real CSRF defence.</li>
+        <li>CSRF abuses the browser attaching cookies by itself. Use SameSite plus a real CSRF defense.</li>
       </ul></div>
       <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
     </section>

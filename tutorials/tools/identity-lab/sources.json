@@ -1540,6 +1540,17 @@
       "rfc": null,
       "status": "generated and tested",
       "checked": "2026-10-13"
+    },
+    {
+      "id": "s07-ari",
+      "step": 7,
+      "claim": "ACME Renewal Information: the CA tells the client, per certificate, a suggested renewal window, so renewals can be moved earlier (for example after a revocation event or mass renewal).",
+      "doc": "RFC 9773: ACME Renewal Information (ARI) Extension",
+      "section": "Sections 1 and 4",
+      "url": "https://www.rfc-editor.org/rfc/rfc9773",
+      "rfc": 9773,
+      "status": "PROPOSED STANDARD",
+      "checked": "2026-10-13"
     }
   ]
 }

@@ -97,7 +97,7 @@
   X['f3-csrf'] = { kind: 'quiz', prompt: '<p>Alice is signed in at <code>app.example.com</code>. She opens <code>evil.test</code>, which auto-submits a form that POSTs to <code>app.example.com/api/todos</code>. The session cookie is <code>SameSite=Strict</code>. What happens?</p>',
     options: [
       { t: 'The browser attaches the cookie, because the request goes to the right host and the cookie is valid for it.', ok: false, why: 'The request starts on another site, and Strict forbids attaching the cookie to those.' },
-      { t: 'The request is sent without the cookie, so the server sees an anonymous caller and refuses it.', ok: true, why: 'This is what SameSite is for. Keep a real CSRF defence as well.' },
+      { t: 'The request is sent without the cookie, so the server sees an anonymous caller and refuses it.', ok: true, why: 'This is what SameSite is for. Keep a real CSRF defense as well.' },
       { t: 'The browser blocks the request entirely.', ok: false, why: 'The request is still sent. Only the cookie is withheld.' },
     ] };
 

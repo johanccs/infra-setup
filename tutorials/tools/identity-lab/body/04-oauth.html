@@ -98,7 +98,7 @@
       </div>
       <div class="what-is"><h4>What is it? The authorization code</h4><dl>
         <dt>What it is</dt><dd>A short-lived, single-use value the authorization server returns through the browser, which the client then trades for tokens over the back channel.</dd>
-        <dt>The problem it solves</dt><dd>Tokens must not travel through the browser. A code can, because on its own it opens nothing, and the server will only honour it for the right client.</dd>
+        <dt>The problem it solves</dt><dd>Tokens must not travel through the browser. A code can, because on its own it opens nothing, and the server will only honor it for the right client.</dd>
         <dt>Everyday comparison</dt><dd>A collection slip. You hand it to the right counter and receive the parcel, which was never in your hands on the way.</dd>
         <dt>What it is not</dt><dd>Not a token, and not a secret by itself: it can leak from the address bar, so something must tie it to the client that asked.</dd>
         <dt>Where you meet it</dt><dd>The <code>?code=…</code> in the address after you approve an app.</dd>
@@ -163,7 +163,7 @@
 
       <h3>Each parameter, by the attack it answers</h3>
       <div class="table-wrap"><table>
-        <thead><tr><th>Attack</th><th>What the attacker does</th><th>The defence</th></tr></thead>
+        <thead><tr><th>Attack</th><th>What the attacker does</th><th>The defense</th></tr></thead>
         <tbody>
           <tr><td>Code interception</td><td>Steals the code from the redirect and exchanges it first.</td><td>PKCE (<code>code_challenge</code>, <code>code_verifier</code>).</td></tr>
           <tr><td>Forged callback (CSRF)</td><td>Gets your browser to finish a flow the attacker started.</td><td><code>state</code>, or PKCE, or the OIDC <code>nonce</code>. RFC 9700 2.1: clients MUST prevent CSRF.</td></tr>
@@ -321,7 +321,7 @@
       </div>
       <div class="what-is"><h4>What is it? OpenID Connect</h4><dl>
         <dt>What it is</dt><dd>A simple identity layer on top of OAuth 2.0 (OpenID Connect Core 1.0). It lets a client verify the identity of the end-user, based on the authentication performed by an authorization server, and get basic profile information.</dd>
-        <dt>The problem it solves</dt><dd>OAuth never defined how an app learns who the user is, so every provider invented its own way. OIDC standardised it, with one token (the ID token) and one way to validate it.</dd>
+        <dt>The problem it solves</dt><dd>OAuth never defined how an app learns who the user is, so every provider invented its own way. OIDC standardized it, with one token (the ID token) and one way to validate it.</dd>
         <dt>Everyday comparison</dt><dd>OAuth is the hotel key card. OIDC is the registration slip that says whose card it is.</dd>
         <dt>What it is not</dt><dd>Not a separate protocol: it is the code flow of step 12 with <code>openid</code> in the scope, plus an <code>id_token</code>. Not SAML, which solves a similar problem in XML.</dd>
         <dt>Where you meet it</dt><dd>Log in with Google, Microsoft, Okta, Keycloak. The "OpenID Provider" and "relying party" are its names for the server and the app.</dd>
@@ -404,10 +404,10 @@
       <div class="table-wrap"><table>
         <thead><tr><th></th><th>OAuth 2.0</th><th>OpenID Connect</th><th>SAML 2.0</th></tr></thead>
         <tbody>
-          <tr><td>Answers</td><td>May this app do that?</td><td>Who signed in?</td><td>Who signed in? (to another organisation's service)</td></tr>
+          <tr><td>Answers</td><td>May this app do that?</td><td>Who signed in?</td><td>Who signed in? (to another organization's service)</td></tr>
           <tr><td>Format</td><td>Access token (often a JWT)</td><td>ID token (a JWT)</td><td>XML assertions</td></tr>
           <tr><td>Built on</td><td>HTTP</td><td>OAuth 2.0</td><td>Its own protocols and bindings</td></tr>
-          <tr><td>Typical use</td><td>APIs, delegated access</td><td>Modern web and mobile sign-in</td><td>Web single sign-on between organisations (OASIS standard, 2005)</td></tr>
+          <tr><td>Typical use</td><td>APIs, delegated access</td><td>Modern web and mobile sign-in</td><td>Web single sign-on between organizations (OASIS standard, 2005)</td></tr>
         </tbody>
       </table></div>
       <h3>One sign-in, a second app</h3>
@@ -484,7 +484,7 @@
       <h3>Part 1: create the client</h3>
       <ol>
         <li>In the Google Cloud console, open <b>Google Auth Platform</b> and its <b>Clients</b> page, in a free project of your own.</li>
-        <li><b>Branding and audience:</b> give the app a name and a support email. Choose <b>External</b> as the audience, and leave the publishing status at <b>Testing</b>. In Testing, only the test users you list (up to 100) can authorise the app, and authorisations expire after seven days. Add your own Google account as a test user. (An app that asks only for the basic profile, email and <code>openid</code> scopes is exempt from the listing and the expiry.)</li>
+        <li><b>Branding and audience:</b> give the app a name and a support email. Choose <b>External</b> as the audience, and leave the publishing status at <b>Testing</b>. In Testing, only the test users you list (up to 100) can authorize the app, and authorizations expire after seven days. Add your own Google account as a test user. (An app that asks only for the basic profile, email and <code>openid</code> scopes is exempt from the listing and the expiry.)</li>
         <li><b>Create a client</b> of type <b>Web application</b>. Under <b>Authorized redirect URIs</b> add exactly the address shown by the tool below. Google requires <code>https</code> for redirect URIs but exempts localhost, and it matches them exactly, including scheme, case and trailing slash.</li>
         <li>Copy the <b>client ID</b> into the tool. Keep the <b>client secret</b> for your terminal: it never goes into this page.</li>
       </ol>
@@ -499,7 +499,7 @@
       <p>Then check by eye, as OpenID Connect requires: <code>iss</code> is <code>https://accounts.google.com</code> (Google documents both that and <code>accounts.google.com</code>), <code>aud</code> is your client ID, <code>exp</code> is in the future, and <code>nonce</code> is the one the tool showed you. For a Google Workspace account, <code>hd</code> is the domain you accept.</p>
       <div data-ex="o15-claims"></div>
       <h3>What to store about the user</h3>
-      <p>Google's guidance is blunt: <b>do not use the <code>email</code> claim as the user's unique identifier. Always use <code>sub</code>, which is unique to a Google Account even if the user changes their email.</b> Store the pair (<code>iss</code>, <code>sub</code>). The <code>hd</code> request parameter is only a hint for the login screen. Google says not to rely on that optimisation to control access, because client-side requests can be modified. Check the <code>hd</code> <em>claim</em> in the ID token on your server.</p>
+      <p>Google's guidance is blunt: <b>do not use the <code>email</code> claim as the user's unique identifier. Always use <code>sub</code>, which is unique to a Google Account even if the user changes their email.</b> Store the pair (<code>iss</code>, <code>sub</code>). The <code>hd</code> request parameter is only a hint for the login screen. Google says not to rely on that optimization to control access, because client-side requests can be modified. Check the <code>hd</code> <em>claim</em> in the ID token on your server.</p>
       <h3>Clean up</h3>
       <p>When you are done, delete the client in the console, or at least remove the test user, and revoke the app at <code>myaccount.google.com/permissions</code>. In step 23 you will add Google to Keycloak, so your app never talks to Google itself.</p>
       <div data-ex="o15-store"></div>
