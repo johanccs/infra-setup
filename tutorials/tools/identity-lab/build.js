@@ -22,12 +22,13 @@ const scripts = [
   '<script>\n' + read(HERE, 'crypto.js') + '\n</script>',
   '<script>\n' + read(HERE, 'x509.js') + '\n</script>',
   '<script>\n' + read(HERE, 'cookie.js') + '\n</script>',
+  '<script>\n' + read(HERE, 'attacklab.js').replace("require('./crypto.js')", 'null') + '\n</script>',
   '<script>\n' + read(HERE, '..', 'shared', 'cmdline.js') + '\n</script>',
   '<script>\n' + read(HERE, 'cmdspec.js') + '\nwindow.IA = window.IA || { exercises: {} };\nIA.cmdFlags = ' + fs.readFileSync(path.join(HERE, 'vendor', 'cmd-flags.json'), 'utf8') + ';\n</script>',
   '<script>\n' + read(HERE, 'engine.js') + '\n</script>',
   '<script>\nwindow.IA = window.IA || { exercises: {} };\nIA.cmds = IA.cmds || {};\n' + exerciseFiles + '\n</script>',
   '<script>\n' + read(HERE, 'ui.js') + '\n</script>',
 ].join('\n');
-if (/<\/script/i.test(read(HERE, 'crypto.js') + read(HERE, 'x509.js') + read(HERE, 'cookie.js') + read(HERE, 'engine.js') + exerciseFiles + read(HERE, 'ui.js'))) throw new Error('a script contains </script');
+if (/<\/script/i.test(read(HERE, 'crypto.js') + read(HERE, 'x509.js') + read(HERE, 'cookie.js') + read(HERE, 'attacklab.js') + read(HERE, 'engine.js') + exerciseFiles + read(HERE, 'ui.js'))) throw new Error('a script contains </script');
 const r = buildPage({ tutorialsDir: T, template: 'code-to-cluster-tutorial.html', meta, body, css: read(HERE, 'lab.css'), scripts, stripScrollTick: true, railLevel: true });
 console.log('wrote', r.file, (r.bytes / 1e6).toFixed(2) + ' MB;', r.sections, 'sections');

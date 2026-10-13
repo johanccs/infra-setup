@@ -65,3 +65,6 @@
 .cookie tr.sent td:nth-child(2) { color: var(--ok); font-weight: 600; white-space: nowrap; }
 .cookie tr.blocked td:nth-child(2) { color: var(--warn); font-weight: 600; white-space: nowrap; }
 code.wrap { display: block; overflow-wrap: anywhere; white-space: normal; padding: 6px 8px; }
+
+.atk select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); max-width: 100%; }
+.atk textarea[readonly] { background: var(--code-bg); }

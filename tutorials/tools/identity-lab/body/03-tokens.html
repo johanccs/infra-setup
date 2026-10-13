@@ -1,0 +1,207 @@
+    <!-- ============ 9 ============ -->
+    <section class="step" id="jwt" data-step data-level="Intermediate">
+      <div class="step-head"><span class="num">09</span><h2>Tokens and JWT, byte by byte</h2><span class="lvl-chip">Intermediate</span></div>
+      <p class="goal"><b>Goal:</b> decode any JWT by hand, name each claim, and explain how an API checks a signature without calling the issuer.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>After sign-in, programs do not send passwords. They send <b>tokens</b>. Most of them are JWTs, and a JWT is nothing mysterious: three pieces of base64url text you already know how to read. Once you can take one apart, access tokens, ID tokens and the next four levels stop being magic.</p>
+        <p>This lesson builds on step 02 (base64url, signatures) and step 01 (who and what).</p>
+      </div>
+
+      <div class="what-is"><h4>What is it? A token</h4><dl>
+        <dt>What it is</dt><dd>A string that stands in for a login. A client presents it with each request, and the API decides from it who is calling and what they may do.</dd>
+        <dt>The problem it solves</dt><dd>An API has no browser session, no cookie jar and no login page. It needs a small piece of proof a program can attach to a request and that works across many servers.</dd>
+        <dt>Everyday comparison</dt><dd>A festival wristband. Staff glance at it, and do not phone the box office each time.</dd>
+        <dt>What it is not</dt><dd>Not a password: it is limited in time and in what it allows. And a token usually proves nothing about <em>who is holding it</em> (see bearer, below).</dd>
+        <dt>Where you meet it</dt><dd>The <code>Authorization: Bearer …</code> header on every API call in the rest of this module.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? A bearer token</h4><dl>
+        <dt>What it is</dt><dd>A token that any party in possession of it can use, in any way another holder could (RFC 6750). "Bearer" means "whoever bears it".</dd>
+        <dt>The problem it solves</dt><dd>Simplicity: no extra proof is needed with each call.</dd>
+        <dt>Everyday comparison</dt><dd>Cash. It does not matter whose pocket it is in.</dd>
+        <dt>What it is not</dt><dd>Not tied to a person or a device. If it leaks in a log or a URL, whoever finds it can use it until it expires. That is why they are short-lived, and why step 26 shows how to bind them to a key.</dd>
+        <dt>Where you meet it</dt><dd>Nearly every OAuth access token.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? A JWT</h4><dl>
+        <dt>What it is</dt><dd>A JSON Web Token (RFC 7519, pronounced "jot"): a compact, URL-safe way to carry <em>claims</em> between two parties, as a JSON object that is signed (and, rarely, encrypted).</dd>
+        <dt>The problem it solves</dt><dd>A <em>self-contained</em> token: an API can check it and read it with no database lookup, only the issuer's public key.</dd>
+        <dt>Everyday comparison</dt><dd>A signed letter that says who it is about and what they may do, on which anyone can check the seal.</dd>
+        <dt>What it is not</dt><dd><b>Not encrypted.</b> A normal JWT is signed, which proves it was not changed. Anyone holding it can read it. Never put a secret in one.</dd>
+        <dt>Where you meet it</dt><dd>OAuth access tokens (RFC 9068 profiles them), OpenID Connect ID tokens, and the OIDC tokens GitHub Actions issues (the Actions Lab).</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? A JWK and a JWKS</h4><dl>
+        <dt>What it is</dt><dd>A JSON Web Key (JWK, RFC 7517) is a key written as JSON. A JWK Set (JWKS) is a list of them. Identity providers publish their <em>public</em> signing keys as a JWKS at a well-known address.</dd>
+        <dt>The problem it solves</dt><dd>How does an API get the issuer's public key, and keep up when it changes? It fetches the set, picks the key by <code>kid</code>, and caches it.</dd>
+        <dt>Everyday comparison</dt><dd>A published list of the official signature specimens for each year.</dd>
+        <dt>What it is not</dt><dd>Not secret: a JWKS has only public keys. Private keys never appear.</dd>
+        <dt>Where you meet it</dt><dd>The <code>jwks_uri</code> in an OpenID Connect discovery document (step 14).</dd>
+      </dl></div>
+
+      <h3>Self-contained or by reference</h3>
+      <p>Two shapes of access token exist. An <b>opaque</b> token is a random string that means nothing alone: the API asks the authorization server what it stands for (token introspection, RFC 7662). A <b>self-contained</b> token such as a JWT carries its meaning, so the API can decide on its own. The price: it cannot be withdrawn before it expires, so keep lifetimes short (step 10).</p>
+
+      <h3>Three parts</h3>
+      <p>A JWT in its compact form is <code>header.payload.signature</code>: three base64url pieces separated by dots. Paste the token below into the workbench (or use the example): it splits, decodes, explains every claim, and checks the signature the way an API would. Try changing a letter in the signature or the payload.</p>
+      <div data-tool="jwt"></div>
+
+      <h4>The header</h4>
+      <p>It says how the token was signed. <code>alg</code> is the signature algorithm, <code>typ</code> the kind of token, and <code>kid</code> (key id) says <em>which</em> of the issuer's keys signed it. JWT access tokens following RFC 9068 use <code>typ: at+jwt</code>.</p>
+      <h4>The claims</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Claim</th><th>Name</th><th>Means</th></tr></thead>
+        <tbody>
+          <tr><td><code>iss</code></td><td>Issuer</td><td>Who made and signed the token.</td></tr>
+          <tr><td><code>sub</code></td><td>Subject</td><td>Who it is about. For a user, the stable id of the user. Never an email address you treat as a key.</td></tr>
+          <tr><td><code>aud</code></td><td>Audience</td><td>Who it is for. An API must check that it is on the list.</td></tr>
+          <tr><td><code>exp</code></td><td>Expiration time</td><td>The moment from which it must not be accepted (seconds since 1970).</td></tr>
+          <tr><td><code>nbf</code></td><td>Not before</td><td>The moment before which it must not be accepted.</td></tr>
+          <tr><td><code>iat</code></td><td>Issued at</td><td>When it was made.</td></tr>
+          <tr><td><code>jti</code></td><td>JWT ID</td><td>A unique name for this token.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Other claims carry the application's own facts: <code>scope</code>, <code>role</code>, <code>client_id</code>. RFC 9068 requires <code>iss</code>, <code>exp</code>, <code>aud</code>, <code>sub</code>, <code>client_id</code>, <code>iat</code> and <code>jti</code> in a JWT access token.</p>
+
+      <details class="lbl"><summary>Line by line: build a JWT by hand</summary><div><dl>
+        <dt>1. Write the header</dt><dd><code>{"alg":"HS256","typ":"JWT"}</code>. Its base64url is <code>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9</code>. Every JWT that starts <code>eyJhbGci</code> is a JSON header starting <code>{"alg"</code>.</dd>
+        <dt>2. Write the payload</dt><dd><code>{"sub":"alice","aud":"todo-api"}</code>, and base64url it.</dd>
+        <dt>3. Join them</dt><dd><code>base64url(header) + "." + base64url(payload)</code>. This text, exactly, is the <em>signing input</em>.</dd>
+        <dt>4. Sign it</dt><dd>HS256: <code>HMAC-SHA-256(secret, signing input)</code>. RS256: an RSA signature over the SHA-256 of it, with the private key. ES256: ECDSA on P-256, written as the two 32-byte numbers r and s joined (not the DER form certificates use).</dd>
+        <dt>5. Append</dt><dd><code>signing input + "." + base64url(signature)</code>. That is the token. To verify, recompute from the first two parts and compare.</dd>
+      </dl></div></details>
+
+      <h3>Choosing a signature algorithm</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Algorithm</th><th>Kind</th><th>Fits when</th></tr></thead>
+        <tbody>
+          <tr><td><code>HS256</code></td><td>HMAC, one shared secret</td><td>One program both makes and checks the token. Anyone who can check can also forge.</td></tr>
+          <tr><td><code>RS256</code>, <code>PS256</code></td><td>RSA signature</td><td>An issuer makes tokens and many others check them with a public key. RS256 is the one RFC 9068 requires every server to support.</td></tr>
+          <tr><td><code>ES256</code></td><td>ECDSA P-256</td><td>The same, with much smaller keys and signatures.</td></tr>
+          <tr><td><code>Ed25519</code></td><td>EdDSA</td><td>The same, modern and fast. RFC 9864 (2025) made <code>Ed25519</code> the name to use and deprecated the older <code>EdDSA</code> value.</td></tr>
+        </tbody>
+      </table></div>
+      <p>RFC 9068 recommends asymmetric signing for access tokens: it is what lets any number of APIs verify tokens without being able to make them.</p>
+
+      <h3>How an API checks a token without calling the issuer</h3>
+      <figure class="anim" aria-label="Animated diagram: an API validates a JWT using the issuer's published keys, and then a key rotation">
+        <div class="anim-stage"><svg viewBox="0 0 760 340" role="img" aria-label="A client sends a request with a token. The API reads the key id from the header, fetches the issuer's published key set once and caches it, verifies the signature, then checks issuer, audience and expiry. When the issuer rotates keys it publishes a new key with a new key id and the API fetches the set again.">
+          <rect class="a-zone" x="8" y="8" width="744" height="324" rx="12"/>
+          <path class="a-route" data-k="r1" d="M170 110 H300"/>
+          <path class="a-route" data-k="r2" d="M450 110 H590"/>
+          <path class="a-route" data-k="r3" d="M590 150 H450"/>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <g class="a-node" data-k="client"><rect x="24" y="70" width="146" height="80" rx="8"/><text class="a-t" x="97" y="104">Client</text><text class="a-s" x="97" y="124">holds a token</text></g>
+          <g class="a-node" data-k="api"><rect x="300" y="60" width="150" height="130" rx="8"/><text class="a-t" x="375" y="98">API</text><text class="a-s" x="375" y="120">key cache</text><text class="a-s" x="375" y="140">kid → public key</text></g>
+          <g class="a-node" data-k="idp"><rect x="590" y="60" width="150" height="130" rx="8"/><text class="a-t" x="665" y="98">Issuer</text><text class="a-s" x="665" y="120">publishes a JWKS</text><text class="a-s" x="665" y="140">keeps private keys</text></g>
+          <text class="a-lbl" data-k="r1" x="235" y="98">Bearer token</text>
+          <text class="a-lbl" data-k="r3" x="520" y="170">GET /jwks.json (once, cached)</text>
+          <text class="a-badge" data-k="chk" x="375" y="234">✓ signature   ✓ iss   ✓ aud   ✓ exp</text>
+          <text class="a-badge" data-k="rot" x="375" y="300">kid 2026-10 and 2026-11 both published while old tokens run out</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "client r1 api", "off": "r2 r3 idp chk rot", "path": [[176, 110], [294, 110]], "text": "<b>1. A request with a token.</b> The API sees <code>Authorization: Bearer eyJ…</code> and splits it into header, payload and signature."},
+          {"on": "api", "off": "r1 r2 r3 idp chk rot", "text": "<b>2. Which key?</b> The header's <code>kid</code> names the signing key. The API also checks that the <code>alg</code> is one it accepts. The <b>API</b>, not the token, decides."},
+          {"on": "api r3 idp", "off": "r1 r2 chk rot", "path": [[584, 150], [456, 150]], "text": "<b>3. Fetch the keys, once.</b> If the API does not have that key yet it downloads the issuer's public key set and caches it. Later requests need no network call at all."},
+          {"on": "api chk", "good": "api chk", "off": "r1 r2 r3 idp rot", "text": "<b>4. Verify and check.</b> It verifies the signature with the public key, then checks the issuer, that it is itself in <code>aud</code>, and that the token has not expired. Only then does it read the claims."},
+          {"on": "api r3 idp rot", "off": "r1 r2 chk", "path": [[584, 150], [456, 150]], "text": "<b>5. Key rotation.</b> The issuer adds a new key (new <code>kid</code>) to the set and starts signing with it. The API sees an unknown <code>kid</code>, refetches, and carries on. The old key stays in the set until the tokens it signed have expired."}
+        ]</script>
+      </figure>
+
+      <h3>Practice</h3>
+      <div data-ex="j9-read"></div>
+      <div data-ex="j9-alg"></div>
+      <div data-ex="j9-order"></div>
+      <div data-ex="j9-readable"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A JWT is <code>header.payload.signature</code>, each part base64url. It is signed, not encrypted: anyone can read it.</li>
+        <li><code>iss</code>, <code>sub</code>, <code>aud</code> and <code>exp</code> say who made it, who it is about, who it is for, and until when.</li>
+        <li>Asymmetric algorithms let many APIs verify a token and none of them forge it. The API fetches and caches the issuer's public keys and picks one by <code>kid</code>.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 10 ============ -->
+    <section class="step" id="jwtattack" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">10</span><h2>Validating a JWT, and the ways it goes wrong</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> list the checks a token must pass, carry out the classic attacks on a weak validator, and configure a validator that resists them.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>A token is only as good as the code that checks it. Almost every JWT vulnerability is a <em>validation</em> mistake, not a break of the cryptography. The fastest way to learn them is to commit each one yourself against a deliberately weak API, then see the one-line fix.</p>
+        <p>This lesson builds on step 09. Nothing here attacks a real system: the API is a simulation inside this page.</p>
+      </div>
+
+      <h3>What a validator must check</h3>
+      <p>RFC 7519 (section 7.2) and RFC 8725 (JSON Web Token Best Current Practices) say, in short: if <em>any</em> step fails, reject the token. In the order a careful API does them:</p>
+      <ol>
+        <li><b>Well formed.</b> Three parts, valid base64url, valid JSON. Only parameters it understands.</li>
+        <li><b>Algorithm on the allow-list.</b> The verifier chooses the algorithms (RFC 8725, 3.1 and 3.2). Never <code>none</code>. Each key is used with exactly one algorithm.</li>
+        <li><b>Signature</b> valid for the issuer's key, selected by <code>kid</code> from a key set you trust (3.3).</li>
+        <li><b>Issuer</b> is the one you expect, and the key belongs to it (3.8).</li>
+        <li><b>Audience</b> includes this API (3.9).</li>
+        <li><b>Expiry and not-before</b>, with a small clock allowance. Require <code>exp</code> to be present.</li>
+        <li><b>Type</b> is right (<code>typ: at+jwt</code> for access tokens, 3.11), so an ID token cannot be used as an access token.</li>
+        <li><b>Then</b> read the claims and authorize. Never before.</li>
+      </ol>
+      <div class="callout"><p><strong>Configure a library; do not write this yourself.</strong> In ASP.NET Core you set the authority and the audience on <code>AddJwtBearer</code> (step 20) and the library does all of the above. The mistakes below are what happens when someone bypasses it, or configures it loosely.</p></div>
+
+      <h3>Why <code>alg</code> is dangerous</h3>
+      <p>The header's <code>alg</code> is written by whoever made the token, so by an attacker if the token is forged. RFC 8725 section 2.1 names two attacks that follow from trusting it:</p>
+      <figure class="anim" aria-label="Animated diagram: the RS256 to HS256 algorithm confusion attack and its fix">
+        <div class="anim-stage"><svg viewBox="0 0 760 320" role="img" aria-label="The API verifies RS256 tokens with its public key, which is published. An attacker changes the header to HS256 and signs with the public key text as the HMAC secret. A weak library follows the header and verifies with HMAC using the public key as the secret, so it accepts. A validator with an allow-list of RS256 only rejects it.">
+          <rect class="a-zone" x="8" y="8" width="744" height="304" rx="12"/>
+          <path class="a-route" data-k="r1" d="M200 90 H340"/>
+          <path class="a-route" data-k="r2" d="M200 200 H340"/>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <g class="a-node" data-k="att"><rect x="24" y="130" width="176" height="100" rx="8"/><text class="a-t" x="112" y="168">Attacker</text><text class="a-s" x="112" y="190">has the public key</text></g>
+          <g class="a-node" data-k="api"><rect x="340" y="60" width="200" height="190" rx="8"/><text class="a-t" x="440" y="94">API</text><text class="a-s" x="440" y="116">expects RS256</text><text class="a-s" x="440" y="136">key: RSA public</text></g>
+          <g class="a-node" data-k="res"><rect x="590" y="100" width="146" height="110" rx="8"/><text class="a-t" x="663" y="140">Result</text></g>
+          <text class="a-lbl" data-k="r1" x="270" y="78">token: alg HS256, role admin</text>
+          <text class="a-lbl" data-k="r2" x="270" y="224">HMAC key = the public key text</text>
+          <text class="a-badge bad" data-k="ok" x="663" y="176">accepted: admin</text>
+          <text class="a-badge good" data-k="no" x="663" y="176">rejected</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "api", "off": "r1 r2 att res ok no", "text": "<b>The setup.</b> The API verifies tokens with the issuer's RSA <b>public</b> key. That key is published, so everybody has it. Nobody can forge an RS256 signature without the private key."},
+          {"on": "att r1 r2 api", "off": "res ok no", "path": [[206, 90], [334, 90]], "text": "<b>The attack.</b> The attacker writes a token with <code>alg: HS256</code> and <code>role: admin</code>, and signs it with HMAC using the public key's text as the secret. They can: they have it."},
+          {"on": "api res ok", "bad": "api ok", "off": "r1 r2 no", "text": "<b>The flaw.</b> A weak library reads <code>alg</code> from the token, sees HS256, and verifies an HMAC with <em>the configured key</em>. That key is the public key. The signature matches. The attacker is admin."},
+          {"on": "api res no", "good": "api no", "off": "r1 r2 ok", "text": "<b>The fix.</b> The verifier is told <em>RS256 only</em> and each key is bound to its algorithm. The HS256 token is rejected before any signature is computed."}
+        ]</script>
+      </figure>
+
+      <h3>The labs</h3>
+      <p>Each lab is a small API with one flaw, and a token you hold. Your job: get it to accept a token that says <code>"role": "admin"</code>. Then apply the fix and see the same token fail. You can build the token in the lab, or in the JWT workbench from step 09. <b>Show answer</b> performs the attack for you.</p>
+      <div data-ex="j10-none"></div>
+      <div data-ex="j10-confusion"></div>
+      <div data-ex="j10-weak"></div>
+      <div data-ex="j10-noverify"></div>
+      <div data-ex="j10-noaud"></div>
+      <div data-ex="j10-noexp"></div>
+
+      <h3>Other ways it goes wrong</h3>
+      <ul>
+        <li><b><code>kid</code> and <code>jku</code> as injection.</b> The <code>kid</code> header is used to look up a key. If it goes straight into a database or file path query, it is an injection. Blindly following a <code>jku</code> or <code>x5u</code> URL in the header could enable server-side request forgery. Only fetch keys from addresses you configured (RFC 8725, 3.10).</li>
+        <li><b>ID token as access token.</b> An ID token is for the app that signed the user in, not for APIs. Use <code>typ</code> and audience checks so one kind cannot stand in for the other (3.11 and 3.12).</li>
+        <li><b>Secrets in the payload.</b> It is readable by anyone who holds it.</li>
+        <li><b>Tokens in URLs, logs and browser storage.</b> Anywhere a token is written, it can be read. Keep them in memory or, for a browser, behind the BFF of step 22.</li>
+        <li><b>Long or no expiry.</b> A JWT cannot be recalled. Keep access tokens to minutes, and use refresh tokens (step 13) to renew.</li>
+      </ul>
+
+      <h3>Practice</h3>
+      <div data-ex="j10-checks"></div>
+      <div data-ex="j10-config"></div>
+
+      <div class="callout"><p><strong>About these labs.</strong> The API here is a simulation written for this lesson that behaves the way RFC 8725 describes each flaw. It is not a real library, and whether a given library is exposed to a flaw like these depends on its version and how it is configured. What carries over is the habit: pass an allow-list, verify before you read, check every claim you rely on.</p></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A validator checks, in order: format, algorithm allow-list, signature, issuer, audience, expiry, type. Any failure rejects.</li>
+        <li>The token must never choose the algorithm. <code>none</code> and key confusion are what happens when it does.</li>
+        <li>Decode is not verify. A secret that can be guessed is not a secret. A token for another audience is not for you.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>

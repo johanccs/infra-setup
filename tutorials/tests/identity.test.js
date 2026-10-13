@@ -114,6 +114,7 @@ async function browserTests() {
       await pg.context().close();
     }
     await toolsInBrowser(browser, base);
+    await attacksInBrowser(browser, base);
     // dark mode: text must stay readable (contrast of body text against the page background)
     const dark = await (await browser.newContext({ colorScheme: 'dark' })).newPage();
     await dark.goto(base); await dark.waitForTimeout(300);
@@ -130,6 +131,42 @@ async function browserTests() {
     check(menu.groups >= 2 && menu.rows >= 9, `the Tutorials menu is grouped (${menu.groups} groups, ${menu.rows} rows)`);
     check(menu.scrolls && menu.fits, 'in a short window the Tutorials menu stays on screen and scrolls');
   } finally { if (browser) await browser.close(); srv.kill(); }
+}
+
+// the attack labs in a real browser: do one by hand, and let Show answer do another
+async function attacksInBrowser(browser, base) {
+  const pg = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
+  const errs = []; pg.on('pageerror', (e) => errs.push(String(e))); pg.on('console', (m) => { if (m.type() === 'error' && !/fonts\./.test(m.text())) errs.push(m.text()); });
+  await pg.goto(base); await pg.waitForSelector('#rail-list li');
+  await pg.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('ia-')) localStorage.removeItem(k); });
+  await pg.reload(); await pg.waitForSelector('#rail-list li');
+  const lab = pg.locator('[data-ex="j10-none"]');
+  await lab.scrollIntoViewIfNeeded();
+  await pg.waitForFunction(() => (document.querySelector('[data-ex="j10-none"] .atk-held') || {}).value, null, { timeout: 15000 });
+  // by hand: alg none, role admin, no signature
+  const payload = JSON.parse(await lab.locator('.atk-p').inputValue()); payload.role = 'admin';
+  await lab.locator('.atk-h').fill('{"alg":"none","typ":"JWT"}');
+  await lab.locator('.atk-p').fill(JSON.stringify(payload));
+  await lab.locator('.atk-mode').selectOption('none');
+  await lab.getByRole('button', { name: 'Build the token' }).click();
+  await lab.getByRole('button', { name: 'Send to the API' }).click();
+  await pg.waitForFunction(() => /The attack worked/.test(document.querySelector('[data-ex="j10-none"] .atk-out').textContent), null, { timeout: 8000 });
+  check(true, 'attack lab: a token with alg none and role admin is accepted by the flawed API');
+  check(await lab.getByRole('button', { name: /Apply the fix/ }).isEnabled(), 'attack lab: the fix button opens once the attack has worked');
+  await lab.getByRole('button', { name: /Apply the fix/ }).click();
+  await pg.waitForFunction(() => /The same token no longer works/.test(document.querySelector('[data-ex="j10-none"] .atk-out').textContent), null, { timeout: 8000 });
+  await pg.waitForFunction(() => document.querySelector('[data-ex="j10-none"]').classList.contains('ok'), null, { timeout: 8000 });
+  check(true, 'attack lab: after the fix the same token is refused, and the exercise passes');
+  // Show answer for the others
+  for (const id of ['j10-confusion', 'j10-weak', 'j10-noverify', 'j10-noaud', 'j10-noexp']) {
+    const l = pg.locator(`[data-ex="${id}"]`); await l.scrollIntoViewIfNeeded();
+    await pg.waitForFunction((i) => (document.querySelector(`[data-ex="${i}"] .atk-held`) || {}).value, id, { timeout: 15000 });
+    await l.locator(':scope > .lab-bar').getByRole('button', { name: 'Show answer' }).click();
+    const ok = await pg.waitForFunction((i) => document.querySelector(`[data-ex="${i}"]`).classList.contains('ok'), id, { timeout: 15000 }).then(() => true, () => false);
+    check(ok, `attack lab ${id}: Show answer performs the attack and the fix, and the exercise passes`);
+  }
+  check(errs.length === 0, 'no console errors while using the attack labs', errs.join(' | '));
+  await pg.context().close();
 }
 
 // Step through every frame of every diagram: each text must sit inside its own box and not overlap another text.
@@ -451,6 +488,51 @@ app.Run();
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---- the attack labs are solvable, and the fix really stops each attack
+async function attackTests() {
+  const A = require(path.join(LAB, 'attacklab.js')), C = require(path.join(LAB, 'crypto.js'));
+  const env = await A.setup();
+  const bad = [];
+  for (const id of A.ORDER) {
+    const held = env.tokens[id];
+    // the token you hold is a normal user's: accepted, but not as admin (except the two labs that start from an admin token)
+    const asHeld = await A.validate(id, env, held, false);
+    const startsAdmin = ['no-audience', 'no-expiry'].includes(id);
+    if (!startsAdmin && (!asHeld.accepted || asHeld.admin)) bad.push(`${id}: the held token should be accepted as a plain user, got accepted=${asHeld.accepted} admin=${asHeld.admin}`);
+    // the forged token works on the flawed API, and not on the fixed one
+    const forged = await A.forge(id, env);
+    const flawed = await A.validate(id, env, forged, false), fixed = await A.validate(id, env, forged, true);
+    if (!flawed.admin) bad.push(`${id}: the forgery does not work on the flawed API: ${flawed.steps.join(' | ')}`);
+    if (fixed.accepted) bad.push(`${id}: the fixed API still accepts the forgery`);
+    // the fixed API still accepts an honest token (for the labs where the honest token is for this API and not expired)
+    if (!startsAdmin && id !== 'weak-secret') { const ok = await A.validate(id, env, held, true); if (!ok.accepted) bad.push(`${id}: the fixed API rejects an honest token: ${ok.steps.join(' | ')}`); }
+    // a token with no changes made, signature garbage, is refused by the fixed API
+    const garbled = held.slice(0, -4) + (held.endsWith('AAAA') ? 'BBBB' : 'AAAA');
+    if (id !== 'no-verify' && (await A.validate(id, env, garbled, true)).accepted) bad.push(`${id}: a token with a damaged signature was accepted by the fixed API`);
+  }
+  check(bad.length === 0, `all ${A.ORDER.length} attack labs: the forgery works on the flawed API and fails on the fixed one, and honest tokens still pass the fix`, bad.join('\n'));
+  // the engine kind
+  const E = require(path.join(LAB, 'engine.js'));
+  const ex = { kind: 'attack', lab: 'alg-none' };
+  check(E.judge(ex, E.solution(ex)).ok && !E.judge(ex, E.wrongAnswer(ex)).ok && !E.judge(ex, { worked: true }).ok, 'attack exercises need both the attack and the fix');
+  // the header the lesson shows is the base64url of the JSON it claims
+  check(C.b64uEnc(C.utf8('{"alg":"HS256","typ":"JWT"}')) === 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9', 'the base64url header the lesson prints is right');
+}
+
+// facts an exercise states about a token are true of the token
+function factTests() {
+  const C = require(path.join(LAB, 'crypto.js'));
+  const reg = loadExercises().exercises, bad = [];
+  let n = 0;
+  for (const [id, ex] of Object.entries(reg)) for (const f of ex.facts || []) {
+    n++;
+    const p = C.parse(f.token);
+    const val = f.path === 'lifetime' ? p.payload.exp - p.payload.iat : f.path.split('.').reduce((o, k) => (o ? o[k] : undefined), p);
+    if (val !== f.equals) bad.push(`${id}: ${f.path} is ${JSON.stringify(val)}, the exercise says ${JSON.stringify(f.equals)}`);
+  }
+  check(n > 0 && bad.length === 0, `the ${n} facts exercises state about tokens are true of the tokens`, bad.join('\n'));
+}
+
 // ---- the certificate reader agrees with OpenSSL on certificates OpenSSL made
 async function certTests() {
   const X = require(path.join(LAB, 'x509.js'));
@@ -648,6 +730,8 @@ async function main() {
   engineTests();
   drillJudgeTests();
   await cryptoTests();
+  await attackTests();
+  factTests();
   await drillRunTests(typeof html === 'string' ? html : read(PAGE));
   manifestTests(typeof html === 'string' ? html : read(PAGE));
   await kestrelTests(typeof html === 'string' ? html : read(PAGE));

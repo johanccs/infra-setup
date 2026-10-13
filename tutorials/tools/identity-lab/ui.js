@@ -77,6 +77,68 @@
         show: function (res) { rows.forEach(function (x, i) { var it = res.items[i]; x.r.classList.remove('good', 'bad'); if (!it || x.sel.value === '') { x.why.hidden = true; return; } x.r.classList.add(it.ok ? 'good' : 'bad'); x.why.hidden = !it.why; x.why.innerHTML = it.why || ''; }); },
       };
     },
+
+    attack: function (ex, box, id) {
+      var A = window.IAAttack, state = { worked: false, fixedRejected: false }, env = null, lab = A.LABS[ex.lab];
+      var wrap = el('div', 'atk'); box.appendChild(wrap);
+      wrap.innerHTML = '<p>' + lab.story + '</p><p class="tool-note">Loading the lab…</p>';
+      var parts = {};
+      function ready(e) {
+        env = e; var held = env.tokens[ex.lab], p = C.parse(held);
+        var extra = '';
+        if (ex.lab === 'alg-confusion') extra = '<label class="pg-l">The API\'s public key (anyone can have it)</label><pre class="ex-art">' + esc(env.rsa.pem) + '</pre>';
+        if (ex.lab === 'weak-secret') extra = '<label class="pg-l">Words worth trying</label><p><code>' + env.wordlist.map(esc).join('</code> <code>') + '</code></p>';
+        wrap.innerHTML = '<p>' + lab.story + '</p><label class="pg-l">The token you hold</label><textarea class="cmd-in mono atk-held" rows="4" readonly aria-label="The token you hold"></textarea>' + extra +
+          '<p class="tool-note"><b>Goal:</b> get the API to accept a token that says <code>"role": "admin"</code>. Build it below (or open the JWT workbench), then send it.</p>' +
+          '<label class="pg-l">Header</label><textarea class="cmd-in mono atk-h" rows="3" spellcheck="false" aria-label="Header"></textarea>' +
+          '<label class="pg-l">Payload</label><textarea class="cmd-in mono atk-p" rows="6" spellcheck="false" aria-label="Payload"></textarea>' +
+          '<label class="pg-l">Signature</label><select class="atk-mode" aria-label="Signature"><option value="keep">Keep the original signature</option><option value="none">No signature (empty)</option><option value="hmac">HMAC with this secret →</option></select> <input class="cmd-in mono atk-sec" placeholder="secret text" aria-label="HMAC secret" style="display:inline-block;width:16em">' +
+          '<div class="lab-bar"><button type="button" class="copy atk-build">Build the token</button></div>' +
+          '<label class="pg-l">The token to send</label><textarea class="cmd-in mono atk-tok" rows="4" spellcheck="false" aria-label="Token to send"></textarea>' +
+          '<div class="lab-bar"><button type="button" class="copy atk-send">Send to the API</button><button type="button" class="copy atk-fix" disabled>Apply the fix, and send it again</button></div><div class="atk-out" aria-live="polite"></div>';
+        $('.atk-held', wrap).value = held; $('.atk-h', wrap).value = JSON.stringify(p.header, null, 2); $('.atk-p', wrap).value = JSON.stringify(p.payload, null, 2);
+        $('.atk-tok', wrap).value = held;
+        $('.atk-build', wrap).addEventListener('click', build);
+        $('.atk-send', wrap).addEventListener('click', function () { send(false); });
+        $('.atk-fix', wrap).addEventListener('click', function () { send(true); });
+      }
+      var envPromise = (IA._atkEnv = IA._atkEnv || A.setup());
+      envPromise.then(ready);
+      async function build() {
+        var out = $('.atk-out', wrap);
+        try {
+          var h = JSON.parse($('.atk-h', wrap).value), pl = JSON.parse($('.atk-p', wrap).value), mode = $('.atk-mode', wrap).value;
+          var enc = function (o) { return C.b64uEnc(C.utf8(JSON.stringify(o))); }, tok;
+          if (mode === 'keep') tok = enc(h) + '.' + enc(pl) + '.' + C.parse(env.tokens[ex.lab]).parts[2];
+          else if (mode === 'none') tok = enc(h) + '.' + enc(pl) + '.';
+          else {
+            if (!/^HS(256|384|512)$/.test(h.alg)) throw new Error('HMAC signing needs alg HS256, HS384 or HS512 in the header.');
+            tok = await C.sign(h, pl, { kty: 'oct', k: C.b64uEnc(C.utf8($('.atk-sec', wrap).value)) });
+          }
+          $('.atk-tok', wrap).value = tok; out.innerHTML = '';
+        } catch (e) { out.innerHTML = '<p class="cmd-bad">' + esc(e.message) + '</p>'; }
+      }
+      async function send(fixed) {
+        var out = $('.atk-out', wrap), tok = $('.atk-tok', wrap).value.trim();
+        var r = await A.validate(ex.lab, env, tok, fixed);
+        var h = '<h4>' + (fixed ? 'After the fix' : 'What the API did') + '</h4><ul class="cmd-tok">' + r.steps.map(function (x) { return '<li><code>' + esc(x.slice(0, 1)) + '</code><span>' + esc(x.slice(2)) + '</span></li>'; }).join('') + '</ul>';
+        if (!fixed) {
+          h += '<p class="' + (r.accepted ? 'cmd-ok' : 'cmd-bad') + '">' + (r.accepted ? (r.admin ? '✓ Accepted. The API treats you as <b>' + esc(r.claims.sub) + '</b>, role <b>admin</b>. The attack worked.' : 'Accepted, but only as role ' + esc(String(r.claims.role)) + '. You need role admin.') : '✗ Rejected.') + '</p>';
+          if (r.admin) { state.worked = true; state.token = tok; $('.atk-fix', wrap).disabled = false; h += '<p class="tool-note"><b>Why it works:</b> ' + lab.flaw + '</p>'; }
+        } else {
+          state.fixedRejected = !r.accepted;
+          h += '<p class="' + (r.accepted ? 'cmd-bad' : 'cmd-ok') + '">' + (r.accepted ? '✗ Still accepted.' : '✓ Rejected. The same token no longer works.') + '</p><p class="tool-note"><b>The fix:</b> ' + lab.fix + '</p>';
+        }
+        out.innerHTML = h;
+        if (state.worked && state.fixedRejected) root_check();
+      }
+      var root_check = function () { var b = box.parentNode.querySelector(':scope > .lab-bar .copy'); if (b) b.click(); };
+      return {
+        get: function () { return state; },
+        set: async function () { if (!env) env = await envPromise; var t = await A.forge(ex.lab, env); $('.atk-tok', wrap) || ready(env); $('.atk-tok', wrap).value = t; await send(false); await send(true); },
+        show: function () {},
+      };
+    },
     inspect: function (ex, box, id) {
       var art = el('pre', 'ex-art'); art.textContent = ex.artifact; box.appendChild(art);
       var subs = ex.parts.map(function (p, i) {

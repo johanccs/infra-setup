@@ -5,6 +5,7 @@
 //   order    { kind, prompt, items: [text in the correct order] }                     answer: [indexes into items, in the order chosen]
 //   sort     { kind, prompt, groups: [names], items: [{ t, g (index of its group), why? }] }   answer: [group index per item]
 //   inspect  { kind, prompt, artifact (text), parts: [quiz, quiz, ...] }              answer: [answer per part]
+//   attack   { kind, prompt, lab (id in attacklab.js) }                               answer: { worked, fixedRejected }
 // Every exercise may have hints: [html], after: html (shown when it is passed).
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -43,6 +44,11 @@
         const ok = parts.every((p) => p.ok);
         return { ok, parts, items: [], message: ok ? 'All correct.' : `${parts.filter((p) => p.ok).length} of ${parts.length} questions are right.` };
       }
+      case 'attack': {
+        const a = answer && typeof answer === 'object' ? answer : {};
+        const ok = !!(a.worked && a.fixedRejected);
+        return { ok, items: [], message: ok ? 'The forged token got in, and the fix keeps it out.' : !a.worked ? 'Get the API to accept a token that says role: admin, then apply the fix.' : 'It worked. Now apply the fix and see the same token refused.' };
+      }
       default: throw new Error('unknown exercise kind ' + ex.kind);
     }
   }
@@ -52,6 +58,7 @@
       case 'order': return ex.items.map((_, i) => i);
       case 'sort': return ex.items.map((it) => it.g);
       case 'inspect': return ex.parts.map(solution);
+      case 'attack': return { worked: true, fixedRejected: true };
       default: throw new Error('unknown exercise kind ' + ex.kind);
     }
   }
@@ -62,6 +69,7 @@
       case 'order': { const a = ex.items.map((_, i) => i); [a[0], a[1]] = [a[1], a[0]]; return a; }
       case 'sort': return ex.items.map((it) => (it.g + 1) % ex.groups.length);
       case 'inspect': return ex.parts.map((p, i) => (i === 0 ? wrongAnswer(p) : solution(p)));
+      case 'attack': return { worked: true, fixedRejected: false };
       default: throw new Error('unknown exercise kind ' + ex.kind);
     }
   }
