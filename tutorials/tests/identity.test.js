@@ -113,6 +113,7 @@ async function browserTests() {
       if (w === 1280) await figures(pg);
       await pg.context().close();
     }
+    await toolsInBrowser(browser, base);
     // dark mode: text must stay readable (contrast of body text against the page background)
     const dark = await (await browser.newContext({ colorScheme: 'dark' })).newPage();
     await dark.goto(base); await dark.waitForTimeout(300);
@@ -302,10 +303,122 @@ async function certTests() {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// ---- the exercise engine: every kind accepts its solution, rejects a wrong answer, and says why
+function engineTests() {
+  const E = require(path.join(LAB, 'engine.js'));
+  const sample = {
+    quiz: { kind: 'quiz', prompt: 'q', options: [{ t: 'a', ok: false, why: 'no' }, { t: 'b', ok: true, why: 'yes' }, { t: 'c', ok: false }] },
+    multi: { kind: 'quiz', multi: true, prompt: 'q', options: [{ t: 'a', ok: true }, { t: 'b', ok: true }, { t: 'c', ok: false }] },
+    order: { kind: 'order', prompt: 'q', items: ['one', 'two', 'three'] },
+    sort: { kind: 'sort', prompt: 'q', groups: ['x', 'y'], items: [{ t: 'a', g: 0 }, { t: 'b', g: 1 }, { t: 'c', g: 1 }] },
+    inspect: { kind: 'inspect', prompt: 'q', artifact: 'text', parts: [{ kind: 'quiz', prompt: 'p', options: [{ t: 'a', ok: true }, { t: 'b', ok: false }] }, { kind: 'quiz', prompt: 'p', options: [{ t: 'a', ok: false }, { t: 'b', ok: true }] }] },
+  };
+  for (const [name, ex] of Object.entries(sample)) {
+    check(E.judge(ex, E.solution(ex)).ok === true, `engine: the solution of a ${name} exercise is accepted`);
+    check(E.judge(ex, E.wrongAnswer(ex)).ok === false, `engine: a wrong answer to a ${name} exercise is rejected`);
+  }
+  check(E.judge(sample.quiz, []).empty === true, 'engine: no answer is asked for, not marked wrong');
+  check(E.judge(sample.quiz, [0]).items[0].why === 'no', 'engine: each option carries its reason');
+  check(E.judge(sample.multi, [0]).ok === false && E.judge(sample.multi, [0, 1, 2]).ok === false, 'engine: a multiple-answer quiz needs exactly the right set');
+  check(E.judge(sample.order, [0, 0, 1]).ok === false, 'engine: an order answer that repeats an item is rejected');
+}
+
+// exercises and tools, in a real browser
+async function toolsInBrowser(browser, base) {
+  const pg = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
+  const errs = []; pg.on('pageerror', (e) => errs.push(String(e))); pg.on('console', (m) => { if (m.type() === 'error' && !/fonts\./.test(m.text())) errs.push(m.text()); });
+  await pg.goto(base); await pg.waitForSelector('#rail-list li');
+  // one exercise of each kind, added to step 00
+  await pg.evaluate(() => {
+    IA.exercises['t-quiz'] = { kind: 'quiz', prompt: '<p>Which status code means "I do not know who you are"?</p>', options: [{ t: '<code>403</code>', ok: false, why: 'That is "I know you, and no".' }, { t: '<code>401</code>', ok: true, why: 'Yes: no valid credentials.' }, { t: '<code>404</code>', ok: false, why: 'That is "not found".' }], hints: ['Think about who is missing.'] };
+    IA.exercises['t-order'] = { kind: 'order', prompt: '<p>Order the steps.</p>', items: ['Browser asks for the page', 'Server redirects to the login', 'User signs in', 'Server sets the cookie'] };
+    IA.exercises['t-sort'] = { kind: 'sort', prompt: '<p>Sort.</p>', groups: ['Authentication', 'Authorization'], items: [{ t: 'Check the password', g: 0 }, { t: 'Check the role', g: 1 }] };
+    const sec = document.getElementById('overview');
+    for (const id of ['t-quiz', 't-order', 't-sort']) { const d = document.createElement('div'); d.setAttribute('data-ex', id); sec.insertBefore(d, sec.querySelector('.step-foot')); IAUI.mountExercise(d); }
+    IAUI.syncTicks();
+  });
+  const ex = (id) => pg.locator(`[data-ex="${id}"]`);
+  await ex('t-quiz').locator('.ex-opt').nth(0).locator('input').check();
+  await ex('t-quiz').getByRole('button', { name: 'Check' }).click();
+  check(/Not that one/.test(await ex('t-quiz').locator('.ex-out').textContent()) && /I know you, and no/.test(await ex('t-quiz').locator('.ex-why').first().textContent()), 'exercise: a wrong choice is rejected and its reason is shown');
+  await ex('t-quiz').getByRole('button', { name: 'Hint' }).click();
+  check(/Think about/.test(await ex('t-quiz').locator('.lab-hint').textContent()), 'exercise: Hint shows a hint');
+  await ex('t-quiz').locator('.ex-opt').nth(1).locator('input').check();
+  await ex('t-quiz').getByRole('button', { name: 'Check' }).click();
+  check(/Correct/.test(await ex('t-quiz').locator('.ex-out').textContent()) && await ex('t-quiz').evaluate((n) => n.classList.contains('ok')), 'exercise: the right choice passes');
+  check(await pg.locator('#overview input[data-done]').isDisabled() && !(await pg.locator('#overview input[data-done]').isChecked()), 'the step is not ticked while an exercise in it is still open');
+  await ex('t-order').getByRole('button', { name: 'Show answer' }).click();
+  check(/Correct order/.test(await ex('t-order').locator('.ex-out').textContent()), 'exercise: Show answer fills in an order exercise correctly');
+  await ex('t-sort').locator('select').nth(0).selectOption({ index: 1 }); await ex('t-sort').locator('select').nth(1).selectOption({ index: 1 });
+  await ex('t-sort').getByRole('button', { name: 'Check' }).click();
+  check(/1 of 2 are right/.test(await ex('t-sort').locator('.ex-out').textContent()), 'exercise: a half-right sort says how many are right');
+  await ex('t-sort').getByRole('button', { name: 'Show answer' }).click();
+  check(await pg.locator('#overview input[data-done]').isChecked(), 'the step ticks itself when every exercise in it is passed');
+  const txt = await pg.textContent('#ia-progress');
+  check(/Start here\s*3 \/ 3/.test(txt), 'the progress panel counts passed exercises per level', txt);
+  await pg.reload(); await pg.waitForSelector('#rail-list li');
+  check(await pg.evaluate(() => JSON.parse(localStorage.getItem('ia-ex:t-quiz')).ok === true), 'a passed exercise is remembered in the browser');
+  await pg.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('ia-ex:')) localStorage.removeItem(k); });
+
+  // tools are mounted by data-tool; make one of each
+  await pg.evaluate(() => {
+    const sec = document.getElementById('overview');
+    for (const t of ['jwt', 'cert', 'pkce', 'totp']) { const d = document.createElement('div'); d.setAttribute('data-tool', t); d.id = 'tool-' + t; sec.insertBefore(d, sec.querySelector('.step-foot')); IAUI.mountTool(d); }
+  });
+  // JWT workbench
+  const jwt = pg.locator('#tool-jwt');
+  await jwt.getByRole('button', { name: 'Make an example token' }).click();
+  await pg.waitForTimeout(300);
+  const dec = await jwt.locator('.tool-out').textContent();
+  check(/alice/.test(dec) && /Issuer: who created and signed the token/.test(dec) && /Anyone who holds this token can read it/.test(dec), 'JWT workbench: decodes the claims, explains them and says the token is readable by anyone');
+  await pg.waitForFunction(() => /An API would accept this token/.test(document.querySelector('#tool-jwt .v-out')?.textContent || ''), null, { timeout: 5000 }).catch(() => {});
+  check(/An API would accept this token/.test(await jwt.locator('.v-out').textContent()), 'JWT workbench: the example token verifies with its secret');
+  await jwt.locator('.v-aud').fill('some-other-api');
+  await pg.waitForTimeout(300);
+  check(/would reject/.test(await jwt.locator('.v-out').textContent()) && /Audience includes this API/.test(await jwt.locator('.v-out').textContent()), 'JWT workbench: a wrong audience is rejected');
+  await jwt.locator('.v-aud').fill('todo-api');
+  await jwt.locator('.v-alg').fill('RS256'); await pg.waitForTimeout(300);
+  check(/would reject/.test(await jwt.locator('.v-out').textContent()), 'JWT workbench: an algorithm not on the allow-list is rejected');
+  await jwt.locator('.v-alg').fill('HS256');
+  await jwt.locator('.v-edit').fill('{"iss":"https://login.lab.test","sub":"mallory","aud":"todo-api"}');
+  await jwt.getByRole('button', { name: 'Sign with the key above' }).click(); await pg.waitForTimeout(400);
+  check(/mallory/.test(await jwt.locator('.tool-out').textContent()), 'JWT workbench: changing the payload and signing again gives a new token');
+  const tokVal = await jwt.locator('textarea').first().inputValue();
+  await jwt.locator('textarea').first().fill(tokVal.slice(0, -3) + (tokVal.endsWith('AAA') ? 'BBB' : 'AAA')); await pg.waitForTimeout(300);
+  await jwt.locator('.v-key').fill('lab-secret-lab-secret-lab-secret-32'); await pg.waitForTimeout(300);
+  check(/Signature is valid/.test(await jwt.locator('.v-out').textContent()) && /would reject/.test(await jwt.locator('.v-out').textContent()), 'JWT workbench: a tampered signature is caught');
+  // certificate inspector, with certificates OpenSSL made
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ia-ui-'));
+  const sh = (a) => { const r = run('openssl', a, { cwd: dir }); if (r.status !== 0) throw new Error(r.stderr); };
+  sh(['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-keyout', 'k.pem', '-out', 'c.pem', '-days', '30', '-subj', '/CN=ui.lab.test', '-addext', 'subjectAltName=DNS:ui.lab.test']);
+  const pem = fs.readFileSync(path.join(dir, 'c.pem'), 'utf8'), key = fs.readFileSync(path.join(dir, 'k.pem'), 'utf8');
+  const cert = pg.locator('#tool-cert');
+  await cert.locator('textarea').fill(pem); await pg.waitForTimeout(400);
+  const ct = await cert.locator('.tool-out').textContent();
+  check(/ui\.lab\.test/.test(ct) && /Signed by itself/.test(ct) && /days left/.test(ct) && /chain is complete/.test(ct), 'certificate inspector: shows the fields, the signature check and the verdict');
+  await cert.locator('input').fill('other.lab.test'); await pg.waitForTimeout(400);
+  check(/does not match other\.lab\.test/.test(await cert.locator('.tool-out').textContent()), 'certificate inspector: a host name that is not covered is reported');
+  await cert.locator('textarea').fill(key); await pg.waitForTimeout(300);
+  check(/Never paste a private key/.test(await cert.locator('.tool-out').textContent()), 'certificate inspector: a pasted private key is refused with a warning');
+  fs.rmSync(dir, { recursive: true, force: true });
+  // PKCE helper
+  const pk = pg.locator('#tool-pkce');
+  await pk.locator('.p-ver').fill('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'); await pg.waitForTimeout(300);
+  check(await pk.locator('.p-ch').inputValue() === 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM', 'PKCE helper: gives the RFC 7636 appendix B challenge');
+  await pk.getByRole('button', { name: 'Make a random one' }).click(); await pg.waitForTimeout(300);
+  check((await pk.locator('.p-ver').inputValue()).length === 43 && /valid code_verifier/.test(await pk.locator('.p-msg').textContent()), 'PKCE helper: a random verifier is 43 characters and valid');
+  await pk.locator('.p-txt').fill('hello?>'); check(await pk.locator('.p-enc').inputValue() === 'aGVsbG8_Pg', 'PKCE helper: base64url uses - and _ and no padding');
+  // TOTP
+  check(/^\d{3} \d{3}$/.test((await pg.locator('#tool-totp .t-code').textContent()).trim()), 'TOTP demo: shows a six digit code');
+  check(errs.length === 0, 'no console errors while using the exercises and tools', errs.join(' | '));
+  await pg.context().close();
+}
+
 async function main() {
   const html = parity();
   if (typeof html === 'string') { structure(html); diagrams(html); }
   ledger();
+  engineTests();
   await cryptoTests();
   await certTests();
   await browserTests();
