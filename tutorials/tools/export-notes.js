@@ -18,8 +18,8 @@ for (const page of pages) {
   if (!notes.length && !marks.length && !done) continue;
   out.push(`## ${page}`, '');
   if (done) out.push(`Steps ticked off: ${done}`, '');
-  if (notes.length) { out.push('### Notes', ''); for (const n of notes) out.push(`- **${n.quote}** (${when(n.upd || n.ts)}${n.upd ? ', edited' : ''})`, `  ${String(n.text).replace(/\n/g, '\n  ')}`); out.push(''); }
-  if (marks.length) { out.push('### Bookmarks', ''); for (const m of marks) out.push(`- ${m.quote} (${when(m.ts)})`); out.push(''); }
+  if (notes.length) { out.push('### Notes', ''); for (const n of notes) out.push(`- ${n.no ? '#' + n.no + ' ' : ''}**${n.quote}** (${when(n.upd || n.ts)}${n.upd ? ', edited' : ''})`, `  ${String(n.text).replace(/\n/g, '\n  ')}`); out.push(''); }
+  if (marks.length) { out.push('### Bookmarks', ''); for (const m of marks) out.push(`- ${m.no ? '#' + m.no + ' ' : ''}${m.quote} (${when(m.ts)})`); out.push(''); }
 }
 if (out.length === 2) out.push('Nothing saved yet.');
 console.log(out.join('\n'));

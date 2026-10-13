@@ -350,6 +350,7 @@ dialog.note-dlg::backdrop { background: rgba(10, 16, 22, .45); }
 .note-quote-s { flex: 1; margin: 0; font-size: 12px; color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .note-edit { font: 500 12px/1 var(--font-body); color: var(--accent); background: none; border: 0; padding: 2px 4px; cursor: pointer; }
 .note-text { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-no, .bm-no { font: 600 11.5px var(--font-mono); color: var(--muted); margin-right: 6px; font-variant-numeric: tabular-nums; }
 .note-date { margin: 6px 0 0; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .note-old { margin: 4px 0 0; font-size: 12px; color: var(--warn); }
 .notes-lines { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 12; }
@@ -1608,6 +1609,17 @@ spec:
   } catch (e) {}
   var notes = [];
   try { notes = JSON.parse(localStorage.getItem(KEY) || '[]') || []; } catch (e) { notes = []; }
+  // Every note and bookmark has a running number (1, 2, 3 ...) so the most recent one is easy to see. Entries made before
+  // numbers existed get one now, in the order they were made. A number is never changed afterwards.
+  function numberEntries(list, key) {
+    var max = 0, todo = [];
+    list.forEach(function (x) { if (typeof x.no === 'number') max = Math.max(max, x.no); else todo.push(x); });
+    if (!todo.length) return;
+    todo.sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); }).forEach(function (x) { x.no = ++max; });
+    try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) {}
+  }
+  function nextNo(list) { return list.reduce(function (m, x) { return Math.max(m, x.no || 0); }, 0) + 1; }
+  numberEntries(notes, KEY);
   function save() { try { localStorage.setItem(KEY, JSON.stringify(notes)); } catch (e) {} }
   function pref(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; }
   var $ = function (id) { return document.getElementById(id); };
@@ -1764,7 +1776,7 @@ spec:
     if (!text || !cur) return;
     if (cur.note) { cur.note.text = text; cur.note.upd = Date.now(); }
     else {
-      var n = { id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: cur.info.sec, offset: cur.info.offset, quote: cur.info.quote, text: text, ts: Date.now() };
+      var n = { no: nextNo(notes), id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: cur.info.sec, offset: cur.info.offset, quote: cur.info.quote, text: text, ts: Date.now() };
       notes.push(n); highlight(n);
       setOpen(true);
     }
@@ -1817,6 +1829,7 @@ spec:
     ordered().forEach(function (n) {
       var c = el('article', 'note-card'); c.setAttribute('data-id', n.id);
       var top = el('div', 'note-top');
+      top.appendChild(el('span', 'note-no', '#' + n.no)); top.lastChild.title = 'Note number ' + n.no + ': the higher the number, the later it was added';
       top.appendChild(el('span', 'note-step', stepLabel(n)));
       top.appendChild(el('p', 'note-quote-s', quoteText(n.quote)));
       var b = el('button', 'note-edit', 'Edit'); b.type = 'button'; b.setAttribute('aria-label', 'Edit this note');
@@ -1900,6 +1913,7 @@ spec:
   var BKEY = 'tutorial-bookmarks:' + PAGE, PKEY = 'tutorial-pos:' + PAGE;
   var marks = [], lastPos = null, ready = false, userMoved = false, saveT = 0;
   try { marks = JSON.parse(localStorage.getItem(BKEY) || '[]') || []; } catch (e) { marks = []; }
+  numberEntries(marks, BKEY);
   try { lastPos = JSON.parse(localStorage.getItem(PKEY) || 'null'); } catch (e) { lastPos = null; }
   var bmBtn = $('bm-btn'), bmList = $('bm-list'), toast = null, toastT = 0;
   function saveMarks() { try { localStorage.setItem(BKEY, JSON.stringify(marks)); } catch (e) {} }
@@ -1917,7 +1931,7 @@ spec:
   function toggleBm(p) {
     if (p.bm) { unhighlight(p.bm.id, true); marks = marks.filter(function (b) { return b !== p.bm; }); showToast('Bookmark removed.'); }
     else {
-      var b = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: p.info.sec, offset: p.info.offset, quote: p.info.quote, ts: Date.now() };
+      var b = { no: nextNo(marks), id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: p.info.sec, offset: p.info.offset, quote: p.info.quote, ts: Date.now() };
       marks.push(b); highlight(b, true);
       showToast('Bookmarked “' + (b.quote.length > 40 ? b.quote.slice(0, 40) + '…' : b.quote) + '”. Find it under Bookmarks at the top.');
     }
@@ -1952,7 +1966,7 @@ spec:
       return ia - ib || a.offset - b.offset;
     }).forEach(function (b) {
       var row = el('div', 'bm-item'); row.tabIndex = 0; row.setAttribute('role', 'menuitem');
-      var t = el('span', 't', quoteText(b.quote)); t.appendChild(el('span', 's', secName(b.sec) + ' · ' + stamp(b.ts)));
+      var t = el('span', 't', quoteText(b.quote)); t.insertBefore(el('span', 'bm-no', '#' + b.no), t.firstChild); t.appendChild(el('span', 's', secName(b.sec) + ' · ' + stamp(b.ts)));
       var x = el('button', 'bm-x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Remove this bookmark');
       row.appendChild(t); row.appendChild(x);
       row.addEventListener('click', function () { hideBm(); goBm(b); });

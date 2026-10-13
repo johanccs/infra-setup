@@ -444,6 +444,27 @@ async function rootNotesTest(browser) {
   await pg.fill('#note-text', 'written at the root'); await pg.click('#note-save'); await pg.waitForTimeout(300);
   const keys = await pg.evaluate(() => Object.keys(localStorage).filter((k) => /^tutorial-notes:/.test(k)));
   check(keys.includes('tutorial-notes:' + FILE) && !keys.includes('tutorial-notes:index'), 'a note made at / is stored under the page\'s own name, not "index"');
+  check(await pg.locator('.note-card .note-no').first().textContent() === '#1', 'the first note is numbered #1');
+  // a second note, and a bookmark, get their own running numbers
+  await pg.locator('#overview .glossary dd').nth(1).scrollIntoViewIfNeeded();
+  await pg.locator('#overview .glossary dd').nth(1).click({ button: 'right' });
+  await pg.waitForSelector('#note-menu:not([hidden])', { timeout: 3000 });
+  await pg.click('#note-menu-note'); await pg.waitForSelector('#note-dlg[open]');
+  await pg.fill('#note-text', 'the second one'); await pg.click('#note-save'); await pg.waitForTimeout(300);
+  const nums = (await pg.locator('.note-card .note-no').allTextContents()).sort();
+  check(nums.join() === '#1,#2', `notes are numbered 1, 2 (${nums.join()})`);
+  await pg.locator('#overview .glossary dd').nth(2).scrollIntoViewIfNeeded();
+  await pg.locator('#overview .glossary dd').nth(2).click({ button: 'right' });
+  await pg.waitForSelector('#note-menu:not([hidden])', { timeout: 3000 });
+  await pg.click('#note-menu-bm'); await pg.waitForTimeout(200);
+  await pg.click('#bm-btn');
+  check(/#1/.test(await pg.locator('#bm-list .bm-no').first().textContent()), 'a bookmark shows its number in the list');
+  await pg.keyboard.press('Escape'); await pg.mouse.click(5, 5);
+  // entries saved before numbers existed are numbered in the order they were made
+  await pg.evaluate((f) => { const k = 'tutorial-notes:' + f; const a = JSON.parse(localStorage.getItem(k)); a.forEach((n) => { delete n.no; }); a[0].ts = 5; a[1].ts = 9; localStorage.setItem(k, JSON.stringify(a)); }, FILE);
+  await pg.reload(); await pg.waitForSelector('#rail-list li');
+  const re = await pg.evaluate((f) => JSON.parse(localStorage.getItem('tutorial-notes:' + f)).sort((a, b) => a.ts - b.ts).map((n) => n.no).join(), FILE);
+  check(re === '1,2', 'notes saved before numbers existed are numbered in the order they were made');
   await pg.goto(`${BASE}/${FILE}`); await pg.waitForSelector('#rail-list li');
   check(await pg.locator('.note-card', { hasText: 'written at the root' }).count() === 1, 'the same note is there when the page is opened by file name');
   // an older copy under "index" is moved across on the next visit
