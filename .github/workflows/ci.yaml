@@ -26,4 +26,30 @@ jobs:
           echo "REGISTRY=docker.io/${DOCKERHUB_USERNAME,,}" >> "$GITHUB_ENV"
           echo "TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
       
+      - name: Build the images
+        run: |
+          docker build -t "$REGISTRY/todo-api:$TAG" ./src/api
+          docker build -t "$REGISTRY/todo-ui:$TAG" ./src/ui
+      
+      - name: Log in to Docker Hub"
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+      - name: Push the images
+        run: | 
+          docker push "$REGISTRY/todo-api:$TAG"
+          docker push "$REGISTRY/todo-ui:$TAG"
+
+      - name: Put the new tag in the Helm Chart
+        run: | 
+          sed -i "s/^tag: .*/tag: \"$TAG\"/" charts/todo/values.yaml
+          if git diff --quiet; then echo "Tag already up to date"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Deploy $TAG"
+          git pull --rebase 
+          git push  
+
+      
       

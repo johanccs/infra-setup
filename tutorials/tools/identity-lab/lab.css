@@ -85,3 +85,8 @@ code.wrap { display: block; overflow-wrap: anywhere; white-space: normal; paddin
 .rbac tr.sent td:nth-child(2), tr.ok td:first-child { color: var(--ok); font-weight: 600; } .rbac tr.blocked td:nth-child(2), tr.bad td:first-child { color: var(--warn); font-weight: 600; }
 .scn-fix { margin-top: 10px; padding: 10px 12px; border-left: 4px solid var(--ok); background: var(--bg); border-radius: 6px; }
 pre.code-cs { font: 12.5px/1.5 var(--font-mono); white-space: pre; overflow-x: auto; }
+
+/* passkey demo */
+.passkey .pk-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.passkey .pk-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 4px; }
+.passkey .pk-list li { padding: 6px 10px; border-radius: 6px; background: var(--surface-2, rgba(127,127,127,.08)); overflow-wrap: anywhere; }

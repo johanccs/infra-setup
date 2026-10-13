@@ -693,7 +693,74 @@
     renderGrid(); decide();
   }
 
-  var TOOLS = { rbac: toolRbac, flow: toolFlow, grant: toolGrant, google: toolGoogle, jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp, cookie: toolCookie, crypto: toolCrypto };
+
+  // A passkey made and used for this page: WebAuthn registration and sign-in, with the parts a server checks shown and checked.
+  function toolPasskey(root) {
+    root.innerHTML = '';
+    var q = el('div', 'tool passkey');
+    q.innerHTML = '<p>This creates a real passkey for <code class="pk-rp"></code> with your device or browser, then signs in with it. Nothing leaves this page: there is no server, so the page plays the part of the server and checks every field.</p>' +
+      '<div class="pk-btns"><button type="button" class="copy pk-reg">1. Create a passkey</button> <button type="button" class="copy pk-get" disabled>2. Sign in with it</button></div>' +
+      '<label class="pg-l">Origin the server expects (change it to see what a phishing site gets)</label><input class="cmd-in mono pk-origin" aria-label="Expected origin"><div class="pk-out" aria-live="polite"></div>';
+    root.appendChild(q);
+    var out = $('.pk-out', q), reg = $('.pk-reg', q), get = $('.pk-get', q), origin = $('.pk-origin', q);
+    var rpId = location.hostname; $('.pk-rp', q).textContent = rpId || '(no host name: serve the page over http://localhost)';
+    origin.value = location.origin;
+    var cred = null, pub = null, alg = 0, userId = C.random(16);
+    function row(ok, text) { return '<li class="' + (ok ? 'cmd-ok' : 'cmd-bad') + '">' + (ok ? '✓ ' : '✗ ') + text + '</li>'; }
+    function flags(b) { var f = []; if (b & 1) f.push('user present'); if (b & 4) f.push('user verified'); if (b & 8) f.push('backup eligible (synced)'); if (b & 16) f.push('backed up'); if (b & 64) f.push('attested credential data'); return f.join(', ') || 'none'; }
+    // an ECDSA signature in a WebAuthn assertion is DER; Web Crypto wants r || s
+    function derToRaw(sig, n) {
+      var o = 2; if (sig[1] & 0x80) o += sig[1] & 0x7f;
+      var rl = sig[o + 1], r = sig.slice(o + 2, o + 2 + rl); o += 2 + rl;
+      var sl = sig[o + 1], sv = sig.slice(o + 2, o + 2 + sl);
+      function fit(x) { while (x.length > n && x[0] === 0) x = x.slice(1); var z = new Uint8Array(n); z.set(x, n - x.length); return z; }
+      return C.concat(fit(r), fit(sv));
+    }
+    function eq(a, b) { if (a.length !== b.length) return false; for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; }
+    function fail(e) { out.innerHTML = '<p class="cmd-bad">' + esc(e && e.name === 'NotAllowedError' ? 'The browser or the device said no (cancelled, timed out, or nothing available).' : String(e && e.message || e)) + '</p>'; }
+    function usable() { return window.PublicKeyCredential && navigator.credentials && window.isSecureContext && rpId; }
+    if (!usable()) { out.innerHTML = '<p class="cmd-bad">Passkeys need a secure page with a host name. Open this tutorial through <code>http://localhost:8788</code> (or HTTPS), not as a file.</p>'; reg.disabled = true; }
+    reg.addEventListener('click', async function () {
+      try {
+        var challenge = C.random(32);
+        var c = await navigator.credentials.create({ publicKey: { rp: { id: rpId, name: 'Identity lab (practice)' }, user: { id: userId, name: 'alice@example.test', displayName: 'Alice' }, challenge: challenge, pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }], authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' }, attestation: 'none', timeout: 60000 } });
+        var r = c.response, cd = JSON.parse(C.fromUtf8(new Uint8Array(r.clientDataJSON))), ad = new Uint8Array(r.getAuthenticatorData());
+        var rpHash = new Uint8Array(await C.sha('SHA-256', rpId));
+        alg = r.getPublicKeyAlgorithm();
+        pub = await crypto.subtle.importKey('spki', r.getPublicKey(), alg === -7 ? { name: 'ECDSA', namedCurve: 'P-256' } : { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+        cred = c;
+        out.innerHTML = '<h4>Registration, as the server checks it</h4><ul class="pk-list">' +
+          row(cd.type === 'webauthn.create', 'type is <code>' + esc(cd.type) + '</code>') +
+          row(cd.challenge === C.b64uEnc(challenge), 'the challenge is the one the server made (it stops replay)') +
+          row(cd.origin === origin.value, 'origin is <code>' + esc(cd.origin) + '</code>') +
+          row(eq(ad.slice(0, 32), rpHash), 'the RP ID hash in the authenticator data is SHA-256 of <code>' + esc(rpId) + '</code>') +
+          row(!!(ad[32] & 1), 'flags: ' + esc(flags(ad[32]))) + '</ul>' +
+          '<p>The server stores only the <b>public key</b> (' + (alg === -7 ? 'ES256, P-256' : 'RS256') + ') and the credential ID <code>' + esc(C.b64uEnc(new Uint8Array(c.rawId)).slice(0, 24)) + '…</code>. The private key stays in the authenticator and never leaves it.</p>';
+        get.disabled = false;
+      } catch (e) { fail(e); }
+    });
+    get.addEventListener('click', async function () {
+      try {
+        var challenge = C.random(32);
+        var a = await navigator.credentials.get({ publicKey: { rpId: rpId, challenge: challenge, allowCredentials: [{ type: 'public-key', id: cred.rawId }], userVerification: 'preferred', timeout: 60000 } });
+        var r = a.response, cdBytes = new Uint8Array(r.clientDataJSON), cd = JSON.parse(C.fromUtf8(cdBytes)), ad = new Uint8Array(r.authenticatorData), sig = new Uint8Array(r.signature);
+        var rpHash = new Uint8Array(await C.sha('SHA-256', rpId)), cdHash = new Uint8Array(await C.sha('SHA-256', cdBytes));
+        var signed = C.concat(ad, cdHash);
+        var good = await crypto.subtle.verify(alg === -7 ? { name: 'ECDSA', hash: 'SHA-256' } : { name: 'RSASSA-PKCS1-v1_5' }, pub, alg === -7 ? derToRaw(sig, 32) : sig, signed);
+        var count = (ad[33] << 24 | ad[34] << 16 | ad[35] << 8 | ad[36]) >>> 0;
+        out.innerHTML = '<h4>Sign-in, as the server checks it</h4><ul class="pk-list">' +
+          row(cd.type === 'webauthn.get', 'type is <code>' + esc(cd.type) + '</code>') +
+          row(cd.challenge === C.b64uEnc(challenge), 'the challenge is the fresh one the server just made') +
+          row(cd.origin === origin.value, 'origin is <code>' + esc(cd.origin) + '</code>, the server expects <code>' + esc(origin.value) + '</code>') +
+          row(eq(ad.slice(0, 32), rpHash), 'the RP ID hash matches this site') +
+          row(!!(ad[32] & 1), 'the user was present; flags: ' + esc(flags(ad[32]))) +
+          row(good, 'the signature over authenticator data and the hash of the client data verifies with the stored public key') + '</ul>' +
+          '<p>Signature counter: ' + count + (count === 0 ? ' (many passkeys keep it at 0).' : '.') + ' The browser wrote the real origin into the signed data, so a copy of this page on another host name would produce an origin the real server rejects, and the browser would not even offer this credential to a site whose host is not <code>' + esc(rpId) + '</code>.</p>';
+      } catch (e) { fail(e); }
+    });
+  }
+
+  var TOOLS = { rbac: toolRbac, flow: toolFlow, grant: toolGrant, google: toolGoogle, jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp, passkey: toolPasskey, cookie: toolCookie, crypto: toolCrypto };
   function mountTool(root) { var f = TOOLS[root.getAttribute('data-tool')]; if (f) f(root); }
 
   function init() {
