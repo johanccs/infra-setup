@@ -602,6 +602,44 @@ async function googleTests(html) {
   check(pick && (await C.verify(tok, { algorithms: ['RS256'], key: pick, issuer: claim.issuer, audience: 'x', now: 1700000000 })).ok, 'a token is verified with the key chosen by kid from a key set');
 }
 
+
+// ---- DPoP proofs: RFC 9449's own example, and the attacks a server must refuse
+async function dpopTests() {
+  const D = require(path.join(LAB, 'dpop.js')), C = require(path.join(LAB, 'crypto.js'));
+  const kp = await C.generateKeyPair('ES256');
+  const jkt = await C.thumbprint(kp.publicJwk), token = 'Kz~8mXK1EalYznwH-LC-1fBAo.4Ljp~zsPE_NeO.gxU';
+  const url = 'https://resource.example.org/protected/resource?x=1#frag', now = 1_800_000_000;
+  const mk = (o = {}) => D.makeProof({ privateJwk: kp.privateJwk, publicJwk: kp.publicJwk, htm: 'GET', htu: url, accessToken: token, iat: now, ...o });
+  const chk = (proof, o = {}) => D.checkProof(proof, { htm: 'GET', htu: url, accessToken: token, boundJkt: jkt, now, ...o });
+  let r = await chk(await mk());
+  check(r.ok, 'DPoP: a proof made for this request, this token and this key passes every check', r.checks.filter((c) => !c.ok).map((c) => c.name).join(', '));
+  check(D.htuOf(url) === 'https://resource.example.org/protected/resource', 'DPoP: htu drops the query and the fragment');
+  const names = (r2) => r2.checks.filter((c) => !c.ok).map((c) => c.name);
+  r = await chk(await mk({ htm: 'POST' })); check(!r.ok && names(r).length === 1 && /htm/.test(names(r)[0]), 'DPoP: a proof for another method is refused (htm)');
+  r = await chk(await mk({ htu: 'https://resource.example.org/other' })); check(!r.ok && names(r).length === 1 && /htu/.test(names(r)[0]), 'DPoP: a proof for another URI is refused (htu)');
+  r = await chk(await mk({ accessToken: 'another-token' })); check(!r.ok && names(r).length === 1 && /ath/.test(names(r)[0]), 'DPoP: a proof for another access token is refused (ath)');
+  r = await chk(await mk({ iat: now - 3600 })); check(!r.ok && names(r).length === 1 && /iat/.test(names(r)[0]), 'DPoP: an old proof is refused (iat)');
+  const seen = new Set(); const p1 = await mk();
+  r = await chk(p1, { seenJti: seen }); seen.add(r.parsed.payload.jti);
+  r = await chk(p1, { seenJti: seen }); check(!r.ok && names(r).length === 1 && /jti/.test(names(r)[0]), 'DPoP: a replayed proof is refused (jti)');
+  const other = await C.generateKeyPair('ES256');
+  r = await chk(await D.makeProof({ privateJwk: other.privateJwk, publicJwk: other.publicJwk, htm: 'GET', htu: url, accessToken: token, iat: now })); check(!r.ok && names(r).length === 1 && /cnf\.jkt/.test(names(r)[0]), 'DPoP: a valid proof made with another key is refused because the token is bound to a different key');
+  const [h, pl, sg] = (await mk()).split('.'); const bad = h + '.' + pl + '.' + sg.slice(0, -2) + (sg.endsWith('AA') ? 'BB' : 'AA');
+  r = await chk(bad); check(!r.ok && names(r).some((n) => /signature/.test(n)), 'DPoP: a changed proof fails the signature check');
+  const withPriv = C.b64uEnc(C.utf8(JSON.stringify({ typ: 'dpop+jwt', alg: 'ES256', jwk: kp.privateJwk }))) + '.' + pl + '.' + sg;
+  r = await chk(withPriv); check(!r.ok && names(r).some((n) => /no private part/.test(n)), 'DPoP: a header that carries a private key is refused');
+  // RFC 9449, Figure 5: the example proof in the token request
+  const rfc = '/home/user/.cache/identity-sources/rfc9449.txt';
+  if (!fs.existsSync(rfc)) return skip('RFC 9449 is not cached: its example proof was not checked');
+  const txt = fs.readFileSync(rfc, 'utf8');
+  const m = /DPoP: (eyJ[\s\S]*?)\n\n/.exec(txt.slice(txt.indexOf('Figure 5')));
+  const ex = (m ? m[1] : '').replace(/\\\s*\n\s*/g, '').replace(/\s+/g, '');
+  const ep = C.parse(ex);
+  check(!!ep.payload && ep.header.typ === 'dpop+jwt' && ep.payload.htm === 'POST' && ep.payload.htu === 'https://server.example.com/token', 'DPoP: the example in RFC 9449 section 5 parses as the lesson describes it');
+  const er = await D.checkProof(ex, { htm: 'POST', htu: 'https://server.example.com/token', now: ep.payload.iat });
+  check(er.ok, 'DPoP: the signature on the RFC 9449 example proof verifies with the key in its own header', er.checks.filter((c) => !c.ok).map((c) => c.name + ': ' + c.detail).join('; '));
+}
+
 // ---- the access control models follow the documented rules
 function authzTests() {
   const AZ = require(path.join(LAB, 'authz.js'));
@@ -966,6 +1004,7 @@ async function main() {
   if (typeof html === 'string') { structure(html); diagrams(html); exerciseTests(html); }
   cookieTests();
   authzTests();
+  await dpopTests();
   ledger();
   engineTests();
   drillJudgeTests();

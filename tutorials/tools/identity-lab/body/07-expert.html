@@ -1,0 +1,335 @@
+    <!-- ============ 25 ============ -->
+    <section class="step" id="mfa-passkeys" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">25</span><h2>Stronger sign-in: MFA and passkeys</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> rank sign-in methods by how well they resist phishing, and explain why a passkey cannot be handed to a look-alike site.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>A strong password policy still loses to a convincing fake page. This step is about the factors that go <em>on top of</em> a password, which of them can be phished, and the one that cannot. It builds on steps 01 (factors), 02 (signatures) and 03 (passwords).</p>
+      </div>
+      <div class="what-is"><h4>What is it? MFA</h4><dl><dt>What it is</dt><dd>Multi-factor authentication: proving who you are with two <em>different kinds</em> of factor: something you know (a password), something you have (a phone, a key) or something you are (a fingerprint).</dd><dt>The problem it solves</dt><dd>Passwords are guessed, reused, leaked and phished. A second, independent factor means one stolen thing is not enough.</dd><dt>Everyday comparison</dt><dd>A bank vault that needs a key <em>and</em> a code. A thief with only one is still outside.</dd><dt>What it is not</dt><dd>Not automatically phishing-resistant. A code you read from your phone and type into a page can be typed into a fake page too. Two factors that are both typed are two things to steal.</dd><dt>Where you meet it</dt><dd>Authenticator apps, SMS codes, push prompts, hardware keys. Turn it on in the identity provider (step 19), not in every app.</dd></dl></div>
+      <div class="what-is"><h4>What is it? A passkey</h4><dl><dt>What it is</dt><dd>A credential that is a <b>key pair</b> made for one site. The private key stays in your device or password manager; the site keeps the public key. Signing in is a signature over a fresh challenge (step 02), confirmed with a fingerprint, face or PIN. The standard is WebAuthn, with FIDO2 for the authenticator side.</dd><dt>The problem it solves</dt><dd>There is no secret to type, so there is none to phish, guess or leak from a server breach. The server holds only public keys.</dd><dt>Everyday comparison</dt><dd>A door that recognises your key by its shape and only opens for its own building. A copy of the building on another street does not fit it.</dd><dt>What it is not</dt><dd>Not a password you do not have to remember: nothing about it can be typed, shared or recovered by asking. And "synced" passkeys are copies of the private key in a cloud, which is a trade-off, not a flaw.</dd><dt>Where you meet it</dt><dd>"Sign in with a passkey" or "Use your fingerprint" on many sites, Keycloak 26 (WebAuthn passwordless), Windows Hello, Touch ID, security keys.</dd></dl></div>
+      <h3>Which factors can be phished?</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Method</th><th>Phishable?</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Password only</td><td>Yes</td><td>Typed into whatever page asks. Also guessable, reusable and leakable.</td></tr>
+          <tr><td>SMS or voice code</td><td>Yes, and more</td><td>Typed into a fake page, and also intercepted or redirected (SIM swap). NIST restricts the public telephone network for out-of-band codes.</td></tr>
+          <tr><td>Email code</td><td>Yes, and more</td><td>NIST SP 800-63B-4: email SHALL NOT be used for out-of-band authentication.</td></tr>
+          <tr><td>Authenticator app (TOTP)</td><td>Yes</td><td>A six digit code is typed, so a fake page can ask for it and use it within 30 seconds.</td></tr>
+          <tr><td>Push approval</td><td>Yes</td><td>"Approve?" prompts get approved by a tired person, one after another (MFA fatigue). Number matching helps; it is still a person deciding.</td></tr>
+          <tr><td>Passkey or security key (WebAuthn)</td><td><b>No</b></td><td>The browser signs for the real origin only. Nothing the person can type or approve gives away a usable credential.</td></tr>
+        </tbody>
+      </table></div>
+      <p>NIST SP 800-63B-4 defines phishing resistance as preventing "the disclosure of authentication secrets and valid authenticator outputs to an impostor verifier ... without relying on the vigilance of the claimant", and says it requires cryptographic authentication: manually entered authenticator output (OTP, out-of-band) is not phishing-resistant. Applications assessed at AAL2 must offer a phishing-resistant option.</p>
+      <h3>Codes: TOTP</h3>
+      <p>An authenticator app and the server share a secret (the base32 text in the QR code). Both compute <code>HMAC-SHA-1(secret, floor(time / 30))</code> and show six digits of it (RFC 6238, built on RFC 4226). It needs no network, which is its advantage, and it is a shared secret, which is its weakness: the server holds a secret that can be stolen.</p>
+      <div data-tool="totp"></div>
+      <h3>Passkeys: make one and use one</h3>
+      <p>The demo below makes a <b>real</b> passkey for <code>localhost</code> with your device, and signs in with it. The page plays the server and checks the same fields a real server must check. Try changing the "origin the server expects" before step 2: that is what a look-alike site would produce.</p>
+      <div data-tool="passkey"></div>
+      <details class="lbl"><summary>What the server checks in a registration and a sign-in</summary><div><dl><dt><code>clientDataJSON.type</code></dt><dd><code>webauthn.create</code> or <code>webauthn.get</code>. Stops a signature made for one ceremony being used in the other.</dd><dt><code>clientDataJSON.challenge</code></dt><dd>The one-time random value the server made. Stops replay.</dd><dt><code>clientDataJSON.origin</code></dt><dd>Written by the <em>browser</em>, not by the page. This is what defeats phishing: a fake site cannot make it say your origin.</dd><dt><code>authenticatorData.rpIdHash</code></dt><dd>SHA-256 of the relying party ID (here the host name). Ties the signature to the site.</dd><dt><code>authenticatorData.flags</code></dt><dd><b>UP</b> user present, <b>UV</b> user verified (PIN, fingerprint, face), <b>BE</b> backup eligible and <b>BS</b> backed up (a synced passkey). A server that needs verification must check UV.</dd><dt><code>signature</code></dt><dd>Over <code>authenticatorData || SHA-256(clientDataJSON)</code>, verified with the public key stored at registration.</dd><dt><code>signCount</code></dt><dd>A counter some authenticators increment; many synced passkeys keep it at 0, so a server must not treat a stuck 0 as an attack.</dd></dl></div></details>
+      <figure class="anim" aria-label="Animated diagram: a passkey sign-in, and the same attempt on a phishing site">
+        <div class="anim-stage"><svg viewBox="0 0 760 320" role="img" aria-label="The real site sends a challenge. The browser asks the authenticator to sign it for the real site address, after the user confirms with a fingerprint, face or PIN. The server checks the signature with the stored public key. On a look-alike site the browser does not offer the credential, because the site address differs, so there is nothing to give the attacker.">
+<rect class="a-zone" x="8" y="8" width="744" height="304" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 80 H300"/><path class="a-route" data-k="r2" d="M450 80 H560"/><path class="a-route" data-k="r3" d="M635 120 V180"/><path class="a-route" data-k="r4" d="M200 250 H300"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="br"><rect x="24" y="40" width="176" height="100" rx="8"/><text class="a-t" x="112" y="80">Browser</text><text class="a-s" x="112" y="100">knows the real origin</text></g>
+<g class="a-node" data-k="au"><rect x="300" y="40" width="150" height="80" rx="8"/><text class="a-t" x="375" y="70">Authenticator</text><text class="a-s" x="375" y="90">private key inside</text></g>
+<g class="a-node" data-k="srv"><rect x="560" y="40" width="176" height="80" rx="8"/><text class="a-t" x="648" y="70">example.test</text><text class="a-s" x="648" y="90">public key stored</text></g>
+<g class="a-node" data-k="sig"><rect x="500" y="180" width="236" height="70" rx="8"/><text class="a-t" x="618" y="205">Signed: challenge</text><text class="a-s" x="618" y="225">+ origin + RP ID hash</text></g>
+<g class="a-node" data-k="evil"><rect x="300" y="210" width="150" height="80" rx="8"/><text class="a-t" x="375" y="240">exampl3.test</text><text class="a-s" x="375" y="260">look-alike site</text></g>
+<text class="a-badge bad" data-k="no" x="560" y="290">no credential for this site</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "srv br r1", "off": "r2 r3 r4 au sig evil no", "path": [[560, 80], [206, 80]], "text": "<b>1. A challenge.</b> The real server sends a fresh random challenge and says which site it is: <code>example.test</code>."},
+          {"on": "br r1 au", "off": "r2 r3 r4 srv sig evil no", "path": [[206, 80], [294, 80]], "text": "<b>2. The browser asks the authenticator.</b> It passes the challenge and the site it is really on. The person confirms with a fingerprint, face or PIN."},
+          {"on": "au r2 srv sig r3", "good": "sig", "off": "r1 r4 br evil no", "path": [[456, 80], [554, 80]], "text": "<b>3. A signature for this site only.</b> The authenticator signs the challenge together with the origin and a hash of the site's ID. The server checks it with the public key it stored at registration."},
+          {"on": "br r4 evil no", "bad": "evil no", "off": "r1 r2 r3 au srv sig", "path": [[206, 250], [294, 250]], "text": "<b>4. The same attempt on a look-alike.</b> The person is lured to <code>exampl3.test</code>. The browser looks for credentials for <em>that</em> site, finds none, and offers nothing. A password, or a code typed by the person, would have been handed over."}
+        ]</script>
+      </figure>
+      <h3>Synced and device-bound</h3>
+      <p>A <b>synced</b> passkey is stored in a platform account (a password manager or the phone maker's cloud) and is available on your other devices: easy to recover, and good enough for most apps. A <b>device-bound</b> one, such as a hardware security key, never leaves the device. NIST SP 800-63B-4 allows syncable authenticators at AAL2 under its requirements, and notes that syncing "violates the non-exportability requirements of AAL3". Which one you need is a risk decision: a banking admin and a recipe site differ.</p>
+      <h3>The weak point is recovery</h3>
+      <p>The strongest sign-in is only as strong as "I lost my phone". If recovery is an email link or a call to support, an attacker uses that instead. Offer a second passkey or security key, one-time recovery codes stored offline, and treat recovery as a sign-in event that is logged, delayed and notified.</p>
+      <h3>Asking for more before something risky</h3>
+      <p>Not every action needs the strongest sign-in. <b>Step-up authentication</b> (RFC 9470) lets an API answer <code>401</code> with <code>WWW-Authenticate: Bearer error="insufficient_user_authentication"</code> and the <code>acr_values</code> or <code>max_age</code> it needs; the client sends the user back to the identity provider with those, and gets a new token. Deleting an account asks for a passkey even though a session already exists.</p>
+      <h3>Practice</h3>
+      <div data-ex="a25-rank"></div>
+      <div data-ex="a25-origin"></div>
+      <div data-ex="a25-fatigue"></div>
+      <div data-ex="a25-recovery"></div>
+      <div data-ex="a25-stepup"></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>MFA means two different kinds of factor. Typed codes, push approvals and SMS can all be phished; a passkey cannot, because the browser signs for the real origin only.</li>
+        <li>A passkey is a key pair per site: the server stores a public key and checks a signature over a fresh challenge, the origin and the RP ID hash.</li>
+        <li>Synced passkeys are convenient and acceptable at AAL2; device-bound keys are for the highest assurance. Recovery is the weak point, so design it.</li>
+        <li>Step-up lets a sensitive action ask for a stronger, fresher sign-in.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 26 ============ -->
+    <section class="step" id="hardening" data-step data-level="Expert">
+      <div class="step-head"><span class="num">26</span><h2>Hardening</h2><span class="lvl-chip">Expert</span></div>
+      <p class="goal"><b>Goal:</b> explain how a stolen token is made useless, and plan a signing-key rotation.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>A bearer token works for whoever holds it. Everything in this step is about making the token, the code and the client harder to steal or misuse. It builds on steps 09 to 14, 20 and 22.</p>
+      </div>
+      <div class="what-is"><h4>What is it? Sender-constrained tokens (DPoP)</h4><dl><dt>What it is</dt><dd>Demonstrating Proof of Possession (RFC 9449). The client holds a key pair. The access token is <b>bound</b> to the public key (<code>cnf.jkt</code>, the thumbprint). Every request carries the token <em>and</em> a short proof, a JWT signed with the private key that names the method, the URL and a hash of the token.</dd><dt>The problem it solves</dt><dd>A leaked bearer token (a log, a proxy, a browser extension) works from anywhere. A bound token is useless without the key.</dd><dt>Everyday comparison</dt><dd>A ticket with your photo and a signature you have to repeat at the gate, instead of a ticket anyone can hand in.</dd><dt>What it is not</dt><dd>Not encryption, and not a substitute for keeping scripts out of the page: code running in the client context can still <em>use</em> the key while it is there. Mutual TLS (step 08, RFC 8705) is the same idea at the transport layer.</dd><dt>Where you meet it</dt><dd>Keycloak (DPoP is supported by the token endpoint), banking and open-data APIs under FAPI 2.0.</dd></dl></div>
+      <div data-tool="dpop"></div>
+      <p>The tool uses the same code the test suite checks against the example proof in RFC 9449. Make a proof for <code>GET /api/todos</code>, then change what the server receives: another method, another URL, another token, another key, or send it twice. Each is refused for a different reason.</p>
+      <figure class="anim" aria-label="Animated diagram: a DPoP proof and a stolen token">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="The client sends its access token with a fresh proof signed by its private key. The resource server checks the proof against the key the token is bound to. A thief who copied the token has no private key, so the proof they make is signed with another key and is refused.">
+<rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+<path class="a-route" data-k="r1" d="M200 70 H320"/><path class="a-route" data-k="r2" d="M200 220 H320"/>
+<g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+<g class="a-node" data-k="cl"><rect x="24" y="36" width="176" height="70" rx="8"/><text class="a-t" x="112" y="61">Client</text><text class="a-s" x="112" y="81">token + proof</text></g>
+<g class="a-node" data-k="th"><rect x="24" y="186" width="176" height="70" rx="8"/><text class="a-t" x="112" y="211">Thief</text><text class="a-s" x="112" y="231">token only</text></g>
+<g class="a-node" data-k="rs"><rect x="320" y="36" width="200" height="220" rx="8"/><text class="a-t" x="420" y="126">Resource server</text><text class="a-s" x="420" y="146">token bound to key A</text><text class="a-s" x="420" y="164">proof must match</text></g>
+<text class="a-badge good" data-k="ok" x="640" y="76">accepted: signed by key A</text><text class="a-badge bad" data-k="no" x="640" y="226">refused: signed by key B</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "cl r1 rs", "off": "r2 th ok no", "path": [[206, 70], [314, 70]], "text": "<b>The client.</b> Each request carries the access token and a <b>new</b> proof: a small JWT signed with the client's private key, naming the method, the URL and a hash of the token."},
+          {"on": "rs ok", "good": "rs ok", "off": "r1 r2 cl th no", "text": "<b>The server checks.</b> The proof's key is the one the token is bound to (<code>cnf.jkt</code>), and the method, URL, token hash and time all match."},
+          {"on": "th r2 rs no", "bad": "no", "off": "r1 cl ok", "path": [[206, 220], [314, 220]], "text": "<b>A stolen token.</b> The thief copied the token from a log or a proxy. Without the private key they cannot make a proof the server accepts: any proof they sign uses another key."}
+        ]</script>
+      </figure>
+      <h3>The other layers</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Layer</th><th>What it stops</th><th>Reference</th></tr></thead>
+        <tbody>
+          <tr><td><b>Pushed authorization requests (PAR)</b></td><td>The authorize request travels over the back channel; the browser only carries a <code>request_uri</code>. Parameters cannot be tampered with or leaked in the address bar.</td><td>RFC 9126</td></tr>
+          <tr><td><b><code>iss</code> in the authorization response</b></td><td>A client that talks to several servers being tricked into sending a code to the wrong one (mix-up).</td><td>RFC 9207</td></tr>
+          <tr><td><b>Resource indicators</b></td><td>A token for one API being replayed at another: the client names the target, the token's audience is narrowed to it.</td><td>RFC 8707</td></tr>
+          <tr><td><b>Refresh token rotation and reuse detection</b></td><td>A stolen refresh token: each use returns a new one, and presenting an old one revokes the family.</td><td>RFC 9700 section 4.14</td></tr>
+          <tr><td><b>Short access-token lifetimes</b></td><td>How long a stolen token or an out-of-date role works.</td><td>Step 21</td></tr>
+          <tr><td><b>Private-key client authentication</b></td><td>A leaked client secret.</td><td>RFC 7523, step 24</td></tr>
+          <tr><td><b>Protected resource metadata</b></td><td>Clients not knowing which authorization server a resource trusts.</td><td>RFC 9728</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Rotating a signing key</h3>
+      <p>Step 09 covered the idea; here is the full sequence with the reason for each step, because getting it wrong logs everybody out or leaves a leaked key trusted.</p>
+      <ol>
+        <li><b>Add</b> the new key to the key set, passive: published, not yet used to sign. Verifiers' caches pick it up (the handler refetches when it sees an unknown <code>kid</code>).</li>
+        <li><b>Switch</b> signing to the new key. New tokens carry the new <code>kid</code>.</li>
+        <li><b>Wait</b> for the longest-lived token signed with the old key to expire, plus the cache time of verifiers.</li>
+        <li><b>Remove</b> the old key from the key set.</li>
+      </ol>
+      <p>After a <em>leak</em> you skip the waiting: remove the old key at once and accept that the tokens it signed stop working. That is why short lifetimes matter.</p>
+      <h3>What OAuth 2.1 changes</h3>
+      <p>OAuth 2.1 is still an Internet-Draft (revision 16, September 2026, expiring 7 March 2027), so treat it as a direction, not a standard. Its own non-normative list of changes from OAuth 2.0:</p>
+      <ul>
+        <li>The code flow requires PKCE parameters by default.</li>
+        <li>Redirect URIs are compared by exact string matching.</li>
+        <li>The implicit grant and the password grant are gone.</li>
+        <li>Bearer tokens may not be sent in the query string.</li>
+        <li>Refresh tokens for public clients must be sender-constrained or one-time use.</li>
+        <li><code>redirect_uri</code> is no longer sent in the token request, and the PKCE <code>plain</code> method is removed.</li>
+        <li>Authorization servers must support client credentials in the request body.</li>
+      </ul>
+      <p>Almost all of it is already the advice of RFC 9700, which you have followed since step 12.</p>
+      <div class="callout"><p><strong>FAPI 2.0.</strong> The OpenID Foundation's FAPI 2.0 Security Profile (final, 22 February 2025) is a profile of OAuth for high-value APIs. It combines exactly the parts above: PKCE, pushed authorization requests, sender-constrained tokens (DPoP or mutual TLS) and a short list of allowed algorithms. If you need to say "as secure as the banks", this is what you point at.</p></div>
+      <h3>Practice</h3>
+      <div data-ex="a26-layers"></div>
+      <div data-ex="a26-dpop"></div>
+      <div data-ex="a26-refresh"></div>
+      <div data-ex="a26-rotate"></div>
+      <div data-ex="a26-oauth21"></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A bearer token works for whoever holds it. DPoP binds it to a key, so a copied token without the key is refused.</li>
+        <li>PAR, <code>iss</code>, resource indicators, refresh rotation, short lifetimes and private-key client authentication each close a specific, named gap.</li>
+        <li>Rotate a signing key in four steps (add, switch, wait, remove), and skip the wait only after a leak.</li>
+        <li>OAuth 2.1 is a draft that gathers the advice of RFC 9700. FAPI 2.0 is the final profile for high-value APIs.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 27 ============ -->
+    <section class="step" id="commands" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">27</span><h2>Commands you should know by heart</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> recall the commands of this module without looking them up.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Drills collected from earlier steps. The command judge checks the words and the flags; the real tools reject the same mistakes. Most of these were also run for real by the test suite.</p>
+      </div>
+      <h3>TLS and certificates</h3>
+      <div data-cmd="t4-curlv"></div>
+      <div data-cmd="t4-tls13"></div>
+      <div data-cmd="t4-sclient"></div>
+      <div data-cmd="t5-text"></div>
+      <div data-cmd="t5-verify"></div>
+      <div data-cmd="t6-rootkey"></div>
+      <div data-cmd="t6-csr"></div>
+      <div data-cmd="t6-sign"></div>
+      <div data-cmd="t7-checkend"></div>
+      <div data-cmd="t8-curl"></div>
+      <h3>Tokens and OAuth</h3>
+      <div data-cmd="o12-token"></div>
+      <div data-cmd="o13-cc"></div>
+      <div data-cmd="o13-refresh"></div>
+      <div data-cmd="a19-discovery"></div>
+      <div data-cmd="a19-jwks"></div>
+      <div data-cmd="a19-gettoken"></div>
+      <div data-cmd="a24-token"></div>
+      <h3>Kubernetes access</h3>
+      <div data-cmd="a18-list"></div>
+      <div data-cmd="a18-create"></div>
+      <h3>Decoding a JWT in the shell</h3>
+      <p>No drill is needed for this one, only the habit. Reading a token is base64url decoding; it does not check anything, which is why it is safe to teach and dangerous to trust.</p>
+      <figure class="code"><figcaption>bash: read the payload of a token</figcaption><pre><code># the payload is the second part; base64url needs '=' padding added back
+echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+' | base64 -d 2&gt;/dev/null | jq .
+# compare the issuer and audience with what your API expects
+echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+' | base64 -d 2&gt;/dev/null | jq '{iss, aud, exp, roles}'</code></pre></figure>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>The same dozen commands cover TLS, certificates, tokens, discovery and Kubernetes access.</li>
+        <li>Reading a token is not validating it.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 28 ============ -->
+    <section class="step" id="capstone" data-step data-level="Expert">
+      <div class="step-head"><span class="num">28</span><h2>Capstone: review a login system and find every flaw</h2><span class="lvl-chip">Expert</span></div>
+      <p class="goal"><b>Goal:</b> review a whole sign-in design the way a security reviewer would, and name the fix for each flaw.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Nothing new is taught here. One fictional app, <b>Notely</b>, is described the way a design review shows it: some of its settings, a request or two, and a rule about who may do what. Every flaw is one that an earlier step taught. Each one links back to its lesson in the answer.</p>
+      </div>
+      <h3>The system</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Part</th><th>What Notely does</th></tr></thead>
+        <tbody>
+          <tr><td>Web app</td><td>Single-page app that keeps the access token and the refresh token in <code>localStorage</code>.</td></tr>
+          <tr><td>Sign-in</td><td>Authorization code flow. Redirect URI is registered as <code>https://notely.example/*</code>. No PKCE. <code>state</code> is the fixed value <code>"xyz"</code>.</td></tr>
+          <tr><td>ID token</td><td>The app reads <code>email</code> from the ID token to decide which account it is, without checking <code>nonce</code>.</td></tr>
+          <tr><td>API validation</td><td>Accepts any <code>alg</code> the token header names, does not check <code>aud</code>, and uses a five-minute clock skew. Access tokens live 24 hours.</td></tr>
+          <tr><td>Cookie</td><td><code>Set-Cookie: sid=...; Path=/; Domain=notely.example</code> for the marketing site and the app.</td></tr>
+          <tr><td>Notes API</td><td><code>GET /api/notes/{id}</code> returns the note when the caller is signed in. <code>DELETE /api/admin/users/{id}</code> is hidden in the UI unless the user is an admin.</td></tr>
+          <tr><td>Machines</td><td>A nightly export job uses the admin's client secret, committed to the repository.</td></tr>
+          <tr><td>Transport</td><td>HTTPS with a certificate from the company's own CA, installed in every employee's browser. The staging site uses HTTP.</td></tr>
+          <tr><td>Recovery</td><td>"Forgot password" emails a link that signs the person in and never expires.</td></tr>
+          <tr><td>Roles</td><td>Linking Google accounts to local ones by email, with the email unverified.</td></tr>
+          <tr><td>Kubernetes</td><td>The app's service account is bound to <code>cluster-admin</code> "so it never has permission problems".</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Find them</h3>
+      <div data-ex="a28-flaws"></div>
+      <div data-ex="a28-worst"></div>
+      <div data-ex="a28-fixes"></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Each flaw in a login design is a named, known mistake: token storage, PKCE and state, validation settings, cookies, object-level access, secrets, transport, recovery, account linking, and privilege.</li>
+        <li>Reviewing is mostly knowing the list and asking each question of the design.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 29 ============ -->
+    <section class="step" id="toolbox" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">29</span><h2>Toolbox</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> use every tool of the module on your own input.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>The same tools as in the lessons, in one place, with nothing preset to solve. Nothing you type leaves this page. Even so, do not paste production tokens, keys or secrets into any web page as a habit.</p>
+      </div>
+      <h3>Crypto: hashes, MACs, signatures, base64url</h3>
+      <div data-tool="crypto"></div>
+      <h3>JWT workbench</h3>
+      <div data-tool="jwt"></div>
+      <h3>Certificate inspector</h3>
+      <div data-tool="cert"></div>
+      <h3>PKCE and encoding helper</h3>
+      <div data-tool="pkce"></div>
+      <h3>Cookie simulator</h3>
+      <div data-tool="cookie"></div>
+      <h3>OAuth flow stepper</h3>
+      <div data-tool="flow"></div>
+      <h3>Grant chooser</h3>
+      <div data-tool="grant"></div>
+      <h3>Google sign-in by hand</h3>
+      <div data-tool="google"></div>
+      <h3>RBAC playground</h3>
+      <div data-tool="rbac"></div>
+      <h3>TOTP</h3>
+      <div data-tool="totp"></div>
+      <h3>Passkey</h3>
+      <div data-tool="passkey"></div>
+      <h3>DPoP proof</h3>
+      <div data-tool="dpop"></div>
+      <div class="step-foot"><label class="done-toggle" data-manual-tick><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 30 ============ -->
+    <section class="step" id="troubleshooting" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">30</span><h2>When something breaks</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> go from a symptom to its cause and its fix.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>These are the failures the earlier steps produced on purpose, with the exact words the tools print. Each row was reproduced; none is quoted from memory.</p>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Check</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>API: <code>401</code>, <code>WWW-Authenticate: Bearer</code> with nothing else</td><td>No <code>Authorization</code> header, or not the <code>Bearer</code> scheme</td><td><code>curl -i</code> and look at what was sent</td><td>Send <code>Authorization: Bearer &lt;token&gt;</code></td></tr>
+          <tr><td><code>invalid_token</code>, <code>The audience 'empty' is invalid</code></td><td>The token has no <code>aud</code> naming this API</td><td>Decode the token; look at <code>aud</code></td><td>Add an audience mapper in the identity provider (step 19)</td></tr>
+          <tr><td><code>invalid_token</code>, <code>The signature is invalid</code></td><td>Token changed, or the API trusts different keys (another realm, a rotated key)</td><td>Compare the token's <code>kid</code> with the JWKS and the <code>iss</code> with your Authority</td><td>Point <code>Authority</code> at the right issuer; restart if keys are cached too long</td></tr>
+          <tr><td><code>invalid_token</code>, <code>The token expired at</code></td><td>Past <code>exp</code> plus the skew</td><td>Decode <code>exp</code>; check both clocks</td><td>Get a new token; fix clock drift (WSL clocks can drift after sleep)</td></tr>
+          <tr><td>Everything is <code>401</code> though the token looks right</td><td>Issuer string differs: <code>localhost</code> versus <code>127.0.0.1</code>, or <code>http</code> versus <code>https</code></td><td>Compare <code>iss</code> with the discovery document's <code>issuer</code></td><td>Use one name everywhere; pin the host name in the identity provider</td></tr>
+          <tr><td>Kubernetes probes fail with <code>401</code>; pods restart</td><td>Fallback policy covers the health endpoints</td><td><code>kubectl describe pod</code>; probe events</td><td><code>AllowAnonymous</code> on <code>/healthz</code> and <code>/readyz</code></td></tr>
+          <tr><td><code>403</code> for a signed-in person</td><td>The role is missing from the token</td><td>Decode: is <code>roles</code> there and does it hold it? Is the token older than the role change?</td><td>Add the role or the mapper; get a new token</td></tr>
+          <tr><td>Keycloak: <code>Invalid parameter: redirect_uri</code></td><td>The address is not exactly one of the client's redirect URIs</td><td>Compare character by character, including the port and a trailing slash</td><td>Register the exact address</td></tr>
+          <tr><td><code>invalid_grant</code> at the token endpoint</td><td>Code used twice, expired, wrong <code>code_verifier</code> or wrong <code>redirect_uri</code></td><td>Is it the first use, within a minute, with the verifier that made the challenge?</td><td>Start the flow again; keep the verifier per login</td></tr>
+          <tr><td>ASP.NET Core: <code>Correlation failed</code></td><td>The correlation cookie was not sent back: different host name, a cookie blocked as cross-site, or a proxy changing the scheme</td><td>Browser dev tools: cookies after the redirect</td><td>One host name; forward the original scheme and host</td></tr>
+          <tr><td>Signed in, then back to the login page, again and again</td><td>The session cookie is rejected (Secure over HTTP, <code>__Host-</code> rules, SameSite)</td><td>Application tab: is the cookie stored?</td><td>Use <code>localhost</code> or HTTPS; check the prefix rules</td></tr>
+          <tr><td>The cookie is not sent to the API</td><td>SameSite=Strict on a cross-site request, or a different origin</td><td>Network tab: request cookies</td><td>Serve the UI and API from one origin (a proxy)</td></tr>
+          <tr><td><code>curl: (60) SSL certificate problem: unable to get local issuer certificate</code></td><td>The CA that signed the server certificate is not trusted</td><td><code>openssl s_client -connect host:443 -showcerts</code></td><td>Trust the right root: <code>--cacert root.pem</code></td></tr>
+          <tr><td><code>curl: (60) ... certificate has expired</code>, or <code>verify error:num=10</code></td><td>Past <code>notAfter</code></td><td><code>openssl x509 -noout -dates</code></td><td>Renew; automate (step 07)</td></tr>
+          <tr><td><code>curl: (60) ... no alternative certificate subject name matches target host name</code></td><td>The name you used is not in the certificate's SAN</td><td><code>openssl x509 -noout -ext subjectAltName</code></td><td>Reissue with the right names</td></tr>
+          <tr><td><code>tlsv13 alert certificate required</code></td><td>Server demands a client certificate and none was sent</td><td>Did you pass <code>--cert</code> and <code>--key</code>?</td><td>Send the client certificate (step 08)</td></tr>
+        </tbody>
+      </table></div>
+      <p>Method matters more than the table: change one thing at a time, read the exact message, and decode the token before blaming the library.</p>
+      <div data-ex="a30-find"></div>
+      <div data-ex="a30-order"></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Most failures are one of: wrong token (audience, issuer, expiry), wrong name (issuer, redirect, host), wrong trust (certificate, key), or wrong cookie rules.</li>
+        <li>Read the exact message, decode before you guess, and change one thing at a time.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 31 ============ -->
+    <section class="step" id="sources" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">31</span><h2>Where to go next, and sources</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> know where each claim in this module comes from, what could not be machine-tested, and what to read next.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Every fact on these pages has a row in the source ledger: the document, the section, the claim, and the date it was checked. A test re-checks every cited RFC number, title and status against the RFC Editor.</p>
+      </div>
+      <h3>What was not machine-tested</h3>
+      <ul>
+        <li><b>A real Google sign-in</b> (steps 15 and 23). It needs your Google account. The tests check the discovery document, the redirect that Keycloak sends to Google, and the by-hand flow against a stand-in.</li>
+        <li><b>A live Let's Encrypt issuance</b> (step 07). It needs a public domain. The cert-manager manifests are validated against their schemas.</li>
+        <li><b>cert-manager in a live cluster</b> (step 07).</li>
+        <li><b>The passkey demo with a physical authenticator</b> (step 25). The test uses the browser's virtual authenticator.</li>
+      </ul>
+      <h3>Read next</h3>
+      <ul>
+        <li><b>RFC 9700</b>, OAuth 2.0 Security Best Current Practice, in full. It is short and you now know every term.</li>
+        <li><b>RFC 10017</b>, OAuth for browser-based apps, if you build a front end.</li>
+        <li><b>OWASP</b> Cheat Sheet Series: Authentication, Session Management, JWT, Password Storage, OAuth2.</li>
+        <li><b>NIST SP 800-63-4</b>, Digital Identity Guidelines (63B for authenticators).</li>
+        <li><b>OpenID Connect Core 1.0</b>, then RP-Initiated Logout and Back-Channel Logout.</li>
+        <li><b>W3C Web Authentication Level 3</b> (Recommendation, 25 August 2026).</li>
+        <li><b>FAPI 2.0 Security Profile</b>, for high-value APIs.</li>
+      </ul>
+      <h3>Standards used, with status</h3>
+      <div data-ledger></div>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Every claim has a source and a date; the tests re-check the standards.</li>
+        <li>Know what was not machine-tested, and keep reading the primary documents.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle" data-manual-tick><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+

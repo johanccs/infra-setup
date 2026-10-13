@@ -760,7 +760,45 @@
     });
   }
 
-  var TOOLS = { rbac: toolRbac, flow: toolFlow, grant: toolGrant, google: toolGoogle, jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp, passkey: toolPasskey, cookie: toolCookie, crypto: toolCrypto };
+
+  // A DPoP proof (RFC 9449): make one for a request, then see what a server checks when someone replays it.
+  function toolDpop(root) {
+    var D = window.IADpop;
+    root.innerHTML = '';
+    var q = el('div', 'tool dpop');
+    q.innerHTML = '<div class="dp-grid">' +
+      '<fieldset><legend>The client makes a proof for</legend>' +
+      '<label>Method <select class="dp-m" aria-label="Method"><option>GET</option><option>POST</option><option>DELETE</option></select></label>' +
+      '<label>URL <input class="cmd-in mono dp-u" value="https://api.example.test/api/todos" aria-label="URL"></label>' +
+      '<label>Access token <input class="cmd-in mono dp-t" value="access-token-abc" aria-label="Access token"></label></fieldset>' +
+      '<fieldset><legend>The server receives</legend>' +
+      '<label>Method <select class="dp-m2" aria-label="Received method"><option>GET</option><option>POST</option><option>DELETE</option></select></label>' +
+      '<label>URL <input class="cmd-in mono dp-u2" value="https://api.example.test/api/todos" aria-label="Received URL"></label>' +
+      '<label>Token <input class="cmd-in mono dp-t2" value="access-token-abc" aria-label="Received access token"></label>' +
+      '<label class="dp-b"><input type="checkbox" class="dp-k"> signed with a different key (a thief with the token but not the key)</label>' +
+      '<label class="dp-b"><input type="checkbox" class="dp-r"> the same proof is sent a second time</label></fieldset></div>' +
+      '<p class="dp-key"></p><pre class="dp-proof mono" aria-label="The DPoP proof"></pre><div class="dp-out" aria-live="polite"></div>';
+    root.appendChild(q);
+    var m = $('.dp-m', q), u = $('.dp-u', q), t = $('.dp-t', q), m2 = $('.dp-m2', q), u2 = $('.dp-u2', q), t2 = $('.dp-t2', q), kk = $('.dp-k', q), rr = $('.dp-r', q);
+    var keys = null, thief = null, seen = new Set(), now = Math.floor(Date.now() / 1000);
+    async function go() {
+      try {
+        if (!keys) { keys = await C.generateKeyPair('ES256'); thief = await C.generateKeyPair('ES256'); }
+        var jkt = await C.thumbprint(keys.publicJwk);
+        var used = kk.checked ? thief : keys;
+        var proof = await D.makeProof({ privateJwk: used.privateJwk, publicJwk: used.publicJwk, htm: m.value, htu: u.value, accessToken: t.value, iat: now, jti: 'proof-1' });
+        $('.dp-key', q).innerHTML = 'The access token is bound to the key with thumbprint <code>cnf.jkt = ' + esc(jkt) + '</code>.';
+        $('.dp-proof', q).textContent = proof.split('.').slice(0, 2).map(function (p) { return JSON.stringify(JSON.parse(C.fromUtf8(C.b64uDec(p))), null, 2); }).join('\n');
+        var s = new Set(seen); if (rr.checked) s.add('proof-1');
+        var r = await D.checkProof(proof, { htm: m2.value, htu: u2.value, accessToken: t2.value, boundJkt: jkt, now: now, seenJti: s });
+        $('.dp-out', q).innerHTML = '<ul class="pk-list">' + r.checks.map(function (c) { return '<li class="' + (c.ok ? 'cmd-ok' : 'cmd-bad') + '">' + (c.ok ? '✓ ' : '✗ ') + esc(c.name) + '</li>'; }).join('') + '</ul><p class="' + (r.ok ? 'cmd-ok' : 'cmd-bad') + '">' + (r.ok ? 'The server accepts the request.' : 'The server refuses the request.') + '</p>';
+      } catch (e) { $('.dp-out', q).innerHTML = '<p class="cmd-bad">' + esc(e.message) + '</p>'; }
+    }
+    [m, u, t, m2, u2, t2, kk, rr].forEach(function (x) { x.addEventListener('input', go); x.addEventListener('change', go); });
+    go();
+  }
+
+  var TOOLS = { rbac: toolRbac, flow: toolFlow, grant: toolGrant, google: toolGoogle, jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp, passkey: toolPasskey, dpop: toolDpop, cookie: toolCookie, crypto: toolCrypto };
   function mountTool(root) { var f = TOOLS[root.getAttribute('data-tool')]; if (f) f(root); }
 
   function init() {
