@@ -17,7 +17,7 @@ const BASE = `http://localhost:${PORT}`;
 const TESTDB = path.join(os.tmpdir(), `tut-pages-${process.pid}.db`);   // never the real data/tutorial.db
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const REG = require('../tools/pages.json');
-const PAGES = [
+const ALL_PAGES = [
   { file: 'code-to-cluster-tutorial.html', name: 'Code to Cluster', steps: 18, mid: 'docker', link: 'cluster' },
   { file: 'eyes-on-the-cluster-tutorial.html', name: 'Eyes on the Cluster', steps: 20, mid: 'instrument', link: 'servicemonitor' },
   { file: 'platform-as-code-tutorial.html', name: 'Platform as Code', steps: 16, mid: 'project', link: 'bootstrap' },
@@ -26,7 +26,9 @@ const PAGES = [
   { file: 'terraform-the-lab-tutorial.html', name: 'Terraform the Lab', steps: 17, mid: 'module', link: 'gateway' },
   { file: 'todo-on-eks-tutorial.html', name: 'Todo on EKS', steps: 16, mid: 'docker', link: 'cluster' },
   { file: 'github-actions-tutorial.html', name: 'GitHub Actions Lab', steps: 23, mid: 'matrix', link: 'oidc', labTicks: true },
+  { file: 'identity-and-access-tutorial.html', name: 'Identity and Access Lab', steps: 1, mid: 'overview', link: 'overview', labTicks: true, noCode: true },   // noCode: no code blocks yet (the page is built level by level)
 ];
+const PAGES = process.env.ONLY ? ALL_PAGES.filter((p) => p.file === process.env.ONLY) : ALL_PAGES;   // ONLY=identity-and-access-tutorial.html runs one page
 
 let fails = 0, passes = 0;
 const check = (ok, msg) => { if (ok) passes++; else fails++; console.log((ok ? 'PASS ' : 'FAIL ') + msg); };
@@ -260,9 +262,11 @@ async function pageTests(browser, spec) {
   check((await bar()) > 99, 'reading bar is full at the bottom');
   await jump(0);
   await pg.evaluate(() => document.querySelectorAll('input[data-done]').forEach((b) => { if (b.checked) { b.checked = false; b.dispatchEvent(new Event('change')); } }));
-  await pg.locator('section[data-step] input[data-done]:not([disabled])').nth(1).check();
+  const boxes = pg.locator('section[data-step] input[data-done]:not([disabled])');
+  const second = Math.min(1, (await boxes.count()) - 1);   // a page still being built may have one step
+  await boxes.nth(second).check();
   check(/^[1-9]\d*\/\d+ done$/.test(await pg.textContent('#tb-done')), 'the toolbar counts ticked steps');
-  await pg.locator('section[data-step] input[data-done]:not([disabled])').nth(1).uncheck();
+  await boxes.nth(second).uncheck();
 
   // resizable steps panel
   const railW = () => pg.evaluate(() => Math.round(document.querySelector('.rail').getBoundingClientRect().width));
@@ -294,16 +298,20 @@ async function pageTests(browser, spec) {
   await pg.setViewportSize({ width: 1280, height: 900 });
 
   // wide content
+  if (!spec.noCode) {
   const wide = await pg.evaluate(() => { const m = document.querySelector('main').getBoundingClientRect().width; const f = document.querySelector('figure.code').getBoundingClientRect().width; const p = document.querySelector('main p').getBoundingClientRect().width; return { m, f, p }; });
   check(wide.f >= wide.m - 2 && wide.m > 800, `code blocks use the whole column (${Math.round(wide.f)} of ${Math.round(wide.m)}px)`);
   check(wide.p < 900, `paragraphs keep a readable line length (${Math.round(wide.p)}px)`);
+  }
 
   // copy buttons
+  if (!spec.noCode) {
   const figs = await pg.locator('figure.code').count();
   check(figs > 10 && (await pg.locator('figure.code .copy').count()) === figs, `every code block has a Copy button (${figs})`);
   await pg.locator('figure.code .copy').nth(2).click();
   const want = await pg.locator('figure.code pre code').nth(2).textContent();
   check((await pg.evaluate(() => navigator.clipboard.readText())) === want, 'Copy puts the exact code on the clipboard');
+  }
 
   // layout
   for (const w of [1280, 768, 390]) {
@@ -471,9 +479,10 @@ async function noKeyTest(browser) {
     await pg.reload(); await pg.waitForSelector('#rail-list li');
     check(await pg.locator('mark.bm-hl.bm-start').count() === 1, `${spec.name}: the bookmark survives a reload`);
     await pg.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' })); await pg.waitForTimeout(300);
-    await pg.click('#bm-btn'); await pg.locator('#bm-list .bm-item', { hasText: 'Step' }).first().click();
-    await pg.waitForFunction(() => { const r = document.querySelector('mark.bm-hl').getBoundingClientRect(); return r.top > 0 && r.bottom < innerHeight; }, null, { timeout: 4000 });
-    check(true, `${spec.name}: choosing a bookmark scrolls to it`);
+    await pg.click('#bm-btn'); await pg.locator('#bm-list .bm-item:has(.bm-x)').first().click();   // the bookmark's row, not the "Where you stopped" row
+    const inView = await pg.waitForFunction(() => { const r = document.querySelector('mark.bm-hl').getBoundingClientRect(); return r.top > 0 && r.bottom < innerHeight; }, null, { timeout: 12000 }).then(() => true, () => false);   // a long page scrolls smoothly for a while
+    if (!inView) console.log('     ' + JSON.stringify(await pg.evaluate(() => { const r = document.querySelector('mark.bm-hl').getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), innerHeight, scrollY: Math.round(scrollY), docHeight: document.documentElement.scrollHeight, text: document.querySelector('mark.bm-hl').textContent.slice(0, 30) }; })));
+    check(inView, `${spec.name}: choosing a bookmark scrolls to it`);
     await pg.click('#bm-btn'); await pg.locator('#bm-list .bm-x').first().click();
     check(await pg.locator('mark.bm-hl').count() === 0 && await pg.evaluate(() => document.querySelector('main').textContent.length) === len0, `${spec.name}: removing a bookmark leaves the text as it was`);
     // resume where you stopped

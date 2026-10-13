@@ -1,0 +1,148 @@
+{
+ "about": "Source ledger of the Identity and Access Lab: every factual claim on the page, the document and section it comes from, and the date it was checked. tests/identity.test.js checks the RFC numbers and statuses against the RFC Editor.",
+ "entries": [
+  {
+   "id": "s00-401",
+   "step": 0,
+   "claim": "401: the request lacks valid authentication credentials; the server MUST send a WWW-Authenticate header with at least one challenge.",
+   "doc": "RFC 9110",
+   "section": "15.5.2 and 11.6.1",
+   "url": "https://www.rfc-editor.org/rfc/rfc9110",
+   "rfc": 9110,
+   "status": "INTERNET STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s00-403",
+   "step": 0,
+   "claim": "403: the server understood the request but refuses to fulfil it; credentials, if provided, are insufficient.",
+   "doc": "RFC 9110",
+   "section": "15.5.4",
+   "url": "https://www.rfc-editor.org/rfc/rfc9110",
+   "rfc": 9110,
+   "status": "INTERNET STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s00-404",
+   "step": 0,
+   "claim": "404: no current representation was found, or the server is not willing to disclose that one exists.",
+   "doc": "RFC 9110",
+   "section": "15.5.5",
+   "url": "https://www.rfc-editor.org/rfc/rfc9110",
+   "rfc": 9110,
+   "status": "INTERNET STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s00-oauth",
+   "step": 0,
+   "claim": "OAuth 2.0 lets a third-party application obtain limited access to an HTTP service, on behalf of a resource owner or on its own behalf.",
+   "doc": "RFC 6749",
+   "section": "Abstract",
+   "url": "https://www.rfc-editor.org/rfc/rfc6749",
+   "rfc": 6749,
+   "status": "PROPOSED STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s00-roles",
+   "step": 0,
+   "claim": "OAuth defines four roles: resource owner, resource server, client, authorization server.",
+   "doc": "RFC 6749",
+   "section": "1.1",
+   "url": "https://www.rfc-editor.org/rfc/rfc6749",
+   "rfc": 6749,
+   "status": "PROPOSED STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s00-oidc",
+   "step": 0,
+   "claim": "OpenID Connect 1.0 is a simple identity layer on top of OAuth 2.0 that lets clients verify the identity of the end-user.",
+   "doc": "OpenID Connect Core 1.0 incorporating errata set 2",
+   "section": "Abstract",
+   "url": "https://openid.net/specs/openid-connect-core-1_0.html",
+   "rfc": null,
+   "status": "OpenID Final Specification",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s00-saml",
+   "step": 0,
+   "claim": "SAML 2.0 is an OASIS Standard dated 15 March 2005; its most important use case is multi-domain web single sign-on, carried in XML-encoded assertions with identity provider and service provider roles.",
+   "doc": "OASIS SAML V2.0 (Core, OS, 15 March 2005) and the SAML V2.0 Technical Overview (committee draft 02, 25 March 2008)",
+   "section": "front matter; overview section on use cases",
+   "url": "https://docs.oasis-open.org/security/saml/v2.0/saml-core-2.0-os.pdf",
+   "rfc": null,
+   "status": "OASIS Standard",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s00-jwt",
+   "step": 0,
+   "claim": "A JWT is a compact, URL-safe means of representing claims, encoded as a JSON object that is the payload of a JWS or the plaintext of a JWE.",
+   "doc": "RFC 7519",
+   "section": "Abstract",
+   "url": "https://www.rfc-editor.org/rfc/rfc7519",
+   "rfc": 7519,
+   "status": "PROPOSED STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s00-bearer",
+   "step": 0,
+   "claim": "A bearer token can be used by any party in possession of it, in any way another holder could; no proof of key possession is required.",
+   "doc": "RFC 6750",
+   "section": "1.2",
+   "url": "https://www.rfc-editor.org/rfc/rfc6750",
+   "rfc": 6750,
+   "status": "PROPOSED STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s00-pkce",
+   "step": 0,
+   "claim": "PKCE mitigates the authorization code interception attack on OAuth 2.0 public clients.",
+   "doc": "RFC 7636",
+   "section": "Abstract",
+   "url": "https://www.rfc-editor.org/rfc/rfc7636",
+   "rfc": 7636,
+   "status": "PROPOSED STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s00-tls",
+   "step": 0,
+   "claim": "TLS 1.3 allows client/server applications to communicate over the Internet in a way designed to prevent eavesdropping, tampering and message forgery; RFC 9846 obsoletes RFC 8446.",
+   "doc": "RFC 9846",
+   "section": "Abstract",
+   "url": "https://www.rfc-editor.org/rfc/rfc9846",
+   "rfc": 9846,
+   "status": "PROPOSED STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s00-https",
+   "step": 0,
+   "claim": "The https scheme is for an origin server capable of establishing a TLS connection secured for HTTP communication.",
+   "doc": "RFC 9110",
+   "section": "4.2.2",
+   "url": "https://www.rfc-editor.org/rfc/rfc9110",
+   "rfc": 9110,
+   "status": "INTERNET STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s00-cert",
+   "step": 0,
+   "claim": "Internet certificates profile the X.509 v3 certificate format.",
+   "doc": "RFC 5280",
+   "section": "Abstract",
+   "url": "https://www.rfc-editor.org/rfc/rfc5280",
+   "rfc": 5280,
+   "status": "PROPOSED STANDARD",
+   "checked": "2026-10-13"
+  }
+ ]
+}

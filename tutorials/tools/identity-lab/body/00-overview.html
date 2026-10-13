@@ -1,0 +1,100 @@
+    <!-- ============ 0 ============ -->
+    <section class="step" id="overview" data-step data-level="Start here">
+      <div class="step-head"><span class="num">00</span><h2>What you'll be able to do</h2><span class="lvl-chip">Start here</span></div>
+      <p class="goal"><b>Goal:</b> by the end you can explain how a person or a program proves who it is and what it may do, <b>read</b> a certificate, a token or a sign-in flow, <b>spot</b> what is wrong with it, and <b>secure</b> the Todo app with a real identity provider.</p>
+      <div class="callout build-note"><p><strong>Work in progress.</strong> This page is built level by level. The map below shows the whole plan; lessons appear here as each level is finished.</p></div>
+      <div class="why"><h4>How this lab works</h4>
+        <p>Every topic starts with a short <b>"What is it?"</b> box: what it is, the problem it solves, an everyday comparison and what it is <em>not</em>. Then the detail follows, easy first. The detail goes all the way down to real messages, token bytes and certificate fields, but one new idea at a time, and the deepest parts sit in closed <b>"Line by line"</b> blocks you can open when you want them.</p>
+        <p>Each lesson has exercises, and a tool in the page where one helps (a token decoder, a certificate reader, a sign-in flow you can attack). The tools run in your browser and send nothing anywhere. A step ticks itself only when every exercise in it is passed.</p>
+        <p>Every fact is taken from the standard that defines it (the RFCs, the OpenID Connect specifications, NIST) or from the product's own documentation, and each lesson ends with its sources and the date they were checked. Where something could not be run and tested, the page says so.</p>
+      </div>
+
+      <h3>The map</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Level</th><th>Steps</th><th>After it you can</th></tr></thead>
+        <tbody>
+          <tr><td><b>1 Foundations</b></td><td>01 to 03</td><td>Tell authentication from authorization, say when an API answers 401, 403 or 404, choose between a hash, a signature and encryption, and explain a cookie login.</td></tr>
+          <tr><td><b>2 HTTPS, TLS, certificates</b></td><td>04 to 08</td><td>Walk through the TLS handshake, read any certificate, build your own certificate authority, and explain how public certificates are issued and renewed.</td></tr>
+          <tr><td><b>3 Tokens</b></td><td>09 to 10</td><td>Decode a JWT by hand, list the checks it must pass, and carry out (then block) the classic attacks on it.</td></tr>
+          <tr><td><b>4 OAuth and OpenID Connect</b></td><td>11 to 15</td><td>Write every message of the authorization code flow with PKCE, choose the right grant, validate an ID token and run "Log in with Google" by hand.</td></tr>
+          <tr><td><b>5 Authorization</b></td><td>16 to 18</td><td>Design roles and rules, recognise broken access control in code, and write a Kubernetes Role.</td></tr>
+          <tr><td><b>6 Build it</b></td><td>19 to 24</td><td>Run Keycloak, protect the .NET API, sign in from the Angular app, add Google and call the API from another service.</td></tr>
+          <tr><td><b>7 Expert</b></td><td>25 to 31</td><td>Compare sign-in methods by phishing resistance, harden tokens, and review a whole login system for flaws.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Levels 1 to 5 and 7 need only a browser. Level 6 uses your laptop as in the other tutorials: Docker for Keycloak and PostgreSQL, the .NET 10 SDK and Node. Steps 15 and 23 use a free Google account. If you have none, you can still finish the module: you tick those two steps by hand.</p>
+
+      <h3>One sign-in, five technologies</h3>
+      <p>Every level below lights up one part of this picture again. Play it with the arrows, or let it run:</p>
+      <figure class="anim" aria-label="Animated diagram: one sign-in to the Todo app, and where each technology takes part">
+        <div class="anim-stage"><svg viewBox="0 0 760 330" role="img" aria-label="A browser opens the Todo app over HTTPS. The app sends the browser to an identity provider. The user proves who they are there with a password, a passkey or Google. The identity provider gives the app tokens. The app calls the API with a token, and the API checks the token and the user's role.">
+          <rect class="a-zone" x="8" y="8" width="744" height="314" rx="12"/>
+          <path class="a-route" data-k="r1" d="M176 150 L312 78"/>
+          <path class="a-route" data-k="r2" d="M176 190 L272 258"/>
+          <path class="a-route" data-k="r3" d="M386 222 V108"/>
+          <path class="a-route" data-k="r4" d="M462 78 L588 150"/>
+          <text class="a-lbl" data-k="r1" x="190" y="96"><tspan class="h">HTTPS</tspan></text>
+          <text class="a-lbl" data-k="r1" x="190" y="112">TLS + a certificate</text>
+          <text class="a-lbl" data-k="r2" x="170" y="248"><tspan class="h">OAuth 2.0 + OpenID Connect</tspan></text>
+          <text class="a-lbl" data-k="r3" x="440" y="170"><tspan class="h">JWT</tspan></text>
+          <text class="a-lbl" data-k="r3" x="440" y="186">signed tokens</text>
+          <text class="a-lbl" data-k="r4" x="590" y="52"><tspan class="h">token + role</tspan></text>
+          <text class="a-lbl" data-k="r4" x="590" y="68">RBAC decides</text>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <g class="a-node" data-k="browser"><rect x="24" y="120" width="152" height="100" rx="8"/><text class="a-t" x="100" y="164">Browser</text><text class="a-s" x="100" y="184">you</text></g>
+          <g class="a-node" data-k="app"><rect x="312" y="40" width="150" height="68" rx="8"/><text class="a-t" x="387" y="72">Todo app</text><text class="a-s" x="387" y="92">asks who you are</text></g>
+          <g class="a-node" data-k="idp"><rect x="272" y="222" width="230" height="76" rx="8"/><text class="a-t" x="387" y="254">Identity provider</text><text class="a-s" x="387" y="274">password · passkey · Google</text></g>
+          <g class="a-node" data-k="api"><rect x="588" y="110" width="150" height="80" rx="8"/><text class="a-t" x="663" y="146">Todo API</text><text class="a-s" x="663" y="166">checks the token</text></g>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "browser app r1", "path": [[184, 146], [304, 82]], "text": "<b>1. You open the site.</b> Your browser connects over HTTPS. TLS encrypts the connection, and the app's certificate proves it really is that site."},
+          {"on": "browser app idp r2", "path": [[184, 194], [264, 254]], "text": "<b>2. The app sends you to the identity provider.</b> The app does not check passwords itself. OAuth 2.0 and OpenID Connect describe how it asks someone else to do it."},
+          {"on": "browser idp", "good": "idp", "text": "<b>3. You prove who you are there.</b> A password, a passkey or <em>Log in with Google</em>. The app never sees it."},
+          {"on": "app idp r3", "path": [[386, 214], [386, 116]], "text": "<b>4. The identity provider gives the app tokens.</b> They are JWTs: signed, so the app can check that the provider really issued them."},
+          {"on": "app api r4", "good": "api", "path": [[470, 84], [580, 146]], "text": "<b>5. The app calls the API with a token.</b> The API checks the signature, then the user's role (RBAC) decides what this request may do."}
+        ]</script>
+      </figure>
+
+      <h3>Words people mix up</h3>
+      <p>These are the pairs that cause the most confusion. Each is explained properly in its own lesson.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Term</th><th>What it is</th><th>What it is not</th></tr></thead>
+        <tbody>
+          <tr><td><b>OAuth 2.0</b></td><td>A framework that lets an app obtain limited access to a service, on someone's behalf or on its own.</td><td>Not a login protocol. It says what an app may do, not who signed in.</td></tr>
+          <tr><td><b>OpenID Connect</b></td><td>A simple identity layer on top of OAuth 2.0. It lets an app verify who signed in.</td><td>Not a separate system: it uses OAuth 2.0's messages and adds an ID token.</td></tr>
+          <tr><td><b>SAML 2.0</b></td><td>An OASIS standard (15 March 2005) that carries sign-in information between organisations as XML assertions. Its main use case is web single sign-on.</td><td>Not built on OAuth. It does a similar job to OpenID Connect in a different format.</td></tr>
+          <tr><td><b>Role</b></td><td>A named set of permissions given to people inside a system, such as <code>admin</code>.</td><td>Not the same as a scope.</td></tr>
+          <tr><td><b>Scope</b></td><td>A named permission an app asks for when it requests a token, such as <code>openid</code>.</td><td>Not a role: the server may grant less than was asked.</td></tr>
+          <tr><td><b>Claim</b></td><td>A statement inside a token, such as who issued it or when it expires.</td><td>Not a permission by itself. A role or a scope can <em>travel</em> as a claim.</td></tr>
+          <tr><td><b>401</b></td><td>The request has no valid authentication credentials. The server must say how to authenticate, in a <code>WWW-Authenticate</code> header.</td><td>Not "you may not". That is 403.</td></tr>
+          <tr><td><b>403</b></td><td>The server understood the request and refuses it. Credentials, if any, are not enough.</td><td>Not "who are you?". That is 401.</td></tr>
+          <tr><td><b>404</b></td><td>No representation was found, <em>or</em> the server is not willing to disclose that one exists.</td><td>Not always "it does not exist": it can hide a resource from someone who may not know of it.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>Glossary</h3>
+      <p>Short definitions, in the standards' own meaning. Each term gets its "What is it?" box where it is first used.</p>
+      <dl class="glossary">
+        <dt>Authentication</dt><dd>Proving who or what is making a request.</dd>
+        <dt>Authorization</dt><dd>Deciding what an authenticated caller may do.</dd>
+        <dt>Credential</dt><dd>Something used to prove an identity: a password, a key, a token, a certificate.</dd>
+        <dt>Identity provider</dt><dd>The service that signs users in and tells other applications who they are. OpenID Connect calls it the OpenID Provider.</dd>
+        <dt>Resource owner, client, authorization server, resource server</dt><dd>The four OAuth roles: the one who can grant access (often you), the app that wants access, the server that issues access tokens, and the server that holds the protected data.</dd>
+        <dt>Token</dt><dd>A string an app presents to show what it is allowed to do, instead of presenting a password.</dd>
+        <dt>Bearer token</dt><dd>A token that any party in possession of it can use, in any way another holder could. Whoever holds it can use it. It travels in a header such as <code>Authorization: Bearer …</code>.</dd>
+        <dt>JWT</dt><dd>JSON Web Token: a compact, URL-safe way to carry claims between two parties, as a JSON object that can be signed or encrypted. Its three parts are joined with dots: <code>header.payload.signature</code>.</dd>
+        <dt>PKCE</dt><dd>Proof Key for Code Exchange: a technique that protects the authorization code flow against an intercepted code.</dd>
+        <dt>RBAC</dt><dd>Role-based access control: permissions are granted to roles, and people are given roles.</dd>
+        <dt>Single sign-on</dt><dd>One sign-in that lets you use several applications.</dd>
+        <dt>TLS</dt><dd>Transport Layer Security: the protocol that lets two programs talk over the Internet in a way designed to prevent eavesdropping, tampering and message forgery.</dd>
+        <dt>HTTPS</dt><dd>HTTP carried over a TLS connection that has been secured for it. Its addresses start with <code>https://</code>.</dd>
+        <dt>Certificate</dt><dd>A signed document that ties a public key to a name. Internet certificates follow the X.509 format.</dd>
+        <dt>Certificate authority</dt><dd>An organisation that others trust to create and sign certificates.</dd>
+      </dl>
+
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>

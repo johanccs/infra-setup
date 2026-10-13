@@ -1,0 +1,1550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Identity and Access Lab</title>
+<meta name="description" content="An interactive lab for .NET developers: how sign-in and access control work, from cookies, HTTPS and certificates to JWT, OAuth 2.0, OpenID Connect, Log in with Google and RBAC, with animated diagrams, tools in the page, and a real Keycloak sign-in for the Todo app.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M32 3l25 14.5v29L32 61 7 46.5v-29z' fill='%230b6a86'/%3E%3Cpath d='M19 23l11 9-11 9' fill='none' stroke='%23fff' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='36' y='21' width='10' height='10' rx='2' fill='%239fe0f0'/%3E%3Crect x='36' y='34' width='10' height='10' rx='2' fill='%239fe0f0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: sticky step rail on the left (desktop), single reading column on the right; stacks on phones. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #17212b;
+  --muted: #566372;
+  --line: #d9e0e7;
+  --accent: #0b6a86;
+  --accent-soft: #e2f0f4;
+  --code-bg: #eef2f5;
+  --warn: #8a5a00;
+  --warn-soft: #fbf1dc;
+  --ok: #1f7a4a;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e141a; --surface: #151d25; --ink: #dfe6ed; --muted: #95a3b1; --line: #26323e;
+    --accent: #5bbbd6; --accent-soft: #14303a; --code-bg: #111920; --warn: #e8b85a; --warn-soft: #2b2312; --ok: #5cc98e;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0e141a; --surface: #151d25; --ink: #dfe6ed; --muted: #95a3b1; --line: #26323e;
+  --accent: #5bbbd6; --accent-soft: #14303a; --code-bg: #111920; --warn: #e8b85a; --warn-soft: #2b2312; --ok: #5cc98e;
+  color-scheme: dark;
+}
+:root[data-theme="light"] { color-scheme: light; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.65 var(--font-body);
+  padding-inline: 16px; padding-block: 0 64px;
+}
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+.shell { max-width: 1680px; margin: 0 auto; display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 48px; }
+@media (max-width: 960px) { .shell { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+
+/* Rail */
+.rail { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; padding-block: 32px; }
+.rail h2 { font: 600 12px/1 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; }
+/* Resizable steps panel (wide screens only): drag the grip, use the arrow keys, or press « and ». */
+.rail-head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 12px; }
+.rail-head h2 { margin: 0; }
+.rail-btn, .rail-open { font: 600 15px/1 var(--font-body); color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+.rail-btn:hover, .rail-open:hover { color: var(--ink); border-color: var(--accent); }
+.rail-open { position: fixed; left: 12px; top: 12px; z-index: 15; }
+.rail-grip { display: none; }
+@media (min-width: 961px) {
+  .shell { grid-template-columns: var(--rail-w, 250px) minmax(0, 1fr); }
+  .rail { grid-column: 1; grid-row: 1; }
+  main { grid-column: 2; grid-row: 1; }
+  .rail-grip { display: block; grid-column: 1; grid-row: 1; justify-self: end; align-self: start; position: sticky; top: 0; height: 100vh; width: 12px; margin-right: -30px; cursor: col-resize; touch-action: none; z-index: 5; }
+  .rail-grip::after { content: ""; position: absolute; left: 5px; top: 0; bottom: 0; width: 2px; border-radius: 1px; background: transparent; transition: background .15s; }
+  .rail-grip:hover::after, .rail-grip:focus-visible::after, .rail-grip.drag::after { background: var(--accent); }
+  .shell.rail-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .shell.rail-collapsed .rail, .shell.rail-collapsed .rail-grip { display: none; }
+  .shell.rail-collapsed main { grid-column: 1; margin-inline: auto; width: 100%; }
+}
+@media (max-width: 960px) { .rail-btn, .rail-open, .rail-head { display: none !important; } }
+body.resizing { user-select: none; cursor: col-resize; }
+
+.rail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.rail li { margin: 0; }
+.rail a { display: grid; grid-template-columns: 26px 16px 1fr; align-items: baseline; gap: 6px; padding: 5px 8px; border-radius: 6px; color: var(--ink); text-decoration: none; font-size: 14px; line-height: 1.35; }
+.rail a:hover { background: var(--accent-soft); }
+.rail .n { font: 500 12px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.rail .tick { color: var(--ok); font-size: 13px; visibility: hidden; }
+.rail a.done .tick { visibility: visible; }
+.rail a.done .t { color: var(--muted); }
+.rail a.current { background: var(--accent-soft); font-weight: 600; }
+.skip { position: absolute; left: -999px; top: 8px; z-index: 20; background: var(--surface); color: var(--ink); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--line); }
+.skip:focus { left: 16px; }
+.rail .progress { margin-top: 16px; font-size: 13px; color: var(--muted); }
+.bar { height: 4px; background: var(--line); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.bar span { display: block; height: 100%; width: 0; background: var(--ok); transition: width .2s; }
+.rail summary { cursor: pointer; font: 600 13px/1 var(--font-body); color: var(--muted); list-style: none; display: none; }
+@media (max-width: 960px) {
+  .rail { position: static; max-height: none; padding-block: 16px 0; }
+  .rail details > ol { margin-top: 8px; }
+  .rail summary { display: block; padding: 10px 0; }
+  .rail h2 { display: none; }
+}
+
+/* Main column */
+main { min-width: 0; padding-block: 32px 0; }
+/* Code, tables and diagrams use the whole column; prose and notes stay a comfortable reading width. */
+.callout, .why, .learn, details.lbl, .goal { max-width: 90ch; }
+header.hero { padding-bottom: 24px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.eyebrow { font: 500 13px/1 var(--font-mono); color: var(--accent); letter-spacing: .02em; margin: 0 0 14px; }
+h1 { font: 700 clamp(34px, 6vw, 52px)/1.04 var(--font-display); letter-spacing: -.01em; margin: 0 0 14px; text-wrap: balance; }
+.lede { font-size: 18px; color: var(--muted); margin: 0; max-width: 62ch; }
+.stack { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding: 0; list-style: none; }
+.stack li { font: 500 12.5px/1 var(--font-mono); padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); margin: 0; }
+
+section.step { padding-block: 36px 8px; border-bottom: 1px solid var(--line); }
+section.step:last-of-type { border-bottom: 0; }
+.step-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.step-head .num { font: 600 15px/1 var(--font-mono); color: var(--accent); font-variant-numeric: tabular-nums; min-width: 2ch; }
+h2 { font: 700 28px/1.15 var(--font-display); margin: 0; text-wrap: balance; flex: 1 1 260px; }
+.done-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+.done-toggle input { accent-color: var(--ok); width: 16px; height: 16px; }
+.step-foot { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--line); }
+.step-foot .done-toggle { font-size: 14px; }
+h3 { font: 600 17px/1.3 var(--font-body); margin: 28px 0 8px; }
+p, li { max-width: 70ch; }
+ul, ol { padding-left: 22px; }
+li + li { margin-top: 4px; }
+code { font: 400 .9em/1.5 var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.goal { font-size: 15px; color: var(--muted); margin: 8px 0 0; }
+.goal b { color: var(--ink); font-weight: 600; }
+
+figure.code { margin: 14px 0 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg); min-width: 0; }
+figure.code figcaption { display: flex; justify-content: space-between; align-items: center; gap: 12px; overflow-wrap: anywhere; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--line); font: 500 12.5px/1.3 var(--font-mono); color: var(--muted); }
+figure.code pre { margin: 0; padding: 12px 14px; overflow-x: auto; font: 400 13.5px/1.55 var(--font-mono); tab-size: 4; }
+figure.code pre code { background: none; padding: 0; font: inherit; overflow-wrap: normal; }
+/* Line numbers. They live in a pseudo-element, so they are never selected or copied. */
+figure.code pre[data-ln] { display: flex; padding-left: 0; }
+figure.code pre[data-ln]::before { content: attr(data-ln); flex: none; position: sticky; left: 0; padding: 0 10px 0 14px; margin-right: 12px; border-right: 1px solid var(--line); background: var(--code-bg); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; user-select: none; -webkit-user-select: none; }
+figure.code pre[data-ln] code { flex: none; padding-right: 14px; }
+.copy { font: 500 12px/1 var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 5px 9px; cursor: pointer; flex-shrink: 0; }
+.copy:hover { border-color: var(--accent); }
+.copy.copied { color: var(--ok); border-color: var(--ok); }
+
+.callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 18px 0; font-size: 15px; }
+.callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.callout p { margin: 0; }
+.callout p + p { margin-top: 6px; }
+.callout strong { font-weight: 600; }
+.learn { border: 1px dashed var(--line); background: var(--surface); padding: 12px 16px; border-radius: 8px; margin: 20px 0 8px; font-size: 15px; }
+.learn h4 { font: 600 12px/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--ok); margin: 0 0 6px; }
+.learn ul { margin: 0; }
+.why { background: var(--accent-soft); border-radius: 8px; padding: 14px 18px; margin: 16px 0 6px; font-size: 15.5px; }
+.why h4 { font: 600 12px/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0 0 6px; }
+.why p { margin: 0; }
+.why p + p, .why ul { margin-top: 8px; }
+.why ul { margin-bottom: 0; }
+details.lbl { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); margin: -8px 0 18px; font-size: 15px; }
+details.lbl > summary { cursor: pointer; padding: 9px 14px; font-weight: 600; color: var(--accent); list-style: none; }
+details.lbl > summary::before { content: "▸ "; }
+details.lbl[open] > summary::before { content: "▾ "; }
+details.lbl > div { padding: 0 16px 12px; }
+details.lbl dl { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 6px 16px; margin: 0; }
+details.lbl dd { margin: 0; }
+@media (max-width: 520px) { details.lbl dl { grid-template-columns: minmax(0, 1fr); gap: 2px; } details.lbl dd { margin-bottom: 8px; } }
+dl.glossary { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr); gap: 8px 18px; margin: 14px 0; font-size: 15px; }
+dl.glossary dt { font-weight: 600; }
+dl.glossary dd { margin: 0; }
+@media (max-width: 520px) { dl.glossary { grid-template-columns: minmax(0, 1fr); gap: 2px; } dl.glossary dd { margin-bottom: 10px; } }
+
+.table-wrap { overflow-x: auto; margin: 14px 0 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 12px/1.3 var(--font-body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+.problem-table td:first-child { color: var(--muted); }
+
+/* Diagrams: inline SVG and a plain HTML flow, both drawn with the page's own colours. */
+.diagram { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 16px; overflow-x: auto; margin: 16px 0; }
+.diagram svg { display: block; width: 100%; min-width: 680px; height: auto; font-family: var(--font-body); }
+.diagram .box { fill: var(--bg); stroke: var(--line); }
+.diagram .zone { fill: none; stroke: var(--accent); stroke-dasharray: 5 4; }
+.diagram .edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+.diagram marker path { fill: var(--muted); }
+.diagram text { fill: var(--ink); font-size: 13.5px; font-weight: 600; text-anchor: middle; }
+.diagram text.sub, .diagram text.lbl { fill: var(--muted); font-weight: 400; }
+.diagram text.sub { font-size: 11.5px; }
+.diagram text.lbl { font-size: 12px; }
+.diagram text.zone-lbl { fill: var(--accent); font-size: 12px; text-anchor: end; }
+.diagram text.start { text-anchor: start; }
+.flow, .flow ol { list-style: none; margin: 0; padding: 0; }
+.flow { display: grid; justify-items: center; }
+.flow li { max-width: none; margin: 0; }
+.flow > li { text-align: center; }
+.flow > li + li::before { content: "↓"; display: block; color: var(--muted); line-height: 1.7; }
+.flow-node { display: inline-block; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 6px 10px; font-size: 14px; line-height: 1.3; }
+.flow-group { border: 1px dashed var(--accent); border-radius: 8px; padding: 10px 12px 12px; }
+.flow-cap { display: block; font: 600 12px/1.2 var(--font-body); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+.flow-group ol { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 0; }
+.flow-group ol li { display: flex; align-items: center; }
+.flow-group ol li + li::before { content: "→"; color: var(--muted); margin: 0 8px; }
+footer { margin-top: 40px; font-size: 13.5px; color: var(--muted); }
+
+/* Ask box: right-click a word to ask a question about it (needs server.js running). */
+.ask-hint { margin: 16px 0 0; font-size: 14px; color: var(--muted); }
+.ask-hint kbd { font: 500 12px/1 var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 3px 6px; background: var(--surface); color: var(--ink); }
+.flash { background: var(--accent-soft); outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+dialog.ask { width: min(560px, calc(100% - 32px)); max-height: min(640px, calc(100% - 32px)); padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: 0 16px 48px rgba(0, 0, 0, .25); }
+dialog.ask[open] { display: flex; flex-direction: column; }
+dialog.ask::backdrop { background: rgba(10, 16, 22, .45); }
+.ask-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.ask-head h2 { font: 700 20px/1.2 var(--font-display); flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.ask-head h2 code { font-size: .85em; }
+.ask-step { font-size: 12.5px; color: var(--muted); margin: 4px 0 0; }
+.ask-btn { font: 500 13px/1 var(--font-body); background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 6px; padding: 7px 10px; cursor: pointer; flex-shrink: 0; }
+.ask-thread { flex: 1 1 auto; min-height: 60px; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.ask-empty { color: var(--muted); font-size: 14.5px; margin: 0; }
+.ask-q { align-self: flex-end; max-width: 90%; background: var(--accent); color: var(--surface); padding: 8px 12px; border-radius: 10px 10px 2px 10px; font-size: 14.5px; overflow-wrap: anywhere; }
+.ask-a { font-size: 15px; line-height: 1.6; min-width: 0; }
+.ask-a p { margin: 0 0 8px; }
+.ask-a ul, .ask-a ol { margin: 0 0 8px; padding-left: 20px; }
+.ask-a pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; overflow-x: auto; font: 13px/1.5 var(--font-mono); margin: 0 0 8px; }
+.ask-a pre code { background: none; padding: 0; overflow-wrap: normal; }
+.ask-a h4 { font: 600 15px/1.3 var(--font-body); margin: 10px 0 6px; }
+.ask-a.thinking { color: var(--muted); font-style: italic; }
+.ask-err { font-size: 14px; color: var(--warn); }
+.ask-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 12px; }
+.ask-chip { font: 500 13px/1 var(--font-body); color: var(--accent); background: var(--accent-soft); border: 0; border-radius: 999px; padding: 7px 11px; cursor: pointer; }
+.ask-chip:disabled { opacity: .5; cursor: default; }
+.ask-form { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 8px; align-items: flex-end; }
+.ask-form textarea { flex: 1; min-width: 0; resize: none; font: 15px/1.4 var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-height: 42px; max-height: 140px; }
+.ask-form button { font: 600 14px/1 var(--font-body); color: var(--surface); background: var(--accent); border: 0; border-radius: 8px; padding: 12px 14px; cursor: pointer; }
+.ask-form button.stop { background: var(--warn); }
+
+/* Page settings: reading progress, text size, theme. */
+.readbar { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 30; background: transparent; pointer-events: none; }
+.readbar span { display: block; height: 100%; width: 0; background: var(--accent); }
+.tools { position: fixed; top: 8px; right: 12px; z-index: 14; display: flex; align-items: center; gap: 4px; padding: 3px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, .08); }
+.tools .tb-done { font: 500 12px/1 var(--font-mono); color: var(--muted); padding: 0 6px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tmenu { position: relative; }
+.tmenu .short { display: none; }
+.tmenu-list { position: absolute; right: 0; top: calc(100% + 8px); width: 270px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); z-index: 16; }
+.tmenu-list a { display: block; padding: 8px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; font-size: 14.5px; }
+.tmenu-list a b { font-weight: 600; }
+.tmenu-list a span { display: block; font-size: 12.5px; color: var(--muted); }
+.tmenu-list a:hover, .tmenu-list a:focus-visible { background: var(--accent-soft); }
+.tmenu-list a[aria-current="page"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+@media (max-width: 600px) { .tmenu .long { display: none; } .tmenu .short { display: inline; } }
+.tb-btn { font: 600 13px/1 var(--font-body); color: var(--ink); background: none; border: 1px solid transparent; border-radius: 5px; padding: 6px 8px; cursor: pointer; white-space: nowrap; min-width: 30px; }
+.tb-btn:hover:not(:disabled) { border-color: var(--line); background: var(--accent-soft); }
+.tb-btn:disabled { opacity: .35; cursor: default; }
+.tb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#font-down { font-size: 12px; }
+#font-up { font-size: 16px; }
+#font-pct { font-weight: 500; font-size: 12px; color: var(--muted); min-width: 44px; font-variant-numeric: tabular-nums; }
+main { zoom: var(--fs, 1); }
+@media (max-width: 600px) { .tools .tw { display: none; } .tools .tb-done { padding: 0 4px; } #font-pct { min-width: 0; } }
+/* Animated step-through diagrams. A packet moves along a route while the caption explains each hop. */
+figure.anim { margin: 14px 0 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); min-width: 0; max-width: 820px; }
+.anim-stage { overflow-x: auto; padding: 12px 12px 4px; }
+.anim svg { display: block; width: 100%; min-width: 600px; height: auto; font-family: var(--font-body); }
+.anim .a-zone { fill: var(--bg); stroke: var(--line); stroke-width: 1.5; }
+.anim .a-zone.inner { fill: var(--surface); stroke: var(--muted); stroke-dasharray: 6 4; }
+.anim .a-cap { font-size: 11px; font-weight: 600; letter-spacing: .08em; fill: var(--muted); }
+.anim .a-node rect { fill: var(--code-bg); stroke: var(--line); stroke-width: 1.5; transition: stroke .35s ease, fill .35s ease; }
+.anim .a-node.on rect { stroke: var(--accent); fill: var(--accent-soft); }
+.anim .a-t { font-size: 13.5px; font-weight: 600; fill: var(--ink); text-anchor: middle; }
+.anim .a-s { font: 400 11.5px var(--font-mono); fill: var(--muted); text-anchor: middle; }
+.anim .a-route { fill: none; stroke: var(--line); stroke-width: 2; stroke-linecap: round; transition: stroke .35s ease; }
+.anim .a-route.on { stroke: var(--accent); }
+.anim .a-door rect { fill: var(--surface); stroke: var(--muted); stroke-width: 1.5; transition: stroke .35s ease, fill .35s ease; }
+.anim .a-door.on rect { stroke: var(--accent); fill: var(--accent-soft); }
+.anim .a-port { font: 600 12px var(--font-mono); fill: var(--ink); text-anchor: middle; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.anim .a-lbl { font-size: 11.5px; fill: var(--muted); text-anchor: middle; transition: fill .35s ease; }
+.anim .a-lbl b { font-weight: 600; }
+.anim .a-lbl .h { font-weight: 600; fill: var(--ink); transition: fill .35s ease; }
+.anim .on > .a-lbl, .anim .a-lbl.on, .anim .on > .a-lbl .h, .anim .a-lbl.on .h { fill: var(--accent); }
+.anim .a-pkt { transition: opacity .3s ease; }
+.anim .a-pkt .core { fill: var(--accent); transition: fill .3s ease; }
+.anim .a-pkt .halo { fill: var(--accent); opacity: .22; transform-origin: center; transform-box: fill-box; animation: anim-pulse 1.8s ease-in-out infinite; transition: fill .3s ease; }
+.anim.back .a-pkt .core, .anim.back .a-pkt .halo { fill: var(--ok); }
+@keyframes anim-pulse { 0%, 100% { transform: scale(1); opacity: .22; } 50% { transform: scale(1.35); opacity: .1; } }
+.anim-bar { display: flex; align-items: flex-start; gap: 14px; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
+.anim-text { flex: 1; margin: 0; max-width: none; font-size: 14.5px; line-height: 1.45; min-height: 4.4em; }
+.anim-text b { color: var(--accent); }
+.anim-ctl { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.anim-count { font: 500 12px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 4px; white-space: nowrap; }
+.anim [data-k], .anim .a-pkt { transition: opacity .45s ease, fill .35s ease, stroke .35s ease; }
+.anim .off { opacity: 0; }
+.anim .a-node.bad rect { stroke: var(--warn); fill: var(--warn-soft); stroke-dasharray: 5 4; }
+.anim .a-node.good rect { stroke: var(--ok); }
+.anim .a-m { font: 500 12px var(--font-mono); fill: var(--ink); text-anchor: middle; }
+.anim .a-badge { font-size: 12.5px; font-weight: 600; fill: var(--muted); text-anchor: middle; }
+.anim .a-badge.start { text-anchor: start; }
+.anim .a-badge.good { fill: var(--ok); }
+.anim .a-badge.bad { fill: var(--warn); }
+details.lbl.solo { margin-top: 0; }
+@media (max-width: 600px) { .anim-bar { flex-direction: column; gap: 8px; } .anim-text { min-height: 5.8em; } }
+@media (prefers-reduced-motion: reduce) { .anim .a-pkt .halo { animation: none; } .anim * { transition: none !important; } }
+
+/* Notes: right-click a word, add a comment, see it in the margin joined to the word by a line (like Word). */
+:root { --note-hl: #fdecb3; --note-line: #b9770e; --note-card: #fffaf0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --note-hl: #4a3b12; --note-line: #e8b85a; --note-card: #221c0f; } }
+:root[data-theme="dark"] { --note-hl: #4a3b12; --note-line: #e8b85a; --note-card: #221c0f; }
+mark.note-hl { background: var(--note-hl); color: inherit; border-bottom: 2px solid var(--note-line); border-radius: 2px; cursor: pointer; }
+mark.note-hl.note-end::after { content: "✎"; display: inline-block; margin-left: 3px; font: 700 1em/1 var(--font-body); color: var(--note-line); vertical-align: baseline; margin-left: 4px; text-decoration: none; }
+mark.note-hl.active { outline: 2px solid var(--note-line); outline-offset: 1px; }
+.note-menu { position: fixed; z-index: 50; min-width: 200px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 28px rgba(0, 0, 0, .18); padding: 4px; }
+.note-menu[hidden], .notes-pane[hidden] { display: none; }
+.note-menu button { display: block; width: 100%; text-align: left; font: 500 14px/1.3 var(--font-body); color: var(--ink); background: none; border: 0; border-radius: 5px; padding: 8px 10px; cursor: pointer; }
+.note-menu button:hover, .note-menu button:focus-visible { background: var(--accent-soft); outline: none; }
+.note-menu .sub { display: block; font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 2px; overflow-wrap: anywhere; }
+dialog.note-dlg { width: min(460px, calc(100% - 32px)); padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: 0 16px 48px rgba(0, 0, 0, .25); }
+dialog.note-dlg::backdrop { background: rgba(10, 16, 22, .45); }
+.note-dlg form { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.note-dlg h2 { margin: 0; font: 700 18px/1.2 var(--font-display); }
+.note-quote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--note-line); background: var(--note-card); font-size: 14px; color: var(--muted); overflow-wrap: anywhere; max-height: 5.5em; overflow-y: auto; }
+.note-dlg textarea { width: 100%; min-height: 110px; resize: vertical; font: 15px/1.45 var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.note-dlg textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.note-actions { display: flex; align-items: center; gap: 8px; }
+.note-actions .sp { flex: 1; }
+.note-actions button, .notes-head button { font: 600 14px/1 var(--font-body); border-radius: 8px; padding: 10px 14px; cursor: pointer; border: 1px solid var(--line); background: none; color: var(--ink); }
+.note-actions button.primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.note-actions button.primary:disabled { opacity: .45; cursor: default; }
+.note-actions button.danger { color: var(--warn); border-color: var(--warn); }
+.notes-count { margin-left: 6px; font: 600 11px/1 var(--font-mono); background: var(--note-line); color: var(--surface); border-radius: 9px; padding: 2px 6px; }
+.notes-pane { position: fixed; z-index: 13; top: 54px; right: 0; bottom: 0; width: 300px; display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--line); }
+.notes-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.notes-head h2 { flex: 1; margin: 0; font: 700 15px/1.2 var(--font-body); }
+.notes-head button { font-size: 12.5px; padding: 6px 9px; border-radius: 6px; }
+.notes-margin { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.notes-pane.list .notes-margin { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.notes-empty { margin: 0; padding: 14px; font-size: 14px; color: var(--muted); }
+.note-card { background: var(--note-card); border: 1px solid var(--line); border-left: 3px solid var(--note-line); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; line-height: 1.45; cursor: pointer; min-width: 0; }
+.note-card[hidden] { display: none; }
+.notes-pane.margin .note-card { position: absolute; left: 16px; right: 10px; transition: top .15s ease; }
+.note-card.active { box-shadow: 0 0 0 2px var(--note-line); }
+.note-top { display: flex; align-items: baseline; gap: 6px; }
+.note-step { flex: 1; font-size: 11.5px; color: var(--muted); display: none; }
+.notes-pane.list .note-step { display: block; }
+.note-quote-s { flex: 1; margin: 0; font-size: 12px; color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.note-edit { font: 500 12px/1 var(--font-body); color: var(--accent); background: none; border: 0; padding: 2px 4px; cursor: pointer; }
+.note-text { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-date { margin: 6px 0 0; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.note-old { margin: 4px 0 0; font-size: 12px; color: var(--warn); }
+.notes-lines { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 12; }
+.notes-lines path { fill: none; stroke: var(--note-line); stroke-width: 1.5; opacity: .75; }
+.notes-lines circle { fill: var(--note-line); }
+body.notes-open { padding-right: 300px; }
+@media (max-width: 960px) {
+  .notes-pane { top: auto; left: 0; right: 0; width: auto; height: 45vh; border-left: 0; border-top: 1px solid var(--line); box-shadow: 0 -8px 24px rgba(0, 0, 0, .15); }
+  #notes-mode { display: none; }
+  body.notes-open { padding-right: 0; }
+}
+
+/* Bookmarks: save a spot with right-click, and the page remembers where you stopped reading. */
+#note-hint { display: block; max-width: 90ch; }
+mark.bm-hl { background: none; color: inherit; }
+mark.bm-hl.bm-start::before { content: "⚑"; color: var(--accent); font-size: .95em; margin-right: 3px; }
+.bm-wrap { position: relative; }
+.bm-list { position: absolute; right: 0; top: calc(100% + 8px); width: 330px; max-height: 60vh; overflow-y: auto; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); z-index: 16; }
+.bm-list[hidden] { display: none; }
+.bm-head { margin: 0; padding: 8px 10px 2px; font: 600 11.5px/1.2 var(--font-body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.bm-item { display: flex; align-items: flex-start; gap: 6px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; line-height: 1.35; }
+.bm-item:hover, .bm-item:focus-visible { background: var(--accent-soft); outline: none; }
+.bm-item .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.bm-item .s { display: block; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bm-x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 17px; line-height: 1; padding: 0 4px; }
+.bm-x:hover { color: var(--warn); }
+.bm-empty { margin: 0; padding: 10px; font-size: 13.5px; color: var(--muted); }
+.bm-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 40; max-width: calc(100% - 32px); display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; box-shadow: 0 8px 28px rgba(0, 0, 0, .2); font-size: 14px; }
+.bm-toast[hidden] { display: none; }
+.bm-toast button { font: 600 13px/1 var(--font-body); color: var(--accent); background: none; border: 0; cursor: pointer; padding: 4px; }
+/* the lab */
+/* Identity and Access Lab: additions to the shared tutorial styles. Colours come from the page's own tokens. */
+.lvl { margin-left: 6px; padding: 0 6px; border: 1px solid var(--line); border-radius: 10px; font: 500 10.5px/1.5 var(--font-body); font-style: normal; letter-spacing: .02em; color: var(--muted); white-space: nowrap; }
+.lvl-chip { display: inline-block; margin-left: 10px; padding: 1px 9px; border: 1px solid var(--line); border-radius: 12px; font: 600 11px/1.6 var(--font-body); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); vertical-align: middle; }
+.what-is { margin: 14px 0 18px; padding: 12px 16px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; background: var(--surface); max-width: 820px; }
+.what-is h4 { margin: 0 0 6px; font-size: 14.5px; }
+.what-is dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; }
+.what-is dt { font-weight: 600; color: var(--muted); }
+.what-is dd { margin: 0; }
+@media (max-width: 600px) { .what-is dl { grid-template-columns: 1fr; gap: 0; } .what-is dd { margin-bottom: 8px; } }
+.build-note { border-left-color: var(--warn); }
+
+</style>
+<script>
+// Apply the saved theme and text size before the page paints, so there is no flash.
+try {
+  var t = localStorage.getItem('tutorial-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  var f = parseFloat(localStorage.getItem('tutorial-font')); if (f >= 0.8 && f <= 1.6) document.documentElement.style.setProperty('--fs', f);
+} catch (e) {}
+</script>
+<!-- backup:start -->
+<style>
+.bk-state { font: 500 12px/1 var(--font-mono); color: var(--muted); padding: 0 6px; white-space: nowrap; cursor: default; }
+.bk-state::before { content: "●"; color: var(--ok); margin-right: 5px; }
+.bk-state.saving::before { color: var(--accent); }
+.bk-state.off::before { color: var(--warn); }
+@media (max-width: 700px) { .bk-state .t { display: none; } }
+</style>
+<script>
+// Backup. The page keeps notes, bookmarks, your place and ticked steps in this browser (localStorage), and also sends each
+// change to server.js, which keeps them in a SQLite file (data/tutorial.db). When a page opens, the newer copy wins, so a
+// new browser, or a browser whose site data was cleared, gets everything back. A browser that never synced before keeps
+// its own notes and ticks and adds the server's (nothing is dropped). Without the server the page works as before.
+(function () {
+  if (!/^https?:$/.test(location.protocol) || !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return;
+  var PAGE = location.pathname.split('/').pop() || 'code-to-cluster-tutorial.html';
+  var KEYS = { notes: 'tutorial-notes:' + PAGE, bookmarks: 'tutorial-bookmarks:' + PAGE, pos: 'tutorial-pos:' + PAGE, done: PAGE.replace(/\.html$/, '') + '-done' };
+  var TSKEY = 'tutorial-sync-ts:' + PAGE;                       // when each item last changed in this browser
+  var ls, rawSet = Storage.prototype.setItem, rawRemove = Storage.prototype.removeItem;
+  try { ls = window.localStorage; ls.getItem('x'); } catch (e) { return; }
+  var ts = {}; try { ts = JSON.parse(ls.getItem(TSKEY) || '{}') || {}; } catch (e) { ts = {}; }
+  var dirty = {}, timer = null, state = 'off', lastOk = 0;
+  function shortOf(k) { for (var s in KEYS) if (KEYS[s] === k) return s; return null; }
+  function setTs(s, t) { ts[s] = t; try { rawSet.call(ls, TSKEY, JSON.stringify(ts)); } catch (e) {} }
+  function put(s, v) { if (v === null) rawRemove.call(ls, KEYS[s]); else rawSet.call(ls, KEYS[s], v); }
+
+  // Combine two copies of something that was never synced before, so neither side loses anything.
+  function union(s, a, b) {
+    try {
+      var A = JSON.parse(a), B = JSON.parse(b);
+      if (s === 'done') { for (var k in B) if (!(k in A)) A[k] = B[k]; return JSON.stringify(A); }
+      if (s === 'notes' || s === 'bookmarks') {
+        var seen = {}; A.forEach(function (x) { seen[x.id] = 1; });
+        B.forEach(function (x) { if (!seen[x.id]) A.push(x); });
+        return JSON.stringify(A.sort(function (x, y) { return (x.ts || 0) - (y.ts || 0); }));
+      }
+    } catch (e) {}
+    return b;                                                    // "where you stopped": the server's copy
+  }
+
+  // Restore before the page's own scripts read localStorage. A synchronous request is fine: the server is on this machine.
+  var srv = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/api/state?page=' + encodeURIComponent(PAGE), false);
+    x.setRequestHeader('x-tutorial', '1');
+    x.send();
+    if (x.status === 200) { srv = JSON.parse(x.responseText).state || {}; state = 'ok'; lastOk = Date.now(); }
+    else if (x.status === 503) state = 'none';
+  } catch (e) {}
+  if (srv) Object.keys(KEYS).forEach(function (s) {
+    var remote = srv[s], lv = ls.getItem(KEYS[s]), lt = ts[s] || 0;
+    if (!remote) { if (lv !== null) { dirty[s] = true; if (!lt) setTs(s, Date.now()); } return; }
+    if (!lt && lv !== null && lv !== remote.value) { put(s, union(s, lv, remote.value)); setTs(s, Date.now()); dirty[s] = true; return; }
+    if (remote.updated > lt || lv === null && remote.value !== null) { put(s, remote.value); setTs(s, remote.updated); }
+    else if (lt > remote.updated) dirty[s] = true;
+  });
+
+  // Send every later change.
+  function changed(k) { var s = shortOf(k); if (!s || state === 'none') return; setTs(s, Date.now()); dirty[s] = true; schedule(500); }
+  Storage.prototype.setItem = function (k, v) { rawSet.call(this, k, v); if (this === ls) changed(k); };
+  Storage.prototype.removeItem = function (k) { rawRemove.call(this, k); if (this === ls) changed(k); };
+  function schedule(ms) { clearTimeout(timer); timer = setTimeout(push, ms); if (state === 'ok') { state = 'saving'; show(); } }
+  function push() {
+    timer = null;
+    var keys = Object.keys(dirty); dirty = {};
+    if (!keys.length) { if (state === 'saving') { state = 'ok'; show(); } return; }
+    Promise.all(keys.map(function (s) {
+      return fetch('/api/state', { method: 'PUT', keepalive: true, headers: { 'content-type': 'application/json', 'x-tutorial': '1' },
+        body: JSON.stringify({ page: PAGE, key: s, value: ls.getItem(KEYS[s]), updated: ts[s] || Date.now() }) })
+        .then(function (r) { if (r.status === 503) { state = 'none'; return; } if (!r.ok) throw new Error(String(r.status)); });
+    })).then(function () { if (state !== 'none') { state = 'ok'; lastOk = Date.now(); } show(); }, function () {
+      keys.forEach(function (s) { dirty[s] = true; }); state = 'off'; show(); schedule(15000);
+    });
+  }
+  addEventListener('pagehide', function () { if (Object.keys(dirty).length) push(); });
+  if (Object.keys(dirty).length) schedule(300);
+
+  // The small status next to the "done" counter.
+  function show() {
+    var el = document.getElementById('backup-state'); if (!el) return;
+    el.hidden = false;
+    var txt = { ok: 'Backed up', saving: 'Saving…', off: 'Backup off', none: 'Backup off' }[state];
+    el.className = 'bk-state' + (state === 'ok' ? '' : state === 'saving' ? ' saving' : ' off');
+    el.innerHTML = '<span class="t"></span>'; el.firstChild.textContent = txt;
+    el.title = state === 'ok' ? 'Your notes, bookmarks, place and ticks are saved in data/tutorial.db (last saved ' + new Date(lastOk).toLocaleTimeString() + ').'
+      : state === 'saving' ? 'Sending your latest changes to data/tutorial.db.'
+      : state === 'none' ? 'The tutorial server has no SQLite support (it needs Node.js 22.13 or newer), so nothing is backed up. Your changes stay in this browser.'
+      : 'The tutorial server is not answering. Your changes stay in this browser and are sent when it is back.';
+  }
+  document.addEventListener('DOMContentLoaded', show);
+  window.__backup = { state: function () { return state; } };
+})();
+</script>
+<!-- backup:end -->
+</head>
+<body>
+<a class="skip" href="#overview">Skip to the tutorial</a>
+<div class="readbar" id="readbar" aria-hidden="true"><span></span></div>
+<div class="tools" role="group" aria-label="Page settings">
+  <div class="tmenu">
+    <button type="button" class="tb-btn" id="tmenu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tmenu-list" title="Switch tutorial"><span class="long">Tutorials ▾</span><span class="short" aria-label="Tutorials">☰</span></button>
+    <div class="tmenu-list" id="tmenu-list" role="menu" aria-label="Tutorials" hidden>
+      <a role="menuitem" href="code-to-cluster-tutorial.html"><b>Code to Cluster</b><span>Part 1. On your PC with kind. Free.</span></a>
+      <a role="menuitem" href="eyes-on-the-cluster-tutorial.html"><b>Eyes on the Cluster</b><span>Part 2. Metrics, logs and alerts. Free.</span></a>
+      <a role="menuitem" href="platform-as-code-tutorial.html"><b>Platform as Code</b><span>Part 3. The whole platform in Git. Free.</span></a>
+      <a role="menuitem" href="secure-the-road-tutorial.html"><b>Secure the Road</b><span>Part 4. Scan, sign, restrict. Free.</span></a>
+      <a role="menuitem" href="scale-and-capacity-tutorial.html"><b>Scale and Capacity</b><span>Part 5. Size, load-test, autoscale. Free.</span></a>
+      <a role="menuitem" href="terraform-the-lab-tutorial.html"><b>Terraform the Lab</b><span>Part 6. The lab as code. Free.</span></a>
+      <a role="menuitem" href="todo-on-eks-tutorial.html"><b>Todo on EKS</b><span>On AWS with EKS. Costs money.</span></a>
+      <a role="menuitem" href="github-actions-tutorial.html"><b>GitHub Actions Lab</b><span>Interactive. Write and fix pipelines. Free.</span></a>
+      <a role="menuitem" href="identity-and-access-tutorial.html" aria-current="page"><b>Identity and Access Lab</b><span>Interactive. TLS, certificates, OAuth, OIDC, JWT, RBAC. Free.</span></a>
+    </div>
+  </div>
+  <!-- backup-badge:start --><span class="bk-state" id="backup-state" hidden></span><!-- backup-badge:end -->
+<span class="tb-done" id="tb-done" title="Steps you have ticked off">0/0 done</span>
+  <button type="button" class="tb-btn" id="font-down" aria-label="Smaller text" title="Smaller text">A−</button>
+  <button type="button" class="tb-btn" id="font-pct" aria-label="Reset text size" title="Reset text size">100%</button>
+  <button type="button" class="tb-btn" id="font-up" aria-label="Larger text" title="Larger text">A+</button>
+  <span class="bm-wrap"><button type="button" class="tb-btn" id="bm-btn" aria-haspopup="true" aria-expanded="false" aria-controls="bm-list" title="Bookmarks: go back to where you were">⚑<span class="tw"> Bookmarks</span></button><div class="bm-list" id="bm-list" role="menu" aria-label="Bookmarks" hidden></div></span>
+  <button type="button" class="tb-btn" id="notes-btn" aria-pressed="false" aria-controls="notes-pane" title="Show your notes">Notes<span class="notes-count" id="notes-count" hidden></span></button>
+  <button type="button" class="tb-btn" id="theme-btn"><span id="theme-glyph" aria-hidden="true">◐</span><span class="tw" id="theme-word"> Auto</span></button>
+</div>
+<button type="button" class="rail-open" id="rail-open" aria-label="Show the steps panel" title="Show the steps panel" hidden>»</button>
+
+<div class="shell">
+  <div class="rail-grip" id="rail-grip" role="separator" aria-orientation="vertical" aria-label="Resize the steps panel" aria-valuemin="180" aria-valuemax="480" aria-valuenow="250" tabindex="0" title="Drag to resize. Double-click to reset."></div>
+  <nav class="rail" aria-label="Steps">
+    <details id="rail-details" open>
+      <summary>Steps ▾</summary>
+      <div class="rail-head"><h2>Steps</h2><button type="button" class="rail-btn" id="rail-hide" aria-label="Hide the steps panel" title="Hide the steps panel">«</button></div>
+      <ol id="rail-list"></ol>
+      <div class="progress"><span id="progress-text">0 of 0 steps done</span><div class="bar"><span id="progress-bar"></span></div></div>
+    </details>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <p class="eyebrow">Interactive lab · TLS, certificates, OAuth, OIDC, JWT, RBAC · easy to expert · free</p>
+      <h1>Identity and Access Lab</h1>
+      <p class="lede">Learn how people and programs prove who they are and what they may do. Start with what authentication and authorization mean, then HTTPS and certificates, tokens, OAuth 2.0 and OpenID Connect, signing in with Google, and access control, and finish by securing the Todo app yourself.</p>
+      <ul class="stack">
+        <li>TLS</li><li>X.509 certificates</li><li>JWT</li><li>OAuth 2.0</li><li>OpenID Connect</li><li>RBAC</li><li>Keycloak</li><li>ASP.NET Core</li><li>Angular</li><li>Kubernetes</li>
+      </ul>
+      <p class="ask-hint" id="ask-hint" hidden></p>
+      <p class="ask-hint" id="note-hint"><kbd>Right-click</kbd> a word and choose <b>Add a note</b> to save a comment. It stays highlighted, and your notes appear in the margin (button <b>Notes</b> at the top). Choose <b>Bookmark this spot</b> to mark a place you want to come back to. The page also remembers where you stopped reading. Everything is kept in this browser.</p>
+    </header>
+
+    <!-- ============ 0 ============ -->
+    <section class="step" id="overview" data-step data-level="Start here">
+      <div class="step-head"><span class="num">00</span><h2>What you'll be able to do</h2><span class="lvl-chip">Start here</span></div>
+      <p class="goal"><b>Goal:</b> by the end you can explain how a person or a program proves who it is and what it may do, <b>read</b> a certificate, a token or a sign-in flow, <b>spot</b> what is wrong with it, and <b>secure</b> the Todo app with a real identity provider.</p>
+      <div class="callout build-note"><p><strong>Work in progress.</strong> This page is built level by level. The map below shows the whole plan; lessons appear here as each level is finished.</p></div>
+      <div class="why"><h4>How this lab works</h4>
+        <p>Every topic starts with a short <b>"What is it?"</b> box: what it is, the problem it solves, an everyday comparison and what it is <em>not</em>. Then the detail follows, easy first. The detail goes all the way down to real messages, token bytes and certificate fields, but one new idea at a time, and the deepest parts sit in closed <b>"Line by line"</b> blocks you can open when you want them.</p>
+        <p>Each lesson has exercises, and a tool in the page where one helps (a token decoder, a certificate reader, a sign-in flow you can attack). The tools run in your browser and send nothing anywhere. A step ticks itself only when every exercise in it is passed.</p>
+        <p>Every fact is taken from the standard that defines it (the RFCs, the OpenID Connect specifications, NIST) or from the product's own documentation, and each lesson ends with its sources and the date they were checked. Where something could not be run and tested, the page says so.</p>
+      </div>
+
+      <h3>The map</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Level</th><th>Steps</th><th>After it you can</th></tr></thead>
+        <tbody>
+          <tr><td><b>1 Foundations</b></td><td>01 to 03</td><td>Tell authentication from authorization, say when an API answers 401, 403 or 404, choose between a hash, a signature and encryption, and explain a cookie login.</td></tr>
+          <tr><td><b>2 HTTPS, TLS, certificates</b></td><td>04 to 08</td><td>Walk through the TLS handshake, read any certificate, build your own certificate authority, and explain how public certificates are issued and renewed.</td></tr>
+          <tr><td><b>3 Tokens</b></td><td>09 to 10</td><td>Decode a JWT by hand, list the checks it must pass, and carry out (then block) the classic attacks on it.</td></tr>
+          <tr><td><b>4 OAuth and OpenID Connect</b></td><td>11 to 15</td><td>Write every message of the authorization code flow with PKCE, choose the right grant, validate an ID token and run "Log in with Google" by hand.</td></tr>
+          <tr><td><b>5 Authorization</b></td><td>16 to 18</td><td>Design roles and rules, recognise broken access control in code, and write a Kubernetes Role.</td></tr>
+          <tr><td><b>6 Build it</b></td><td>19 to 24</td><td>Run Keycloak, protect the .NET API, sign in from the Angular app, add Google and call the API from another service.</td></tr>
+          <tr><td><b>7 Expert</b></td><td>25 to 31</td><td>Compare sign-in methods by phishing resistance, harden tokens, and review a whole login system for flaws.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Levels 1 to 5 and 7 need only a browser. Level 6 uses your laptop as in the other tutorials: Docker for Keycloak and PostgreSQL, the .NET 10 SDK and Node. Steps 15 and 23 use a free Google account. If you have none, you can still finish the module: you tick those two steps by hand.</p>
+
+      <h3>One sign-in, five technologies</h3>
+      <p>Every level below lights up one part of this picture again. Play it with the arrows, or let it run:</p>
+      <figure class="anim" aria-label="Animated diagram: one sign-in to the Todo app, and where each technology takes part">
+        <div class="anim-stage"><svg viewBox="0 0 760 330" role="img" aria-label="A browser opens the Todo app over HTTPS. The app sends the browser to an identity provider. The user proves who they are there with a password, a passkey or Google. The identity provider gives the app tokens. The app calls the API with a token, and the API checks the token and the user's role.">
+          <rect class="a-zone" x="8" y="8" width="744" height="314" rx="12"/>
+          <path class="a-route" data-k="r1" d="M176 150 L312 78"/>
+          <path class="a-route" data-k="r2" d="M176 190 L272 258"/>
+          <path class="a-route" data-k="r3" d="M386 222 V108"/>
+          <path class="a-route" data-k="r4" d="M462 78 L588 150"/>
+          <text class="a-lbl" data-k="r1" x="190" y="96"><tspan class="h">HTTPS</tspan></text>
+          <text class="a-lbl" data-k="r1" x="190" y="112">TLS + a certificate</text>
+          <text class="a-lbl" data-k="r2" x="170" y="248"><tspan class="h">OAuth 2.0 + OpenID Connect</tspan></text>
+          <text class="a-lbl" data-k="r3" x="440" y="170"><tspan class="h">JWT</tspan></text>
+          <text class="a-lbl" data-k="r3" x="440" y="186">signed tokens</text>
+          <text class="a-lbl" data-k="r4" x="590" y="52"><tspan class="h">token + role</tspan></text>
+          <text class="a-lbl" data-k="r4" x="590" y="68">RBAC decides</text>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <g class="a-node" data-k="browser"><rect x="24" y="120" width="152" height="100" rx="8"/><text class="a-t" x="100" y="164">Browser</text><text class="a-s" x="100" y="184">you</text></g>
+          <g class="a-node" data-k="app"><rect x="312" y="40" width="150" height="68" rx="8"/><text class="a-t" x="387" y="72">Todo app</text><text class="a-s" x="387" y="92">asks who you are</text></g>
+          <g class="a-node" data-k="idp"><rect x="272" y="222" width="230" height="76" rx="8"/><text class="a-t" x="387" y="254">Identity provider</text><text class="a-s" x="387" y="274">password · passkey · Google</text></g>
+          <g class="a-node" data-k="api"><rect x="588" y="110" width="150" height="80" rx="8"/><text class="a-t" x="663" y="146">Todo API</text><text class="a-s" x="663" y="166">checks the token</text></g>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "browser app r1", "path": [[184, 146], [304, 82]], "text": "<b>1. You open the site.</b> Your browser connects over HTTPS. TLS encrypts the connection, and the app's certificate proves it really is that site."},
+          {"on": "browser app idp r2", "path": [[184, 194], [264, 254]], "text": "<b>2. The app sends you to the identity provider.</b> The app does not check passwords itself. OAuth 2.0 and OpenID Connect describe how it asks someone else to do it."},
+          {"on": "browser idp", "good": "idp", "text": "<b>3. You prove who you are there.</b> A password, a passkey or <em>Log in with Google</em>. The app never sees it."},
+          {"on": "app idp r3", "path": [[386, 214], [386, 116]], "text": "<b>4. The identity provider gives the app tokens.</b> They are JWTs: signed, so the app can check that the provider really issued them."},
+          {"on": "app api r4", "good": "api", "path": [[470, 84], [580, 146]], "text": "<b>5. The app calls the API with a token.</b> The API checks the signature, then the user's role (RBAC) decides what this request may do."}
+        ]</script>
+      </figure>
+
+      <h3>Words people mix up</h3>
+      <p>These are the pairs that cause the most confusion. Each is explained properly in its own lesson.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Term</th><th>What it is</th><th>What it is not</th></tr></thead>
+        <tbody>
+          <tr><td><b>OAuth 2.0</b></td><td>A framework that lets an app obtain limited access to a service, on someone's behalf or on its own.</td><td>Not a login protocol. It says what an app may do, not who signed in.</td></tr>
+          <tr><td><b>OpenID Connect</b></td><td>A simple identity layer on top of OAuth 2.0. It lets an app verify who signed in.</td><td>Not a separate system: it uses OAuth 2.0's messages and adds an ID token.</td></tr>
+          <tr><td><b>SAML 2.0</b></td><td>An OASIS standard (15 March 2005) that carries sign-in information between organisations as XML assertions. Its main use case is web single sign-on.</td><td>Not built on OAuth. It does a similar job to OpenID Connect in a different format.</td></tr>
+          <tr><td><b>Role</b></td><td>A named set of permissions given to people inside a system, such as <code>admin</code>.</td><td>Not the same as a scope.</td></tr>
+          <tr><td><b>Scope</b></td><td>A named permission an app asks for when it requests a token, such as <code>openid</code>.</td><td>Not a role: the server may grant less than was asked.</td></tr>
+          <tr><td><b>Claim</b></td><td>A statement inside a token, such as who issued it or when it expires.</td><td>Not a permission by itself. A role or a scope can <em>travel</em> as a claim.</td></tr>
+          <tr><td><b>401</b></td><td>The request has no valid authentication credentials. The server must say how to authenticate, in a <code>WWW-Authenticate</code> header.</td><td>Not "you may not". That is 403.</td></tr>
+          <tr><td><b>403</b></td><td>The server understood the request and refuses it. Credentials, if any, are not enough.</td><td>Not "who are you?". That is 401.</td></tr>
+          <tr><td><b>404</b></td><td>No representation was found, <em>or</em> the server is not willing to disclose that one exists.</td><td>Not always "it does not exist": it can hide a resource from someone who may not know of it.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>Glossary</h3>
+      <p>Short definitions, in the standards' own meaning. Each term gets its "What is it?" box where it is first used.</p>
+      <dl class="glossary">
+        <dt>Authentication</dt><dd>Proving who or what is making a request.</dd>
+        <dt>Authorization</dt><dd>Deciding what an authenticated caller may do.</dd>
+        <dt>Credential</dt><dd>Something used to prove an identity: a password, a key, a token, a certificate.</dd>
+        <dt>Identity provider</dt><dd>The service that signs users in and tells other applications who they are. OpenID Connect calls it the OpenID Provider.</dd>
+        <dt>Resource owner, client, authorization server, resource server</dt><dd>The four OAuth roles: the one who can grant access (often you), the app that wants access, the server that issues access tokens, and the server that holds the protected data.</dd>
+        <dt>Token</dt><dd>A string an app presents to show what it is allowed to do, instead of presenting a password.</dd>
+        <dt>Bearer token</dt><dd>A token that any party in possession of it can use, in any way another holder could. Whoever holds it can use it. It travels in a header such as <code>Authorization: Bearer …</code>.</dd>
+        <dt>JWT</dt><dd>JSON Web Token: a compact, URL-safe way to carry claims between two parties, as a JSON object that can be signed or encrypted. Its three parts are joined with dots: <code>header.payload.signature</code>.</dd>
+        <dt>PKCE</dt><dd>Proof Key for Code Exchange: a technique that protects the authorization code flow against an intercepted code.</dd>
+        <dt>RBAC</dt><dd>Role-based access control: permissions are granted to roles, and people are given roles.</dd>
+        <dt>Single sign-on</dt><dd>One sign-in that lets you use several applications.</dd>
+        <dt>TLS</dt><dd>Transport Layer Security: the protocol that lets two programs talk over the Internet in a way designed to prevent eavesdropping, tampering and message forgery.</dd>
+        <dt>HTTPS</dt><dd>HTTP carried over a TLS connection that has been secured for it. Its addresses start with <code>https://</code>.</dd>
+        <dt>Certificate</dt><dd>A signed document that ties a public key to a name. Internet certificates follow the X.509 format.</dd>
+        <dt>Certificate authority</dt><dd>An organisation that others trust to create and sign certificates.</dd>
+      </dl>
+
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+    </main>
+</div>
+
+<script>
+// Page settings: reading progress bar, text size (A− / A+), and light / dark / auto theme. Saved in this browser.
+(function () {
+  var root = document.documentElement;
+  function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function save(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+  var LEVELS = [0.85, 1, 1.15, 1.3, 1.5];
+  var fs = parseFloat(load('tutorial-font')); if (!(fs >= 0.8 && fs <= 1.6)) fs = 1;
+  var down = document.getElementById('font-down'), up = document.getElementById('font-up'), pct = document.getElementById('font-pct');
+  function nearest() { var b = 0; LEVELS.forEach(function (l, i) { if (Math.abs(l - fs) < Math.abs(LEVELS[b] - fs)) b = i; }); return b; }
+  function applyFont() {
+    root.style.setProperty('--fs', fs);
+    pct.textContent = Math.round(fs * 100) + '%';
+    down.disabled = fs <= LEVELS[0]; up.disabled = fs >= LEVELS[LEVELS.length - 1];
+  }
+  function step(d) { fs = LEVELS[Math.min(LEVELS.length - 1, Math.max(0, nearest() + d))]; save('tutorial-font', fs); applyFont(); }
+  down.addEventListener('click', function () { step(-1); });
+  up.addEventListener('click', function () { step(1); });
+  pct.addEventListener('click', function () { fs = 1; save('tutorial-font', fs); applyFont(); });
+  applyFont();
+
+  var MODES = ['auto', 'light', 'dark'], GLYPH = { auto: '◐', light: '☀', dark: '☾' }, WORD = { auto: 'Auto', light: 'Light', dark: 'Dark' };
+  var mode = load('tutorial-theme'); if (MODES.indexOf(mode) < 0) mode = 'auto';
+  var btn = document.getElementById('theme-btn');
+  function applyTheme() {
+    if (mode === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', mode);
+    document.getElementById('theme-glyph').textContent = GLYPH[mode];
+    document.getElementById('theme-word').textContent = ' ' + WORD[mode];
+    btn.setAttribute('aria-label', 'Theme: ' + WORD[mode] + '. Click to change.');
+    btn.title = 'Theme: ' + WORD[mode] + ' (click to change)';
+  }
+  btn.addEventListener('click', function () { mode = MODES[(MODES.indexOf(mode) + 1) % MODES.length]; save('tutorial-theme', mode); applyTheme(); });
+  applyTheme();
+
+  var tbtn = document.getElementById('tmenu-btn'), tlist = document.getElementById('tmenu-list');
+  function tmenu(open) { tlist.hidden = !open; tbtn.setAttribute('aria-expanded', open); if (open) tlist.querySelector('a').focus(); }
+  tbtn.addEventListener('click', function () { tmenu(tlist.hidden); });
+  document.addEventListener('click', function (e) { if (!tlist.hidden && !e.target.closest('.tmenu')) tmenu(false); });
+  document.addEventListener('keydown', function (e) {
+    if (tlist.hidden) return;
+    if (e.key === 'Escape') { tmenu(false); tbtn.focus(); }
+    var items = Array.prototype.slice.call(tlist.querySelectorAll('a')), i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+  });
+
+  var bar = document.querySelector('#readbar span'), queued = false;
+  function paint() {
+    queued = false;
+    var max = root.scrollHeight - window.innerHeight;
+    bar.style.width = (max > 0 ? Math.min(100, Math.max(0, window.scrollY / max * 100)) : 0) + '%';
+  }
+  function schedule() { if (!queued) { queued = true; requestAnimationFrame(paint); } }
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule);
+  paint();
+})();
+</script>
+
+<script>
+(function () {
+  var KEY = 'identity-and-access-tutorial-done';
+  var done = {};
+  try { done = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { done = {}; }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(done)); } catch (e) {} }
+
+  // Build the step rail from the sections.
+  var list = document.getElementById('rail-list');
+  var sections = Array.prototype.slice.call(document.querySelectorAll('section[data-step]'));
+  var trackable = 0;
+  sections.forEach(function (s) {
+    var num = s.querySelector('.num').textContent;
+    var title = s.querySelector('h2').textContent;
+    var li = document.createElement('li');
+    var a = document.createElement('a');
+    a.href = '#' + s.id;
+    a.innerHTML = '<span class="n"></span><span class="tick" aria-hidden="true">✓</span><span class="t"></span>';
+    a.querySelector('.n').textContent = num;
+    a.querySelector('.t').textContent = title; var lv = s.getAttribute('data-level'); if (lv) { var c = document.createElement('i'); c.className = 'lvl'; c.textContent = lv; a.querySelector('.t').appendChild(c); }
+    li.appendChild(a);
+    list.appendChild(li);
+    var box = s.querySelector('input[data-done]');
+    if (box) {
+      trackable++;
+      box.checked = !!done[s.id];
+      a.classList.toggle('done', box.checked);
+      box.addEventListener('change', function () {
+        done[s.id] = box.checked;
+        a.classList.toggle('done', box.checked);
+        save(); progress();
+      });
+    }
+  });
+  function progress() {
+    var n = sections.filter(function (s) { var b = s.querySelector('input[data-done]'); return b && b.checked; }).length;
+    document.getElementById('progress-text').textContent = n + ' of ' + trackable + ' steps done';
+    document.getElementById('progress-bar').style.width = (trackable ? (n / trackable * 100) : 0) + '%';
+    document.getElementById('tb-done').textContent = n + '/' + trackable + ' done';
+  }
+  progress();
+
+  // Mark the step being read in the rail.
+  if ('IntersectionObserver' in window) {
+    var links = {};
+    list.querySelectorAll('a').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting || !links[en.target.id]) return;
+        Object.keys(links).forEach(function (k) { links[k].classList.remove('current'); links[k].removeAttribute('aria-current'); });
+        links[en.target.id].classList.add('current');
+        links[en.target.id].setAttribute('aria-current', 'step');
+      });
+    }, { rootMargin: '-10% 0px -80% 0px' });
+    sections.forEach(function (s) { io.observe(s); });
+  }
+
+  // Resizable steps panel: drag the grip, use the arrow keys (Home resets), or collapse it with « and ».
+  (function () {
+    var shell = document.querySelector('.shell'), grip = document.getElementById('rail-grip');
+    var hide = document.getElementById('rail-hide'), show = document.getElementById('rail-open');
+    var W0 = 250, MIN = 180, MAX = 480, st = { w: W0, c: false };
+    try { st = Object.assign(st, JSON.parse(localStorage.getItem(KEY + '-rail') || '{}')); } catch (e) {}
+    function clamp(w) { return Math.min(MAX, Math.max(MIN, Math.round(+w || W0))); }
+    function apply() {
+      st.w = clamp(st.w);
+      shell.style.setProperty('--rail-w', st.w + 'px');
+      shell.classList.toggle('rail-collapsed', !!st.c);
+      show.hidden = !st.c;
+      grip.setAttribute('aria-valuenow', st.w);
+    }
+    function save() { try { localStorage.setItem(KEY + '-rail', JSON.stringify(st)); } catch (e) {} }
+    apply();
+    grip.addEventListener('pointerdown', function (e) {
+      grip.setPointerCapture(e.pointerId); grip.classList.add('drag'); document.body.classList.add('resizing'); e.preventDefault();
+    });
+    grip.addEventListener('pointermove', function (e) {
+      if (!grip.hasPointerCapture(e.pointerId)) return;
+      st.w = clamp(e.clientX - shell.getBoundingClientRect().left); apply();
+    });
+    function end(e) { if (grip.hasPointerCapture(e.pointerId)) grip.releasePointerCapture(e.pointerId); grip.classList.remove('drag'); document.body.classList.remove('resizing'); save(); }
+    grip.addEventListener('pointerup', end);
+    grip.addEventListener('pointercancel', end);
+    grip.addEventListener('dblclick', function () { st.w = W0; apply(); save(); });
+    grip.addEventListener('keydown', function (e) {
+      var d = e.key === 'ArrowLeft' ? -16 : e.key === 'ArrowRight' ? 16 : 0;
+      if (d) st.w += d; else if (e.key === 'Home') st.w = W0; else return;
+      e.preventDefault(); apply(); save();
+    });
+    hide.addEventListener('click', function () { st.c = true; apply(); save(); show.focus(); });
+    show.addEventListener('click', function () { st.c = false; apply(); save(); hide.focus(); });
+  })();
+
+  // Collapse the rail by default on phones.
+  if (window.matchMedia('(max-width: 960px)').matches) document.getElementById('rail-details').open = false;
+
+  // Copy buttons on every code block.
+  document.querySelectorAll('figure.code').forEach(function (fig) {
+    // Line numbers on multi-line snippets (not on one-line commands or folder trees).
+    var pre = fig.querySelector('pre'), src = pre.querySelector('code').textContent.replace(/\n$/, '');
+    var count = src.split('\n').length;
+    if (count > 1 && !/[├└]──/.test(src)) {
+      var nums = []; for (var i = 1; i <= count; i++) nums.push(i);
+      pre.setAttribute('data-ln', nums.join('\n'));
+    }
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'copy';
+    btn.textContent = 'Copy';
+    fig.querySelector('figcaption').appendChild(btn);
+    btn.addEventListener('click', function () {
+      var text = fig.querySelector('pre code').textContent;
+      function ok() { btn.textContent = 'Copied'; btn.classList.add('copied'); setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500); }
+      function fallback() {
+        var r = document.createRange(); r.selectNodeContents(fig.querySelector('pre code'));
+        var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        btn.textContent = 'Press Ctrl+C';
+      }
+      try {
+        navigator.clipboard.writeText(text).then(ok, fallback);
+      } catch (e) { fallback(); }
+    });
+  });
+})();
+</script>
+
+<dialog class="ask" id="ask" aria-labelledby="ask-title">
+  <div class="ask-head">
+    <div><h2 id="ask-title">Ask about <code id="ask-word"></code></h2><p class="ask-step" id="ask-step"></p></div>
+    <button type="button" class="ask-btn" id="ask-close">Close</button>
+  </div>
+  <div class="ask-thread" id="ask-thread" aria-live="polite"></div>
+  <div class="ask-chips" id="ask-chips">
+    <button type="button" class="ask-chip">What is this?</button>
+    <button type="button" class="ask-chip">Why do I need it?</button>
+    <button type="button" class="ask-chip">Give me a .NET comparison</button>
+  </div>
+  <form class="ask-form" id="ask-form">
+    <textarea id="ask-input" rows="1" placeholder="Type your question…" aria-label="Your question"></textarea>
+    <button type="submit" id="ask-send">Ask</button>
+  </form>
+</dialog>
+
+<script>
+// Right-click a word to ask a question about it. Answers come from the OpenAI API through server.js,
+// so this only switches on when the page is opened from that server (http://localhost:8788).
+(function () {
+  var hint = document.getElementById('ask-hint');
+  // Opened straight from disk: a page can't start a server, so jump to the served copy if the server is up,
+  // and otherwise say how to start it.
+  if (location.protocol === 'file:') {
+    var served = 'http://localhost:8788/';
+    fetch(served + 'api/status', { mode: 'no-cors' }).then(function () {
+      location.replace(served + location.pathname.split('/').pop() + location.hash);
+    }, function () {
+      hint.hidden = false;
+      hint.textContent = 'To ask questions about any word, close this tab and start the tutorial with ./start.sh in the tutorials folder (in Ubuntu).';
+    });
+    return;
+  }
+  if (!/^https?:$/.test(location.protocol) || !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return;
+
+  var main = document.querySelector('main');
+  var dlg = document.getElementById('ask');
+  var wordEl = document.getElementById('ask-word');
+  var stepEl = document.getElementById('ask-step');
+  var thread = document.getElementById('ask-thread');
+  var chips = document.getElementById('ask-chips');
+  var form = document.getElementById('ask-form');
+  var input = document.getElementById('ask-input');
+  var send = document.getElementById('ask-send');
+  var ctx = null, turns = [], ctl = null, busy = false;
+
+  fetch('/api/status').then(function (r) { return r.json(); }).then(function (s) {
+    hint.hidden = false;
+    if (s && s.ai) {
+      hint.innerHTML = '<kbd>Right-click</kbd> any word to ask a question about it. Select a phrase first to ask about the whole phrase.';
+      main.addEventListener('contextmenu', onContextMenu);
+    } else {
+      hint.textContent = 'Questions are switched off: set OPENAI_API_KEY and restart server.js to turn them on.';
+    }
+  }).catch(function () {});
+
+  // ---- Find the word under the pointer ----
+  var WORD = /[A-Za-z0-9_.\-\/:@$]/;
+  function wordAt(x, y) {
+    var node, offset, p;
+    if (document.caretPositionFromPoint) { p = document.caretPositionFromPoint(x, y); if (p) { node = p.offsetNode; offset = p.offset; } }
+    else if (document.caretRangeFromPoint) { p = document.caretRangeFromPoint(x, y); if (p) { node = p.startContainer; offset = p.startOffset; } }
+    if (!node || node.nodeType !== 3) return null;
+    var t = node.data, s = offset, e = offset;
+    while (s > 0 && WORD.test(t[s - 1])) s--;
+    while (e < t.length && WORD.test(t[e])) e++;
+    var word = t.slice(s, e).replace(/^[.:\/\-]+(?=[A-Za-z0-9])/, function (m) { return m.charAt(0) === '-' ? m : ''; }).replace(/[.:\/]+$/, '');
+    if (!word) return null;
+    return { word: word, near: t.slice(Math.max(0, s - 700), e + 700) };
+  }
+  function stepTitle(sec) {
+    if (!sec) return 'Tutorial overview';
+    var n = sec.querySelector('.num'), h = sec.querySelector('h2');
+    return (n && /^\d+$/.test(n.textContent) ? 'Step ' + n.textContent + ' · ' : '') + (h ? h.textContent : '');
+  }
+
+  function onContextMenu(e) {
+    if (e.shiftKey) return;                         // Shift+right-click keeps the browser's own menu
+    if (e.target.closest('input, textarea, select, a[href]')) return;
+    var sel = window.getSelection();
+    var picked = sel && !sel.isCollapsed && main.contains(sel.anchorNode) ? sel.toString().trim() : '';
+    var hit = wordAt(e.clientX, e.clientY);
+    var word = picked || (hit && hit.word);
+    if (!word) return;
+    e.preventDefault();
+    var block = e.target.closest('dd, dt, li, p, td, th, pre, h2, h3, h4, figcaption, summary');
+    var passage = block ? (block.innerText || block.textContent || '').trim() : '';
+    if ((!passage || passage.length > 1500) && hit) passage = hit.near;
+    if (block) { block.classList.add('flash'); setTimeout(function () { block.classList.remove('flash'); }, 700); }
+    open({ word: word.slice(0, 300), passage: passage.slice(0, 1500), step: stepTitle(e.target.closest('section[data-step]')) });
+  }
+
+  // ---- The box ----
+  function open(c) {
+    stop();
+    ctx = c; turns = [];
+    wordEl.textContent = c.word;
+    stepEl.textContent = c.step;
+    thread.innerHTML = '';
+    var p = document.createElement('p'); p.className = 'ask-empty'; p.textContent = 'Type a question below, or pick one of the suggestions.'; thread.appendChild(p);
+    chips.hidden = false;
+    input.value = ''; autosize();
+    if (!dlg.open) dlg.showModal();
+    input.focus();
+  }
+  function stop() { if (ctl) { ctl.abort(); ctl = null; } }
+  function setBusy(on) {
+    busy = on;
+    send.textContent = on ? 'Stop' : 'Ask';
+    send.classList.toggle('stop', on);
+    chips.querySelectorAll('button').forEach(function (b) { b.disabled = on; });
+  }
+  function note(msg) { var n = document.createElement('div'); n.className = 'ask-err'; n.textContent = msg; thread.appendChild(n); }
+
+  var ERRORS = {
+    no_key: 'OPENAI_API_KEY is not set. Set it and restart server.js.',
+    bad_key: 'OpenAI rejected the API key. Check OPENAI_API_KEY and restart server.js.',
+    rate_limited: 'OpenAI says the rate limit or quota is used up. Wait a minute, or check your OpenAI billing.',
+    server_gone: 'The local server is not answering. Start it again with: node server.js',
+    empty: 'The model returned nothing. Try asking in a different way.'
+  };
+
+  function ask(question) {
+    question = String(question || '').trim();
+    if (busy || !ctx || !question) return;
+    var empty = thread.querySelector('.ask-empty'); if (empty) empty.remove();
+    chips.hidden = true;
+
+    turns.push({ role: 'user', content: turns.length ? question :
+      'I am on: ' + ctx.step + '\n\nPassage I was reading:\n<<<\n' + ctx.passage + '\n>>>\n\nI right-clicked: "' + ctx.word + '"\n\nMy question: ' + question });
+
+    var q = document.createElement('div'); q.className = 'ask-q'; q.textContent = question; thread.appendChild(q);
+    var a = document.createElement('div'); a.className = 'ask-a thinking'; a.textContent = 'Thinking…'; thread.appendChild(a);
+    thread.scrollTop = thread.scrollHeight;
+
+    var mine = ctl = new AbortController();
+    var text = '';
+    setBusy(true);
+    fetch('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json', 'x-tutorial': '1' }, body: JSON.stringify({ messages: turns }), signal: mine.signal })
+      .then(function (res) {
+        if (!res.ok) return res.json().catch(function () { return {}; }).then(function (j) { throw { code: j.code || 'upstream_error', message: j.message }; });
+        var rd = res.body.getReader(), dec = new TextDecoder();
+        return (function pump() {
+          return rd.read().then(function (r) {
+            if (r.done) return;
+            text += dec.decode(r.value, { stream: true });
+            if (text.trim()) { a.classList.remove('thinking'); a.innerHTML = md(text); thread.scrollTop = thread.scrollHeight; }
+            return pump();
+          });
+        })();
+      })
+      .then(function () {
+        if (!text.trim()) throw { code: 'empty' };
+        turns.push({ role: 'assistant', content: text });
+      })
+      .catch(function (e) {
+        var cancelled = mine.signal.aborted;
+        if (text.trim()) { turns.push({ role: 'assistant', content: text }); if (cancelled) note('Stopped.'); else note('The answer was cut off. Ask again to retry.'); return; }
+        a.remove(); turns.pop();
+        if (cancelled) return;
+        var code = e && e.code ? e.code : 'server_gone';
+        note(ERRORS[code] || (e && e.message) || 'Something went wrong. Ask again to retry.');
+      })
+      .then(function () {
+        if (ctl === mine) ctl = null;
+        setBusy(false);
+        thread.scrollTop = thread.scrollHeight;
+      });
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (busy) { stop(); return; }
+    var q = input.value; input.value = ''; autosize();
+    ask(q);
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+  });
+  function autosize() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 140) + 'px'; }
+  input.addEventListener('input', autosize);
+  chips.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) ask(b.textContent); });
+  document.getElementById('ask-close').addEventListener('click', function () { dlg.close(); });
+  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });   // click outside the box
+  dlg.addEventListener('close', stop);
+
+  // ---- Markdown (small, safe subset) ----
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function inline(s) {
+    s = esc(s);
+    s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    return s;
+  }
+  function md(src) {
+    var lines = src.replace(/\r/g, '').split('\n'), out = [], i = 0, para = [], list = null, m;
+    function flushPara() { if (para.length) { out.push('<p>' + inline(para.join(' ')) + '</p>'); para = []; } }
+    function flushList() { if (list) { out.push('<' + list.tag + '>' + list.items.map(function (x) { return '<li>' + inline(x) + '</li>'; }).join('') + '</' + list.tag + '>'); list = null; } }
+    while (i < lines.length) {
+      var line = lines[i];
+      if (/^\s*```/.test(line)) {
+        flushPara(); flushList();
+        var code = []; i++;
+        while (i < lines.length && !/^\s*```/.test(lines[i])) { code.push(lines[i]); i++; }
+        out.push('<pre><code>' + esc(code.join('\n')) + '</code></pre>'); i++; continue;
+      }
+      if ((m = line.match(/^\s*#{1,4}\s+(.*)$/))) { flushPara(); flushList(); out.push('<h4>' + inline(m[1]) + '</h4>'); i++; continue; }
+      if ((m = line.match(/^\s*[-*]\s+(.*)$/))) { flushPara(); if (!list || list.tag !== 'ul') { flushList(); list = { tag: 'ul', items: [] }; } list.items.push(m[1]); i++; continue; }
+      if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) { flushPara(); if (!list || list.tag !== 'ol') { flushList(); list = { tag: 'ol', items: [] }; } list.items.push(m[1]); i++; continue; }
+      if (!line.trim()) { flushPara(); flushList(); i++; continue; }
+      if (list && /^\s{2,}\S/.test(line)) { list.items[list.items.length - 1] += ' ' + line.trim(); i++; continue; }
+      flushList(); para.push(line.trim()); i++;
+    }
+    flushPara(); flushList();
+    return out.join('');
+  }
+})();
+</script>
+<script>
+// Animated step-through diagrams (figure.anim). The steps come from the JSON inside each figure:
+// "path" is the list of points the packet moves through (leave it out for a step with no packet).
+// "on", "off", "bad" and "good" name the parts (data-k) to highlight, hide, mark as a problem, or mark as fine.
+(function () {
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var HOLD = 4200;
+  document.querySelectorAll('figure.anim').forEach(function (fig) {
+    var steps = JSON.parse(fig.querySelector('script[type="application/json"]').textContent);
+    var pkt = fig.querySelector('.a-pkt'), text = fig.querySelector('.anim-text'), count = fig.querySelector('.anim-count');
+    var playBtn = fig.querySelector('[data-act="play"]');
+    var i = 0, playing = !reduce, visible = false, timer = null, run = null;
+    function at(p) { return 'translate(' + p[0] + 'px,' + p[1] + 'px)'; }
+    function show(n, animate) {
+      i = (n + steps.length) % steps.length;
+      var s = steps[i], path = s.path || [], dur = 0;
+      text.innerHTML = s.text;
+      count.textContent = (i + 1) + ' / ' + steps.length;
+      fig.classList.toggle('back', !!s.back);
+      ['on', 'off', 'bad', 'good'].forEach(function (c) {
+        var keys = (s[c] || '').split(' ');
+        fig.querySelectorAll('[data-k]').forEach(function (el) { el.classList.toggle(c, keys.indexOf(el.getAttribute('data-k')) >= 0); });
+      });
+      pkt.classList.toggle('off', !path.length);
+      if (run) { run.cancel(); run = null; }
+      if (path.length) pkt.style.transform = at(path[path.length - 1]);
+      if (animate && !reduce && path.length > 1 && pkt.animate) {
+        var d = [0], total = 0;
+        for (var k = 1; k < path.length; k++) { total += Math.hypot(path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1]); d.push(total); }
+        dur = Math.max(800, Math.min(2800, total * 5.5));
+        run = pkt.animate(path.map(function (p, k) { return { transform: at(p), offset: d[k] / total }; }), { duration: dur, easing: 'cubic-bezier(.45, 0, .25, 1)' });
+      }
+      return dur;
+    }
+    function schedule(dur) {
+      clearTimeout(timer);
+      if (playing && visible) timer = setTimeout(function () { schedule(show(i + 1, true)); }, dur + HOLD);
+    }
+    function setPlaying(p) {
+      playing = p;
+      playBtn.textContent = p ? 'Pause' : 'Play';
+      clearTimeout(timer);
+    }
+    playBtn.addEventListener('click', function () { setPlaying(!playing); if (playing) schedule(show(i + 1, true)); });
+    fig.querySelector('[data-act="next"]').addEventListener('click', function () { setPlaying(false); show(i + 1, true); });
+    fig.querySelector('[data-act="back"]').addEventListener('click', function () { setPlaying(false); show(i - 1, false); });
+    setPlaying(playing);
+    show(0, false);
+    // Only run while the diagram is on screen (a closed "Explained" section counts as off screen).
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) {
+        visible = entries[entries.length - 1].isIntersecting;
+        if (visible) schedule(0); else clearTimeout(timer);
+      }, { threshold: 0.4 }).observe(fig);
+    } else { visible = true; schedule(0); }
+  });
+})();
+</script>
+<div class="note-menu note-ui" id="note-menu" role="menu" aria-label="Note or question" hidden>
+  <button type="button" role="menuitem" data-act="note" id="note-menu-note">Add a note<span class="sub" id="note-menu-sub"></span></button>
+  <button type="button" role="menuitem" data-act="bm" id="note-menu-bm">Bookmark this spot</button>
+  <button type="button" role="menuitem" data-act="ask" id="note-menu-ask">Ask the tutor</button>
+</div>
+<dialog class="note-dlg note-ui" id="note-dlg" aria-labelledby="note-title">
+  <form id="note-form">
+    <h2 id="note-title">Add a note</h2>
+    <p class="note-quote" id="note-quote"></p>
+    <textarea id="note-text" aria-label="Your note" placeholder="Write your note…"></textarea>
+    <div class="note-actions">
+      <button type="button" class="danger" id="note-del" hidden>Delete</button>
+      <span class="sp"></span>
+      <button type="button" id="note-cancel">Cancel</button>
+      <button type="submit" class="primary" id="note-save">Save</button>
+    </div>
+  </form>
+</dialog>
+<aside class="notes-pane note-ui margin" id="notes-pane" aria-label="Your notes" hidden>
+  <div class="notes-head"><h2>Your notes</h2><button type="button" id="notes-mode" title="Switch between notes beside the text and a list of all notes">List</button><button type="button" id="notes-close" aria-label="Close notes">×</button></div>
+  <div class="notes-margin" id="notes-margin"></div>
+</aside>
+<svg class="notes-lines note-ui" id="notes-lines" aria-hidden="true"></svg>
+<script>
+// Notes: right-click a word (or a selected phrase) and choose "Add a note". The note is saved in this browser
+// (localStorage), the text stays highlighted, and the note sits in the right margin joined to it by a line.
+(function () {
+  var main = document.querySelector('main');
+  if (!main || !window.Range || !document.createTreeWalker) return;
+  var PAGE = location.pathname.split('/').pop() || 'index';
+  var KEY = 'tutorial-notes:' + PAGE;
+  var notes = [];
+  try { notes = JSON.parse(localStorage.getItem(KEY) || '[]') || []; } catch (e) { notes = []; }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(notes)); } catch (e) {} }
+  function pref(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; }
+  var $ = function (id) { return document.getElementById(id); };
+  var menu = $('note-menu'), dlg = $('note-dlg'), pane = $('notes-pane'), box = $('notes-margin'), svg = $('notes-lines');
+  var btn = $('notes-btn'), countEl = $('notes-count'), area = $('note-text'), saveBtn = $('note-save'), delBtn = $('note-del');
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var SKIP = 'button, script, style, svg, textarea, .anim-bar, .ask-hint, .note-ui';
+  var WORD = /[A-Za-z0-9_.\-\/:@$]/;
+  var sections = Array.prototype.slice.call(document.querySelectorAll('section[data-step]'));
+  var pending = null, cur = null, open = false, raf = 0;
+  var wide = function () { return window.matchMedia('(min-width: 961px)').matches; };
+
+  // ---- Text positions: a note remembers its step, the character offset inside it, and the words ----
+  function textNodes(root) {
+    var out = [], w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), n;
+    while ((n = w.nextNode())) if (n.data && !n.parentElement.closest(SKIP)) out.push(n);
+    return out;
+  }
+  function fullText(c) { return textNodes(c).map(function (t) { return t.data; }).join(''); }
+  function containerOf(node) { var el = node.nodeType === 3 ? node.parentElement : node; return (el && el.closest('section[data-step]')) || main; }
+  function offsetIn(c, node, off) {
+    var r = document.createRange(); r.setStart(c, 0); r.setEnd(node, off);
+    var acc = 0;
+    textNodes(c).forEach(function (t) {
+      if (t === node) acc += off;
+      else if (r.comparePoint(t, t.length) <= 0) acc += t.length;
+    });
+    return acc;
+  }
+  function describe(range) {
+    var c = containerOf(range.startContainer), text = fullText(c);
+    var s = offsetIn(c, range.startContainer, range.startOffset);
+    var e = c.contains(range.endContainer) ? offsetIn(c, range.endContainer, range.endOffset) : text.length;
+    while (s < e && /\s/.test(text[s])) s++;
+    while (e > s && /\s/.test(text[e - 1])) e--;
+    if (e - s > 300) e = s + 300;
+    if (e <= s) return null;
+    return { sec: c === main ? '' : c.id, offset: s, quote: text.slice(s, e) };
+  }
+  function wordRange(x, y) {
+    var node, off, p;
+    if (document.caretPositionFromPoint) { p = document.caretPositionFromPoint(x, y); if (p) { node = p.offsetNode; off = p.offset; } }
+    else if (document.caretRangeFromPoint) { p = document.caretRangeFromPoint(x, y); if (p) { node = p.startContainer; off = p.startOffset; } }
+    if (!node || node.nodeType !== 3 || !main.contains(node) || node.parentElement.closest(SKIP)) return null;
+    var t = node.data, s = off, e = off;
+    while (s > 0 && WORD.test(t[s - 1])) s--;
+    while (e < t.length && WORD.test(t[e])) e++;
+    while (s < e && /[.:\/]/.test(t[s])) s++;
+    while (e > s && /[.:\/]/.test(t[e - 1])) e--;
+    if (s >= e) return null;
+    var r = document.createRange(); r.setStart(node, s); r.setEnd(node, e);
+    return r;
+  }
+  function locate(text, n) {
+    if (text.substr(n.offset, n.quote.length) === n.quote) return n.offset;
+    var best = -1, i = text.indexOf(n.quote);
+    while (i >= 0) { if (best < 0 || Math.abs(i - n.offset) < Math.abs(best - n.offset)) best = i; i = text.indexOf(n.quote, i + 1); }
+    return best;
+  }
+
+  // ---- Highlighting ----
+  function highlight(n, bm) {
+    var c = n.sec ? $(n.sec) : main;
+    if (!c) return false;
+    var at = locate(fullText(c), n);
+    if (at < 0) return false;
+    var end = at + n.quote.length, pos = 0, last = null, first = null;
+    textNodes(c).forEach(function (t) {
+      var a = pos, b = pos + t.length; pos = b;
+      var s = Math.max(at, a), e = Math.min(end, b);
+      if (s >= e || !t.data.slice(s - a, e - a).trim()) return;
+      var r = document.createRange(); r.setStart(t, s - a); r.setEnd(t, e - a);
+      var m = document.createElement('mark'); m.className = bm ? 'bm-hl' : 'note-hl'; m.setAttribute(bm ? 'data-bm' : 'data-note', n.id);
+      r.surroundContents(m);
+      last = m; if (!first) first = m;
+    });
+    if (bm) { if (first) first.classList.add('bm-start'); }
+    else if (last) last.classList.add('note-end');
+    return true;
+  }
+  function marksOf(id, bm) { return Array.prototype.slice.call(main.querySelectorAll(bm ? 'mark.bm-hl[data-bm="' + id + '"]' : 'mark.note-hl[data-note="' + id + '"]')); }
+  function unhighlight(id, bm) {
+    marksOf(id, bm).forEach(function (m) {
+      var p = m.parentNode;
+      while (m.firstChild) p.insertBefore(m.firstChild, m);
+      p.removeChild(m); p.normalize();
+    });
+  }
+  function find(id) { for (var i = 0; i < notes.length; i++) if (notes[i].id === id) return notes[i]; return null; }
+
+  // ---- The right-click menu ----
+  function askOn() { var h = $('ask-hint'); return !!h && !h.hidden && /Right-click/.test(h.textContent); }
+  function hideMenu() { menu.hidden = true; }
+  main.addEventListener('contextmenu', function (e) {
+    if (e.notesPass || e.shiftKey) return;           // Shift+right-click keeps the browser's own menu
+    if (e.target.closest('input, textarea, select, a[href]')) return;
+    var sel = window.getSelection(), range = null;
+    if (sel && sel.rangeCount && !sel.isCollapsed && main.contains(sel.anchorNode) && main.contains(sel.focusNode)) range = sel.getRangeAt(0).cloneRange();
+    if (!range) range = wordRange(e.clientX, e.clientY);
+    if (!range) return;
+    var info = describe(range);
+    if (!info) return;
+    e.preventDefault(); e.stopPropagation();
+    var mark = e.target.closest ? e.target.closest('mark.note-hl') : null;
+    var bmark = e.target.closest ? e.target.closest('mark.bm-hl') : null;
+    pending = { info: info, note: mark ? find(mark.getAttribute('data-note')) : null, bm: bmark ? findBm(bmark.getAttribute('data-bm')) : null, target: e.target, x: e.clientX, y: e.clientY };
+    $('note-menu-bm').textContent = pending.bm ? 'Remove bookmark' : 'Bookmark this spot';
+    $('note-menu-ask').hidden = !askOn();
+    $('note-menu-note').firstChild.nodeValue = pending.note ? 'Edit note' : 'Add a note';
+    $('note-menu-sub').textContent = '“' + (info.quote.length > 40 ? info.quote.slice(0, 40) + '…' : info.quote) + '”';
+    menu.hidden = false;
+    var w = menu.offsetWidth, h = menu.offsetHeight;
+    menu.style.left = Math.max(8, Math.min(e.clientX, window.innerWidth - w - 8)) + 'px';
+    menu.style.top = Math.max(8, Math.min(e.clientY, window.innerHeight - h - 8)) + 'px';
+    $('note-menu-note').focus();
+  }, true);
+  menu.addEventListener('mousedown', function (e) { e.preventDefault(); });   // keep the text selected
+  menu.addEventListener('click', function (e) { var b = e.target.closest('button[data-act]'); if (b) choose(b.getAttribute('data-act')); });
+  document.addEventListener('mousedown', function (e) { if (!menu.hidden && !menu.contains(e.target)) hideMenu(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hideMenu(); });
+  window.addEventListener('resize', hideMenu);
+  function choose(act) {
+    hideMenu();
+    var p = pending; if (!p) return;
+    if (act === 'note') { edit(p.note, p.info); return; }
+    if (act === 'bm') { toggleBm(p); return; }
+    setTimeout(function () {                          // hand the click to the Ask feature
+      var ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 2 });
+      ev.notesPass = true;
+      p.target.dispatchEvent(ev);
+    }, 0);
+  }
+
+  // ---- The box ----
+  function quoteText(q) { return '“' + (q.length > 160 ? q.slice(0, 160) + '…' : q) + '”'; }
+  function edit(note, info) {
+    cur = { note: note, info: note ? { sec: note.sec, offset: note.offset, quote: note.quote } : info };
+    $('note-title').textContent = note ? 'Note' : 'Add a note';
+    $('note-quote').textContent = quoteText(cur.info.quote);
+    area.value = note ? note.text : '';
+    delBtn.hidden = !note; delBtn.textContent = 'Delete'; delBtn.setAttribute('data-sure', '');
+    saveBtn.disabled = !area.value.trim();
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+    area.focus();
+  }
+  function closeBox() { if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); cur = null; }
+  area.addEventListener('input', function () { saveBtn.disabled = !area.value.trim(); });
+  area.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('note-form').requestSubmit ? $('note-form').requestSubmit() : saveBtn.click(); } });
+  $('note-cancel').addEventListener('click', closeBox);
+  dlg.addEventListener('click', function (e) { if (e.target === dlg) closeBox(); });
+  $('note-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var text = area.value.trim();
+    if (!text || !cur) return;
+    if (cur.note) { cur.note.text = text; cur.note.upd = Date.now(); }
+    else {
+      var n = { id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: cur.info.sec, offset: cur.info.offset, quote: cur.info.quote, text: text, ts: Date.now() };
+      notes.push(n); highlight(n);
+      setOpen(true);
+    }
+    save(); closeBox(); render();
+  });
+  delBtn.addEventListener('click', function () {
+    if (!cur || !cur.note) return;
+    if (delBtn.getAttribute('data-sure') !== '1') { delBtn.setAttribute('data-sure', '1'); delBtn.textContent = 'Click again to delete'; return; }
+    unhighlight(cur.note.id);
+    notes = notes.filter(function (n) { return n !== cur.note; });
+    save(); closeBox(); render();
+  });
+  main.addEventListener('click', function (e) {
+    var m = e.target.closest ? e.target.closest('mark.note-hl') : null;
+    var sel = window.getSelection();
+    if (!m || (sel && !sel.isCollapsed)) return;
+    var n = find(m.getAttribute('data-note')); if (n) edit(n);
+  });
+  function setActive(id, on) {
+    marksOf(id).forEach(function (m) { m.classList.toggle('active', on); });
+    var c = box.querySelector('.note-card[data-id="' + id + '"]'); if (c) c.classList.toggle('active', on);
+  }
+  main.addEventListener('mouseover', function (e) { var m = e.target.closest ? e.target.closest('mark.note-hl') : null; if (m) setActive(m.getAttribute('data-note'), true); });
+  main.addEventListener('mouseout', function (e) { var m = e.target.closest ? e.target.closest('mark.note-hl') : null; if (m) setActive(m.getAttribute('data-note'), false); });
+
+  // ---- The notes pane ----
+  function stepLabel(n) {
+    var s = n.sec ? $(n.sec) : null;
+    if (!s) return 'Tutorial';
+    var num = s.querySelector('.num'), h = s.querySelector('h2');
+    return (num && /^\d+$/.test(num.textContent) ? 'Step ' + num.textContent + ' · ' : '') + (h ? h.textContent : '');
+  }
+  function ordered() {
+    return notes.slice().sort(function (a, b) {
+      var ia = a.sec ? sections.indexOf($(a.sec)) : 999, ib = b.sec ? sections.indexOf($(b.sec)) : 999;
+      return ia - ib || a.offset - b.offset;
+    });
+  }
+  function el(tag, cls, text) { var x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; }
+  function whenText(n) {
+    var d = new Date(n.upd || n.ts);
+    if (isNaN(d)) return '';
+    var t = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return (n.upd ? 'Edited ' : '') + t;
+  }
+  function render() {
+    box.innerHTML = '';
+    countEl.hidden = !notes.length; countEl.textContent = notes.length;
+    if (!notes.length) box.appendChild(el('p', 'notes-empty', 'No notes yet. Right-click a word and choose “Add a note”.'));
+    ordered().forEach(function (n) {
+      var c = el('article', 'note-card'); c.setAttribute('data-id', n.id);
+      var top = el('div', 'note-top');
+      top.appendChild(el('span', 'note-step', stepLabel(n)));
+      top.appendChild(el('p', 'note-quote-s', quoteText(n.quote)));
+      var b = el('button', 'note-edit', 'Edit'); b.type = 'button'; b.setAttribute('aria-label', 'Edit this note');
+      top.appendChild(b);
+      c.appendChild(top);
+      c.appendChild(el('p', 'note-text', n.text));
+      var when = el('p', 'note-date', whenText(n)); when.title = 'Saved ' + new Date(n.ts).toLocaleString(); c.appendChild(when);
+      if (!marksOf(n.id).length) { c.setAttribute('data-gone', '1'); c.appendChild(el('p', 'note-old', 'This text has changed, so the highlight is gone.')); }
+      c.addEventListener('mouseenter', function () { setActive(n.id, true); });
+      c.addEventListener('mouseleave', function () { setActive(n.id, false); });
+      b.addEventListener('click', function (e) { e.stopPropagation(); edit(n); });
+      c.addEventListener('click', function () { jump(n); });
+      box.appendChild(c);
+    });
+    schedule();
+  }
+  function jump(n) {
+    var m = marksOf(n.id)[0]; if (!m) return;
+    var d = m.closest('details'); while (d) { d.open = true; d = d.parentElement ? d.parentElement.closest('details') : null; }
+    m.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setActive(n.id, true); setTimeout(function () { setActive(n.id, false); }, 1400);
+  }
+  function mode() { return !wide() || pref('tutorial-notes-mode') === 'list' ? 'list' : 'margin'; }
+  function setOpen(v) {
+    open = v; pref('tutorial-notes-open', v ? '1' : '0');
+    pane.hidden = !v;
+    btn.setAttribute('aria-pressed', v ? 'true' : 'false');
+    applyMode();
+  }
+  function applyMode() {
+    var m = mode();
+    pane.classList.toggle('list', m === 'list'); pane.classList.toggle('margin', m === 'margin');
+    $('notes-mode').textContent = m === 'list' ? 'Beside text' : 'List';
+    document.body.classList.toggle('notes-open', open && wide());
+    schedule();
+  }
+  btn.addEventListener('click', function () { setOpen(!open); });
+  $('notes-close').addEventListener('click', function () { setOpen(false); });
+  $('notes-mode').addEventListener('click', function () { pref('tutorial-notes-mode', mode() === 'list' ? 'margin' : 'list'); applyMode(); });
+
+  // Place each note card level with its word and draw the line between them.
+  function layout() {
+    raf = 0;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    if (!open || mode() !== 'margin') return;
+    var br = box.getBoundingClientRect(), cards = Array.prototype.slice.call(box.querySelectorAll('.note-card')), items = [];
+    cards.forEach(function (c) {
+      var ms = marksOf(c.getAttribute('data-id')), last = ms[ms.length - 1], rs = last ? last.getClientRects() : [];
+      var r = rs[rs.length - 1];
+      if (!r || (!r.width && !r.height)) { c.hidden = true; return; }
+      var y = r.top + r.height / 2;
+      if (y < br.top - 4 || y > br.bottom - 8) { c.hidden = true; return; }
+      c.hidden = false; items.push({ c: c, y: y, ly: r.bottom + 1, x: r.right });
+    });
+    items.sort(function (a, b) { return a.y - b.y; });
+    var cursor = 0;
+    items.forEach(function (it) {
+      var top = Math.max(it.y - br.top - 16, cursor);
+      it.c.style.top = top + 'px';
+      cursor = top + it.c.offsetHeight + 8;
+      if (top + it.c.offsetHeight > br.height) { it.c.hidden = true; return; }
+      var cy = br.top + top + 16, cx = br.left + 16, mx = Math.max(it.x + 6, cx - 18);
+      var p = document.createElementNS(SVGNS, 'path');
+      p.setAttribute('d', 'M' + (it.x - 8) + ' ' + it.ly + ' L' + mx + ' ' + it.ly + ' L' + cx + ' ' + cy);
+      svg.appendChild(p);
+      var d = document.createElementNS(SVGNS, 'circle');
+      d.setAttribute('cx', it.x - 8); d.setAttribute('cy', it.ly); d.setAttribute('r', 3);
+      svg.appendChild(d);
+    });
+  }
+  function schedule() { if (!raf) raf = requestAnimationFrame(layout); }
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', function () { applyMode(); });
+  document.addEventListener('toggle', schedule, true);
+  if (window.ResizeObserver) new ResizeObserver(schedule).observe(main);
+  if (window.matchMedia) window.matchMedia('(min-width: 961px)').addEventListener && window.matchMedia('(min-width: 961px)').addEventListener('change', applyMode);
+
+  // ---- Start up: put the saved highlights back ----
+
+  // ---- Bookmarks: saved spots, plus the place you stopped reading ----
+  var BKEY = 'tutorial-bookmarks:' + PAGE, PKEY = 'tutorial-pos:' + PAGE;
+  var marks = [], lastPos = null, ready = false, userMoved = false, saveT = 0;
+  try { marks = JSON.parse(localStorage.getItem(BKEY) || '[]') || []; } catch (e) { marks = []; }
+  try { lastPos = JSON.parse(localStorage.getItem(PKEY) || 'null'); } catch (e) { lastPos = null; }
+  var bmBtn = $('bm-btn'), bmList = $('bm-list'), toast = null, toastT = 0;
+  function saveMarks() { try { localStorage.setItem(BKEY, JSON.stringify(marks)); } catch (e) {} }
+  function findBm(id) { for (var i = 0; i < marks.length; i++) if (marks[i].id === id) return marks[i]; return null; }
+  function stamp(ts) {
+    var d = new Date(ts);
+    return isNaN(d) ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+  function showToast(text, actionLabel, action) {
+    if (!toast) { toast = el('div', 'bm-toast note-ui'); toast.setAttribute('role', 'status'); document.body.appendChild(toast); }
+    toast.innerHTML = ''; toast.appendChild(el('span', '', text));
+    if (actionLabel) { var b = el('button', '', actionLabel); b.type = 'button'; b.addEventListener('click', function () { toast.hidden = true; action(); }); toast.appendChild(b); }
+    toast.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { toast.hidden = true; }, 7000);
+  }
+  function toggleBm(p) {
+    if (p.bm) { unhighlight(p.bm.id, true); marks = marks.filter(function (b) { return b !== p.bm; }); showToast('Bookmark removed.'); }
+    else {
+      var b = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sec: p.info.sec, offset: p.info.offset, quote: p.info.quote, ts: Date.now() };
+      marks.push(b); highlight(b, true);
+      showToast('Bookmarked “' + (b.quote.length > 40 ? b.quote.slice(0, 40) + '…' : b.quote) + '”. Find it under Bookmarks at the top.');
+    }
+    saveMarks(); renderBm();
+  }
+  function goBm(b) {
+    var m = marksOf(b.id, true)[0]; if (!m) return;
+    var d = m.closest('details'); while (d) { d.open = true; d = d.parentElement ? d.parentElement.closest('details') : null; }
+    m.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    m.classList.add('active'); setTimeout(function () { m.classList.remove('active'); }, 1400);
+  }
+  function secName(id) {
+    var s = id ? $(id) : null; if (!s) return 'Tutorial';
+    var num = s.querySelector('.num'), h = s.querySelector('h2');
+    return (num && /^\d+$/.test(num.textContent) ? 'Step ' + num.textContent + ' · ' : '') + (h ? h.textContent : '');
+  }
+  function renderBm() {
+    if (!bmList) return;
+    bmList.innerHTML = '';
+    if (lastPos && $(lastPos.sec)) {
+      bmList.appendChild(el('p', 'bm-head', 'Where you stopped'));
+      var r = el('div', 'bm-item'); r.tabIndex = 0; r.setAttribute('role', 'menuitem');
+      var t = el('span', 't', 'Continue: ' + secName(lastPos.sec)); t.appendChild(el('span', 's', stamp(lastPos.ts)));
+      r.appendChild(t);
+      r.addEventListener('click', function () { hideBm(); toPos(lastPos, true); });
+      bmList.appendChild(r);
+    }
+    bmList.appendChild(el('p', 'bm-head', 'Your bookmarks'));
+    if (!marks.length) bmList.appendChild(el('p', 'bm-empty', 'None yet. Right-click a word and choose “Bookmark this spot”.'));
+    marks.slice().sort(function (a, b) {
+      var ia = a.sec ? sections.indexOf($(a.sec)) : 999, ib = b.sec ? sections.indexOf($(b.sec)) : 999;
+      return ia - ib || a.offset - b.offset;
+    }).forEach(function (b) {
+      var row = el('div', 'bm-item'); row.tabIndex = 0; row.setAttribute('role', 'menuitem');
+      var t = el('span', 't', quoteText(b.quote)); t.appendChild(el('span', 's', secName(b.sec) + ' · ' + stamp(b.ts)));
+      var x = el('button', 'bm-x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Remove this bookmark');
+      row.appendChild(t); row.appendChild(x);
+      row.addEventListener('click', function () { hideBm(); goBm(b); });
+      row.addEventListener('keydown', function (e) { if (e.key === 'Enter') { hideBm(); goBm(b); } });
+      x.addEventListener('click', function (e) { e.stopPropagation(); toggleBm({ bm: b }); });
+      bmList.appendChild(row);
+    });
+  }
+  function hideBm() { if (bmList) { bmList.hidden = true; bmBtn.setAttribute('aria-expanded', 'false'); } }
+  if (bmBtn && bmList) {
+    bmBtn.addEventListener('click', function (e) { e.stopPropagation(); var show = bmList.hidden; if (show) renderBm(); bmList.hidden = !show; bmBtn.setAttribute('aria-expanded', show ? 'true' : 'false'); });
+    document.addEventListener('click', function (e) { if (!bmList.hidden && !bmList.contains(e.target)) hideBm(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hideBm(); });
+  }
+  marks.forEach(function (b) { try { highlight(b, true); } catch (e) {} });
+
+  // Remember the place you stopped reading (a step and how far through it) and go back to it on the next visit.
+  var TOP = 80;
+  function here() {
+    for (var i = 0; i < sections.length; i++) {
+      var r = sections[i].getBoundingClientRect();
+      if (r.bottom > TOP) return { sec: sections[i].id, f: Math.max(0, Math.min(1, (TOP - r.top) / (r.height || 1))), ts: Date.now() };
+    }
+    var s = sections[sections.length - 1];
+    return s ? { sec: s.id, f: 1, ts: Date.now() } : null;
+  }
+  function savePos() {
+    if (!ready) return;
+    var h = here(); if (!h) return;
+    lastPos = h;
+    try { localStorage.setItem(PKEY, JSON.stringify(h)); } catch (e) {}
+  }
+  function toPos(p, smooth) {
+    var s = $(p.sec); if (!s) return;
+    var r = s.getBoundingClientRect();
+    window.scrollTo({ top: Math.max(0, window.scrollY + r.top + p.f * r.height - TOP), behavior: smooth ? 'smooth' : 'instant' });
+  }
+  ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(function (ev) { window.addEventListener(ev, function () { userMoved = true; }, { passive: true, capture: true }); });
+  window.addEventListener('scroll', function () { clearTimeout(saveT); saveT = setTimeout(savePos, 250); }, { passive: true });
+  window.addEventListener('pagehide', savePos);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') savePos(); });
+  try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (e) {}
+  function resume() {
+    var p = lastPos;
+    if (!p || location.hash || !$(p.sec) || (sections[0] && p.sec === sections[0].id && p.f < 0.02)) { setTimeout(function () { ready = true; }, 300); return; }
+    toPos(p, false);
+    setTimeout(function () { if (!userMoved) toPos(p, false); }, 500);         // once the diagrams and fonts have settled
+    showToast('Back where you left off: ' + secName(p.sec), 'Start at the top', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+    setTimeout(function () { ready = true; }, 1000);
+  }
+  if (document.readyState === 'complete') resume(); else window.addEventListener('load', resume);
+  notes.forEach(function (n) { try { highlight(n); } catch (e) {} });
+  open = pref('tutorial-notes-open') === '1' && notes.length > 0;
+  pane.hidden = !open;
+  btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+  applyMode();
+  render();
+  window.addEventListener('load', schedule);
+})();
+</script>
+
+</body>
+</html>

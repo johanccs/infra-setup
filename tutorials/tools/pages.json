@@ -38,5 +38,10 @@
     "file": "github-actions-tutorial.html",
     "name": "GitHub Actions Lab",
     "blurb": "Interactive. Write and fix pipelines. Free."
+  },
+  {
+    "file": "identity-and-access-tutorial.html",
+    "name": "Identity and Access Lab",
+    "blurb": "Interactive. TLS, certificates, OAuth, OIDC, JWT, RBAC. Free."
   }
 ]
