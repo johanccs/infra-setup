@@ -4,7 +4,7 @@
 //
 //   node server.js          then open http://localhost:8788
 //
-// Settings (environment variables): OPENAI_API_KEY (required for answers), OPENAI_MODEL (default gpt-4o-mini), PORT (default 8788),
+// Settings (environment variables): OPENAI_API_KEY (required for answers), OPENAI_MODEL (default gpt-6-luna), OPENAI_REASONING_EFFORT (default none for gpt-6 models, not sent for others), PORT (default 8788),
 // OPENAI_BASE_URL (default https://api.openai.com/v1; for testing or an OpenAI-compatible service),
 // TUTORIAL_DB (default data/tutorial.db: the SQLite file that backs up your notes, bookmarks, place and ticks).
 
@@ -13,7 +13,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const PORT = Number(process.env.PORT) || 8788;
-const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const MODEL = process.env.OPENAI_MODEL || 'gpt-6-luna';
+// The gpt-6 models reason before they answer; for a short tutor answer that only costs time and output tokens.
+const EFFORT = process.env.OPENAI_REASONING_EFFORT || (/^gpt-6/.test(MODEL) ? 'none' : '');
 const KEY = (process.env.OPENAI_API_KEY || '').trim();
 const BASE = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
 const DOCS = path.join(__dirname, 'docs');
@@ -132,7 +134,7 @@ async function ask(req, res) {
     upstream = await fetch(`${BASE}/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${KEY}` },
-      body: JSON.stringify({ model: MODEL, stream: true, max_completion_tokens: 700, messages: [{ role: 'system', content: SYSTEM }, ...messages] }),
+      body: JSON.stringify({ model: MODEL, stream: true, max_completion_tokens: 700, ...(EFFORT ? { reasoning_effort: EFFORT } : {}), messages: [{ role: 'system', content: SYSTEM }, ...messages] }),
       signal: ctl.signal,
     });
   } catch (e) {

@@ -213,6 +213,8 @@ dialog.ask::backdrop { background: rgba(10, 16, 22, .45); }
 .ask-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
 .ask-head h2 { font: 700 20px/1.2 var(--font-display); flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .ask-head h2 code { font-size: .85em; }
+.ask-model { margin: 2px 0 0; font: 500 11px/1.3 var(--font-mono, ui-monospace, monospace); color: var(--muted); }
+.ask-model-inline { color: var(--muted); white-space: nowrap; }
 .ask-step { font-size: 12.5px; color: var(--muted); margin: 4px 0 0; }
 .ask-btn { font: 500 13px/1 var(--font-body); background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 6px; padding: 7px 10px; cursor: pointer; flex-shrink: 0; }
 .ask-thread { flex: 1 1 auto; min-height: 60px; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
@@ -2561,7 +2563,7 @@ docker compose -f infra/docker-compose.yml down -v     # the step 4 stack and it
 
 <dialog class="ask" id="ask" aria-labelledby="ask-title">
   <div class="ask-head">
-    <div><h2 id="ask-title">Ask about <code id="ask-word"></code></h2><p class="ask-step" id="ask-step"></p></div>
+    <div><h2 id="ask-title">Ask about <code id="ask-word"></code></h2><p class="ask-step" id="ask-step"></p><p class="ask-model" id="ask-model" hidden></p></div>
     <button type="button" class="ask-btn" id="ask-close">Close</button>
   </div>
   <div class="ask-thread" id="ask-thread" aria-live="polite"></div>
@@ -2599,6 +2601,7 @@ docker compose -f infra/docker-compose.yml down -v     # the step 4 stack and it
   var dlg = document.getElementById('ask');
   var wordEl = document.getElementById('ask-word');
   var stepEl = document.getElementById('ask-step');
+  var modelEl = document.getElementById('ask-model');
   var thread = document.getElementById('ask-thread');
   var chips = document.getElementById('ask-chips');
   var form = document.getElementById('ask-form');
@@ -2610,6 +2613,7 @@ docker compose -f infra/docker-compose.yml down -v     # the step 4 stack and it
     hint.hidden = false;
     if (s && s.ai) {
       hint.innerHTML = '<kbd>Right-click</kbd> any word to ask a question about it. Select a phrase first to ask about the whole phrase.';
+      if (s.model && modelEl) { modelEl.textContent = 'Model: ' + s.model; modelEl.hidden = false; hint.innerHTML += ' <span class="ask-model-inline">Model: ' + String(s.model).replace(/[<>&]/g, '') + '.</span>'; }
       main.addEventListener('contextmenu', onContextMenu);
     } else {
       hint.textContent = 'Questions are switched off: set OPENAI_API_KEY and restart server.js to turn them on.';

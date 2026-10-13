@@ -337,10 +337,13 @@ async function pageTests(browser, spec) {
   if (isC2C) {
     await pg.waitForSelector('dialog#ask[open]', { timeout: 3000 });
     check(true, 'right-click opens the ask box');
+    const shown = await pg.evaluate(async () => { const m = document.getElementById('ask-model'); const st = await (await fetch('/api/status')).json(); return { text: m && !m.hidden ? m.textContent : '', model: st.model }; });
+    check(!!shown.model && shown.text === 'Model: ' + shown.model, 'the ask box names the model in use (' + shown.text + ')');
     await pg.click('#ask-chips .ask-chip >> nth=0');
     await pg.waitForSelector('.ask-a:not(.thinking)', { timeout: 5000 });
     await pg.waitForFunction(() => /kubectl get pods/.test(document.querySelector('#ask-thread').textContent), null, { timeout: 5000 });
     check(await pg.locator('.ask-a pre code').count() === 1 && await pg.locator('.ask-a ul li').count() === 2 && await pg.locator('.ask-a b').count() >= 1, 'answer is rendered as Markdown (bold, list, code block)');
+    check(seen.length === 1 && seen[0].body.model === 'gpt-6-luna' && seen[0].body.reasoning_effort === 'none', 'the request names the default model, gpt-6-luna, with reasoning off');
     check(seen.length === 1 && /I right-clicked/.test(seen[0].body.messages.slice(-1)[0].content) && /Step \d+|Tutorial overview/.test(seen[0].body.messages.slice(-1)[0].content), 'question carries the passage and the step');
     await pg.fill('#ask-input', 'FAIL429'); await pg.press('#ask-input', 'Enter');
     await pg.waitForSelector('.ask-err', { timeout: 4000 });
