@@ -122,6 +122,12 @@ async function browserTests() {
       return (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
     });
     check(ratio >= 4.5, 'body text has enough contrast in dark mode', `ratio ${ratio.toFixed(1)}`);
+    // the Tutorials menu: grouped, and scrollable when the window is too short to show it all
+    const short = await (await browser.newContext({ viewport: { width: 1280, height: 320 } })).newPage();
+    await short.goto(base); await short.waitForSelector('#tmenu-btn'); await short.click('#tmenu-btn');
+    const menu = await short.evaluate(() => { const l = document.getElementById('tmenu-list'); const cs = getComputedStyle(l); return { groups: l.querySelectorAll('.tmenu-group').length, rows: l.querySelectorAll('a').length, scrolls: l.scrollHeight > l.clientHeight && /auto|scroll/.test(cs.overflowY), fits: l.getBoundingClientRect().bottom <= innerHeight }; });
+    check(menu.groups >= 2 && menu.rows >= 9, `the Tutorials menu is grouped (${menu.groups} groups, ${menu.rows} rows)`);
+    check(menu.scrolls && menu.fits, 'in a short window the Tutorials menu stays on screen and scrolls');
   } finally { if (browser) await browser.close(); srv.kill(); }
 }
 
@@ -158,10 +164,71 @@ async function figures(pg) {
   }
 }
 
+
+// ---- the crypto code gives the answers the standards publish, and agrees with Node's own crypto
+async function cryptoTests() {
+  const C = require(path.join(LAB, 'crypto.js'));
+  const nodeCrypto = require('node:crypto');
+  // RFC 7515 appendix A.1 (HS256) with the key from the same appendix
+  const jwsKey = { kty: 'oct', k: 'AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow' };
+  const jws = 'eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+  let r = await C.verify(jws, { algorithms: ['HS256'], key: jwsKey, now: 1300819000 });
+  check(r.ok && r.parsed.payload.iss === 'joe', 'RFC 7515 A.1: the example HS256 JWS verifies, and decodes to iss=joe');
+  r = await C.verify(jws, { algorithms: ['HS256'], key: jwsKey, now: 1300819381 });
+  check(!r.ok && r.checks.find((c) => c.name === 'Not expired').ok === false, 'RFC 7515 A.1: the same token is rejected after its exp');
+  r = await C.verify(jws.slice(0, -2) + 'AA', { algorithms: ['HS256'], key: jwsKey, now: 1300819000 });
+  check(!r.ok && !r.checks.find((c) => c.name === 'Signature is valid').ok, 'a token with a changed signature is rejected');
+  r = await C.verify(jws, { algorithms: ['RS256'], key: jwsKey, now: 1300819000 });
+  check(!r.ok && !r.checks.find((c) => c.name.startsWith('Algorithm')).ok, 'a verifier whose allow-list does not name the token\'s algorithm rejects it');
+  const none = await C.sign({ alg: 'none', typ: 'JWT' }, { sub: 'x' });
+  r = await C.verify(none, { algorithms: ['HS256'], key: jwsKey });
+  check(!r.ok, 'alg=none is rejected when it is not on the allow-list');
+  // RFC 7636 appendix B
+  const vbytes = [116, 24, 223, 180, 151, 153, 224, 37, 79, 250, 96, 125, 216, 173, 187, 186, 22, 212, 37, 77, 105, 214, 191, 240, 91, 88, 5, 88, 83, 132, 141, 121];
+  const ver = C.b64uEnc(Uint8Array.from(vbytes));
+  check(ver === 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk', 'RFC 7636 B: the 32 octets encode to the published code_verifier');
+  const chBytes = [19, 211, 30, 150, 26, 26, 216, 236, 47, 22, 177, 12, 76, 152, 46, 8, 118, 168, 120, 173, 109, 241, 68, 86, 110, 225, 137, 74, 203, 112, 249, 195];
+  check(await C.pkceChallenge(ver) === C.b64uEnc(Uint8Array.from(chBytes)) && await C.pkceChallenge(ver) === 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM', 'RFC 7636 B: the S256 challenge is the published value');
+  check(C.pkceVerifier().length === 43, 'a generated PKCE verifier is 43 characters (32 random octets)');
+  // RFC 7638
+  const rsa = { kty: 'RSA', n: '0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw', e: 'AQAB', alg: 'RS256', kid: '2011-04-29' };
+  check(await C.thumbprint(rsa) === 'NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs', 'RFC 7638: the example key\'s thumbprint is the published value');
+  // RFC 6238 appendix B
+  const s1 = C.utf8('12345678901234567890'), s256 = C.utf8('12345678901234567890123456789012'), s512 = C.utf8('1234567890123456789012345678901234567890123456789012345678901234');
+  const rows = [[59, s1, 'SHA-1', '94287082'], [1111111109, s1, 'SHA-1', '07081804'], [20000000000, s1, 'SHA-1', '65353130'], [59, s256, 'SHA-256', '46119246'], [1111111109, s256, 'SHA-256', '68084774'], [59, s512, 'SHA-512', '90693936'], [1111111109, s512, 'SHA-512', '25091201']];
+  let ok = true; for (const [t, sec, alg, want] of rows) if (await C.totp(sec, t, { digits: 8, alg }) !== want) ok = false;
+  check(ok, `RFC 6238 appendix B: ${rows.length} published TOTP values are reproduced (SHA-1, SHA-256, SHA-512)`);
+  check(C.hexEnc(C.b32Dec('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ')) === C.hexEnc(s1), 'base32 decodes the usual authenticator secret form');
+  // strict base64url
+  let bad = 0; for (const x of ['a+b', 'a/b', 'abc=', 'a', 'a b']) { try { C.b64uDec(x); } catch (e) { bad++; } }
+  check(bad === 5, 'base64url decoding rejects +, /, padding, impossible lengths and spaces');
+  // agreement with Node: sign here, verify there, and the other way round
+  for (const alg of ['RS256', 'PS256', 'ES256', 'ES384', 'Ed25519']) {
+    const kp = await C.generateKeyPair(alg);
+    const tok = await C.sign({ alg, typ: 'JWT', kid: 'k1' }, { sub: 'alice', n: 1 }, kp.privateJwk);
+    const [h, p, sig] = tok.split('.');
+    const pub = nodeCrypto.createPublicKey({ key: kp.publicJwk, format: 'jwk' });
+    const input = Buffer.from(h + '.' + p);
+    const a = C.ALGS[alg];
+    const opt = a.kty === 'RSA' && alg.startsWith('PS') ? { key: pub, padding: nodeCrypto.constants.RSA_PKCS1_PSS_PADDING, saltLength: a.sign.saltLength } : a.kty === 'EC' ? { key: pub, dsaEncoding: 'ieee-p1363' } : { key: pub };
+    const nodeOk = nodeCrypto.verify(a.hash ? a.hash.replace('-', '').toLowerCase() : null, input, opt, Buffer.from(sig, 'base64url'));
+    const mine = await C.verify(tok, { algorithms: [alg], key: kp.publicJwk, issuer: undefined });
+    check(nodeOk && mine.ok, `${alg}: a token signed here verifies in Node's crypto and in this code`);
+    // and one signed by Node verifies here
+    const priv = nodeCrypto.createPrivateKey({ key: kp.privateJwk, format: 'jwk' });
+    const hdr = C.b64uEnc(C.utf8(JSON.stringify({ alg }))), pl = C.b64uEnc(C.utf8(JSON.stringify({ sub: 'bob' })));
+    const sopt = a.kty === 'RSA' && alg.startsWith('PS') ? { key: priv, padding: nodeCrypto.constants.RSA_PKCS1_PSS_PADDING, saltLength: a.sign.saltLength } : a.kty === 'EC' ? { key: priv, dsaEncoding: 'ieee-p1363' } : { key: priv };
+    const nsig = nodeCrypto.sign(a.hash ? a.hash.replace('-', '').toLowerCase() : null, Buffer.from(hdr + '.' + pl), sopt);
+    const theirs = await C.verify(hdr + '.' + pl + '.' + nsig.toString('base64url'), { algorithms: [alg], key: kp.publicJwk });
+    check(theirs.ok, `${alg}: a token signed by Node's crypto verifies here`);
+  }
+}
+
 async function main() {
   const html = parity();
   if (typeof html === 'string') { structure(html); diagrams(html); }
   ledger();
+  await cryptoTests();
   await browserTests();
   process.exit(summary());
 }
