@@ -1854,8 +1854,21 @@ git push</code></pre></figure>
 (function () {
   var main = document.querySelector('main');
   if (!main || !window.Range || !document.createTreeWalker) return;
-  var PAGE = location.pathname.split('/').pop() || 'index';
+  var PAGE = location.pathname.split('/').pop() || 'code-to-cluster-tutorial.html';   // the site root serves this page; the backup uses the same name
   var KEY = 'tutorial-notes:' + PAGE;
+  // Notes, bookmarks and the saved place made at the site root were once stored under "index", which the backup does not
+  // know. Bring them under the page's own name, merging by id with anything already there.
+  try {
+    ['tutorial-notes:', 'tutorial-bookmarks:'].forEach(function (p) {
+      var old = JSON.parse(localStorage.getItem(p + 'index') || 'null'), cur = JSON.parse(localStorage.getItem(p + PAGE) || '[]') || [];
+      if (!Array.isArray(old) || !old.length) return;
+      var have = {}; cur.forEach(function (n) { have[n.id] = true; });
+      var merged = cur.concat(old.filter(function (n) { return !have[n.id]; }));
+      localStorage.setItem(p + PAGE, JSON.stringify(merged));
+      localStorage.removeItem(p + 'index');
+    });
+    if (localStorage.getItem('tutorial-pos:index') !== null && localStorage.getItem('tutorial-pos:' + PAGE) === null) { localStorage.setItem('tutorial-pos:' + PAGE, localStorage.getItem('tutorial-pos:index')); localStorage.removeItem('tutorial-pos:index'); }
+  } catch (e) {}
   var notes = [];
   try { notes = JSON.parse(localStorage.getItem(KEY) || '[]') || []; } catch (e) { notes = []; }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(notes)); } catch (e) {} }

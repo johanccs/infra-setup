@@ -416,6 +416,32 @@ async function pageTests(browser, spec) {
   await ctx.close();
 }
 
+// Notes made at the site root ("/") must be saved under the page's own name, because that is the name the backup watches
+// and the name the page has when it is opened by file name. An older version stored them under "index" and they seemed to vanish.
+async function rootNotesTest(browser) {
+  console.log('\n== notes at the site root');
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const pg = await ctx.newPage();
+  const FILE = 'code-to-cluster-tutorial.html';
+  await pg.goto(`${BASE}/`); await pg.waitForSelector('#rail-list li');
+  await pg.evaluate(() => { for (const k of Object.keys(localStorage)) if (/^tutorial-(notes|bookmarks|pos):/.test(k)) localStorage.removeItem(k); });
+  await pg.reload(); await pg.waitForSelector('#rail-list li');
+  await pg.locator('#overview .glossary dd').first().scrollIntoViewIfNeeded();
+  await pg.locator('#overview .glossary dd').first().click({ button: 'right' });
+  await pg.waitForSelector('#note-menu:not([hidden])', { timeout: 3000 });
+  await pg.click('#note-menu-note'); await pg.waitForSelector('#note-dlg[open]');
+  await pg.fill('#note-text', 'written at the root'); await pg.click('#note-save'); await pg.waitForTimeout(300);
+  const keys = await pg.evaluate(() => Object.keys(localStorage).filter((k) => /^tutorial-notes:/.test(k)));
+  check(keys.includes('tutorial-notes:' + FILE) && !keys.includes('tutorial-notes:index'), 'a note made at / is stored under the page\'s own name, not "index"');
+  await pg.goto(`${BASE}/${FILE}`); await pg.waitForSelector('#rail-list li');
+  check(await pg.locator('.note-card', { hasText: 'written at the root' }).count() === 1, 'the same note is there when the page is opened by file name');
+  // an older copy under "index" is moved across on the next visit
+  await pg.evaluate((f) => { const v = localStorage.getItem('tutorial-notes:' + f); localStorage.removeItem('tutorial-notes:' + f); localStorage.setItem('tutorial-notes:index', v); }, FILE);
+  await pg.goto(`${BASE}/${FILE}`); await pg.waitForSelector('#rail-list li');
+  check(await pg.locator('.note-card', { hasText: 'written at the root' }).count() === 1 && await pg.evaluate(() => localStorage.getItem('tutorial-notes:index') === null), 'a note stored under "index" by the older version is found and moved to the page\'s own name');
+  await ctx.close();
+}
+
 async function noKeyTest(browser) {
   console.log('\n== without OPENAI_API_KEY');
   for (const spec of PAGES) await raw({ path: '/api/state?page=' + spec.file, method: 'DELETE', headers: { host: `localhost:${PORT}`, 'x-tutorial': '1' } });
@@ -499,6 +525,7 @@ async function noKeyTest(browser) {
     for (const spec of PAGES) await pageTests(browser, spec);
     srv.kill(); await new Promise((r) => srv.on('exit', r));
     srv = await startServer({ OPENAI_API_KEY: '' });
+    await rootNotesTest(browser);
     await noKeyTest(browser);
   } catch (e) {
     fails++; console.log('FAIL unexpected error: ' + (e && e.stack || e));
