@@ -12,14 +12,14 @@
         <thead><tr><th>Method</th><th>Phishable?</th><th>Why</th></tr></thead>
         <tbody>
           <tr><td>Password only</td><td>Yes</td><td>Typed into whatever page asks. Also guessable, reusable and leakable.</td></tr>
-          <tr><td>SMS or voice code</td><td>Yes, and more</td><td>Typed into a fake page, and also intercepted or redirected (SIM swap). NIST restricts the public telephone network for out-of-band codes.</td></tr>
+          <tr><td>SMS or voice code</td><td>Yes, and more</td><td>Typed into a fake page, and also intercepted or redirected (SIM swap: an attacker gets your phone number moved to their own SIM card). NIST restricts the public telephone network for out-of-band codes.</td></tr>
           <tr><td>Email code</td><td>Yes, and more</td><td>NIST SP 800-63B-4: email SHALL NOT be used for out-of-band authentication.</td></tr>
           <tr><td>Authenticator app (TOTP)</td><td>Yes</td><td>A six digit code is typed, so a fake page can ask for it and use it within 30 seconds.</td></tr>
-          <tr><td>Push approval</td><td>Yes</td><td>"Approve?" prompts get approved by a tired person, one after another (MFA fatigue). Number matching helps; it is still a person deciding.</td></tr>
+          <tr><td>Push approval</td><td>Yes</td><td>"Approve?" prompts get approved by a tired person, one after another (MFA fatigue). Number matching (the prompt shows a number that you must also type in the app) helps; it is still a person deciding.</td></tr>
           <tr><td>Passkey or security key (WebAuthn)</td><td><b>No</b></td><td>The browser signs for the real origin only. Nothing the person can type or approve gives away a usable credential.</td></tr>
         </tbody>
       </table></div>
-      <p>NIST SP 800-63B-4 defines phishing resistance as preventing "the disclosure of authentication secrets and valid authenticator outputs to an impostor verifier ... without relying on the vigilance of the claimant", and says it requires cryptographic authentication: manually entered authenticator output (OTP, out-of-band) is not phishing-resistant. Applications assessed at AAL2 must offer a phishing-resistant option.</p>
+      <p>NIST SP 800-63B-4 defines phishing resistance as preventing "the disclosure of authentication secrets and valid authenticator outputs to an impostor verifier ... without relying on the vigilance of the claimant", and says it requires cryptographic authentication: manually entered authenticator output (OTP, out-of-band) is not phishing-resistant. Applications assessed at AAL2 must offer a phishing-resistant option. (AAL means authenticator assurance level: NIST's three levels of confidence in a sign-in, from AAL1, the lowest, to AAL3, the highest.)</p>
       <h3>Codes: TOTP</h3>
       <p>An authenticator app and the server share a secret (the base32 text in the QR code). Both compute <code>HMAC-SHA-1(secret, floor(time / 30))</code> and show six digits of it (RFC 6238, built on RFC 4226). It needs no network, which is its advantage, and it is a shared secret, which is its weakness: the server holds a secret that can be stolen.</p>
       <div data-tool="totp"></div>
