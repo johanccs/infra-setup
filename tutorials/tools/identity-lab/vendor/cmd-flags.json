@@ -1,0 +1,4584 @@
+{
+ "curl": {
+  "--abstract-unix-socket": {
+   "short": null,
+   "value": true
+  },
+  "--alt-svc": {
+   "short": null,
+   "value": true
+  },
+  "--anyauth": {
+   "short": null,
+   "value": false
+  },
+  "--append": {
+   "short": "-a",
+   "value": false
+  },
+  "--aws-sigv4": {
+   "short": null,
+   "value": true
+  },
+  "--basic": {
+   "short": null,
+   "value": false
+  },
+  "--ca-native": {
+   "short": null,
+   "value": false
+  },
+  "--cacert": {
+   "short": null,
+   "value": true
+  },
+  "--capath": {
+   "short": null,
+   "value": true
+  },
+  "--cert": {
+   "short": "-E",
+   "value": true
+  },
+  "--cert-status": {
+   "short": null,
+   "value": false
+  },
+  "--cert-type": {
+   "short": null,
+   "value": true
+  },
+  "--ciphers": {
+   "short": null,
+   "value": true
+  },
+  "--compressed": {
+   "short": null,
+   "value": false
+  },
+  "--compressed-ssh": {
+   "short": null,
+   "value": false
+  },
+  "--config": {
+   "short": "-K",
+   "value": true
+  },
+  "--connect-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--connect-to": {
+   "short": null,
+   "value": true
+  },
+  "--continue-at": {
+   "short": "-C",
+   "value": true
+  },
+  "--cookie": {
+   "short": "-b",
+   "value": true
+  },
+  "--cookie-jar": {
+   "short": "-c",
+   "value": true
+  },
+  "--create-dirs": {
+   "short": null,
+   "value": false
+  },
+  "--create-file-mode": {
+   "short": null,
+   "value": true
+  },
+  "--crlf": {
+   "short": null,
+   "value": false
+  },
+  "--crlfile": {
+   "short": null,
+   "value": true
+  },
+  "--curves": {
+   "short": null,
+   "value": true
+  },
+  "--data": {
+   "short": "-d",
+   "value": true
+  },
+  "--data-ascii": {
+   "short": null,
+   "value": true
+  },
+  "--data-binary": {
+   "short": null,
+   "value": true
+  },
+  "--data-raw": {
+   "short": null,
+   "value": true
+  },
+  "--data-urlencode": {
+   "short": null,
+   "value": true
+  },
+  "--delegation": {
+   "short": null,
+   "value": true
+  },
+  "--digest": {
+   "short": null,
+   "value": false
+  },
+  "--disable": {
+   "short": "-q",
+   "value": false
+  },
+  "--disable-eprt": {
+   "short": null,
+   "value": false
+  },
+  "--disable-epsv": {
+   "short": null,
+   "value": false
+  },
+  "--disallow-username-in-url": {
+   "short": null,
+   "value": false
+  },
+  "--dns-interface": {
+   "short": null,
+   "value": true
+  },
+  "--dns-ipv4-addr": {
+   "short": null,
+   "value": true
+  },
+  "--dns-ipv6-addr": {
+   "short": null,
+   "value": true
+  },
+  "--dns-servers": {
+   "short": null,
+   "value": true
+  },
+  "--doh-cert-status": {
+   "short": null,
+   "value": false
+  },
+  "--doh-insecure": {
+   "short": null,
+   "value": false
+  },
+  "--doh-url": {
+   "short": null,
+   "value": true
+  },
+  "--dump-ca-embed": {
+   "short": null,
+   "value": false
+  },
+  "--dump-header": {
+   "short": "-D",
+   "value": true
+  },
+  "--ech": {
+   "short": null,
+   "value": true
+  },
+  "--egd-file": {
+   "short": null,
+   "value": true
+  },
+  "--engine": {
+   "short": null,
+   "value": true
+  },
+  "--etag-compare": {
+   "short": null,
+   "value": true
+  },
+  "--etag-save": {
+   "short": null,
+   "value": true
+  },
+  "--expect100-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--fail": {
+   "short": "-f",
+   "value": false
+  },
+  "--fail-early": {
+   "short": null,
+   "value": false
+  },
+  "--fail-with-body": {
+   "short": null,
+   "value": false
+  },
+  "--false-start": {
+   "short": null,
+   "value": false
+  },
+  "--follow": {
+   "short": null,
+   "value": false
+  },
+  "--form": {
+   "short": "-F",
+   "value": true
+  },
+  "--form-escape": {
+   "short": null,
+   "value": false
+  },
+  "--form-string": {
+   "short": null,
+   "value": true
+  },
+  "--ftp-account": {
+   "short": null,
+   "value": true
+  },
+  "--ftp-alternative-to-user": {
+   "short": null,
+   "value": true
+  },
+  "--ftp-create-dirs": {
+   "short": null,
+   "value": false
+  },
+  "--ftp-method": {
+   "short": null,
+   "value": true
+  },
+  "--ftp-pasv": {
+   "short": null,
+   "value": false
+  },
+  "--ftp-port": {
+   "short": "-P",
+   "value": true
+  },
+  "--ftp-pret": {
+   "short": null,
+   "value": false
+  },
+  "--ftp-skip-pasv-ip": {
+   "short": null,
+   "value": false
+  },
+  "--ftp-ssl-ccc": {
+   "short": null,
+   "value": false
+  },
+  "--ftp-ssl-ccc-mode": {
+   "short": null,
+   "value": true
+  },
+  "--ftp-ssl-control": {
+   "short": null,
+   "value": false
+  },
+  "--get": {
+   "short": "-G",
+   "value": false
+  },
+  "--globoff": {
+   "short": "-g",
+   "value": false
+  },
+  "--happy-eyeballs-timeout-ms": {
+   "short": null,
+   "value": true
+  },
+  "--haproxy-clientip": {
+   "short": null,
+   "value": true
+  },
+  "--haproxy-protocol": {
+   "short": null,
+   "value": false
+  },
+  "--head": {
+   "short": "-I",
+   "value": false
+  },
+  "--header": {
+   "short": "-H",
+   "value": true
+  },
+  "--help": {
+   "short": "-h",
+   "value": true
+  },
+  "--hostpubmd5": {
+   "short": null,
+   "value": true
+  },
+  "--hostpubsha256": {
+   "short": null,
+   "value": true
+  },
+  "--hsts": {
+   "short": null,
+   "value": true
+  },
+  "--http0.9": {
+   "short": null,
+   "value": false
+  },
+  "--http1.0": {
+   "short": "-0",
+   "value": false
+  },
+  "--http1.1": {
+   "short": null,
+   "value": false
+  },
+  "--http2": {
+   "short": null,
+   "value": false
+  },
+  "--http2-prior-knowledge": {
+   "short": null,
+   "value": false
+  },
+  "--http3": {
+   "short": null,
+   "value": false
+  },
+  "--http3-only": {
+   "short": null,
+   "value": false
+  },
+  "--ignore-content-length": {
+   "short": null,
+   "value": false
+  },
+  "--insecure": {
+   "short": "-k",
+   "value": false
+  },
+  "--interface": {
+   "short": null,
+   "value": true
+  },
+  "--ip-tos": {
+   "short": null,
+   "value": true
+  },
+  "--ipfs-gateway": {
+   "short": null,
+   "value": true
+  },
+  "--ipv4": {
+   "short": "-4",
+   "value": false
+  },
+  "--ipv6": {
+   "short": "-6",
+   "value": false
+  },
+  "--json": {
+   "short": null,
+   "value": true
+  },
+  "--junk-session-cookies": {
+   "short": "-j",
+   "value": false
+  },
+  "--keepalive-cnt": {
+   "short": null,
+   "value": true
+  },
+  "--keepalive-time": {
+   "short": null,
+   "value": true
+  },
+  "--key": {
+   "short": null,
+   "value": true
+  },
+  "--key-type": {
+   "short": null,
+   "value": true
+  },
+  "--knownhosts": {
+   "short": null,
+   "value": true
+  },
+  "--krb": {
+   "short": null,
+   "value": true
+  },
+  "--libcurl": {
+   "short": null,
+   "value": true
+  },
+  "--limit-rate": {
+   "short": null,
+   "value": true
+  },
+  "--list-only": {
+   "short": "-l",
+   "value": false
+  },
+  "--local-port": {
+   "short": null,
+   "value": true
+  },
+  "--location": {
+   "short": "-L",
+   "value": false
+  },
+  "--location-trusted": {
+   "short": null,
+   "value": false
+  },
+  "--login-options": {
+   "short": null,
+   "value": true
+  },
+  "--mail-auth": {
+   "short": null,
+   "value": true
+  },
+  "--mail-from": {
+   "short": null,
+   "value": true
+  },
+  "--mail-rcpt": {
+   "short": null,
+   "value": true
+  },
+  "--mail-rcpt-allowfails": {
+   "short": null,
+   "value": false
+  },
+  "--manual": {
+   "short": "-M",
+   "value": false
+  },
+  "--max-filesize": {
+   "short": null,
+   "value": true
+  },
+  "--max-redirs": {
+   "short": null,
+   "value": true
+  },
+  "--max-time": {
+   "short": "-m",
+   "value": true
+  },
+  "--metalink": {
+   "short": null,
+   "value": false
+  },
+  "--mptcp": {
+   "short": null,
+   "value": false
+  },
+  "--negotiate": {
+   "short": null,
+   "value": false
+  },
+  "--netrc": {
+   "short": "-n",
+   "value": false
+  },
+  "--netrc-file": {
+   "short": null,
+   "value": true
+  },
+  "--netrc-optional": {
+   "short": null,
+   "value": false
+  },
+  "--next": {
+   "short": "-:",
+   "value": false
+  },
+  "--no-alpn": {
+   "short": null,
+   "value": false
+  },
+  "--no-buffer": {
+   "short": "-N",
+   "value": false
+  },
+  "--no-clobber": {
+   "short": null,
+   "value": false
+  },
+  "--no-keepalive": {
+   "short": null,
+   "value": false
+  },
+  "--no-npn": {
+   "short": null,
+   "value": false
+  },
+  "--no-progress-meter": {
+   "short": null,
+   "value": false
+  },
+  "--no-sessionid": {
+   "short": null,
+   "value": false
+  },
+  "--noproxy": {
+   "short": null,
+   "value": true
+  },
+  "--ntlm": {
+   "short": null,
+   "value": false
+  },
+  "--ntlm-wb": {
+   "short": null,
+   "value": false
+  },
+  "--oauth2-bearer": {
+   "short": null,
+   "value": true
+  },
+  "--out-null": {
+   "short": null,
+   "value": false
+  },
+  "--output": {
+   "short": "-o",
+   "value": true
+  },
+  "--output-dir": {
+   "short": null,
+   "value": true
+  },
+  "--parallel": {
+   "short": "-Z",
+   "value": false
+  },
+  "--parallel-immediate": {
+   "short": null,
+   "value": false
+  },
+  "--parallel-max": {
+   "short": null,
+   "value": true
+  },
+  "--parallel-max-host": {
+   "short": null,
+   "value": true
+  },
+  "--pass": {
+   "short": null,
+   "value": true
+  },
+  "--path-as-is": {
+   "short": null,
+   "value": false
+  },
+  "--pinnedpubkey": {
+   "short": null,
+   "value": true
+  },
+  "--post301": {
+   "short": null,
+   "value": false
+  },
+  "--post302": {
+   "short": null,
+   "value": false
+  },
+  "--post303": {
+   "short": null,
+   "value": false
+  },
+  "--preproxy": {
+   "short": null,
+   "value": true
+  },
+  "--progress-bar": {
+   "short": "-#",
+   "value": false
+  },
+  "--proto": {
+   "short": null,
+   "value": true
+  },
+  "--proto-default": {
+   "short": null,
+   "value": true
+  },
+  "--proto-redir": {
+   "short": null,
+   "value": true
+  },
+  "--proxy": {
+   "short": "-x",
+   "value": true
+  },
+  "--proxy-anyauth": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-basic": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-ca-native": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-cacert": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-capath": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-cert": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-cert-type": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-ciphers": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-crlfile": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-digest": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-header": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-http2": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-insecure": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-key": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-key-type": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-negotiate": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-ntlm": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-pass": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-pinnedpubkey": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-service-name": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-ssl-allow-beast": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-ssl-auto-client-cert": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-tls13-ciphers": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-tlsauthtype": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-tlspassword": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-tlsuser": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-tlsv1": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-user": {
+   "short": "-U",
+   "value": true
+  },
+  "--proxy1.0": {
+   "short": null,
+   "value": true
+  },
+  "--proxytunnel": {
+   "short": "-p",
+   "value": false
+  },
+  "--pubkey": {
+   "short": null,
+   "value": true
+  },
+  "--quote": {
+   "short": "-Q",
+   "value": true
+  },
+  "--random-file": {
+   "short": null,
+   "value": true
+  },
+  "--range": {
+   "short": "-r",
+   "value": true
+  },
+  "--rate": {
+   "short": null,
+   "value": true
+  },
+  "--raw": {
+   "short": null,
+   "value": false
+  },
+  "--referer": {
+   "short": "-e",
+   "value": true
+  },
+  "--remote-header-name": {
+   "short": "-J",
+   "value": false
+  },
+  "--remote-name": {
+   "short": "-O",
+   "value": false
+  },
+  "--remote-name-all": {
+   "short": null,
+   "value": false
+  },
+  "--remote-time": {
+   "short": "-R",
+   "value": false
+  },
+  "--remove-on-error": {
+   "short": null,
+   "value": false
+  },
+  "--request": {
+   "short": "-X",
+   "value": true
+  },
+  "--request-target": {
+   "short": null,
+   "value": true
+  },
+  "--resolve": {
+   "short": null,
+   "value": true
+  },
+  "--retry": {
+   "short": null,
+   "value": true
+  },
+  "--retry-all-errors": {
+   "short": null,
+   "value": false
+  },
+  "--retry-connrefused": {
+   "short": null,
+   "value": false
+  },
+  "--retry-delay": {
+   "short": null,
+   "value": true
+  },
+  "--retry-max-time": {
+   "short": null,
+   "value": true
+  },
+  "--sasl-authzid": {
+   "short": null,
+   "value": true
+  },
+  "--sasl-ir": {
+   "short": null,
+   "value": false
+  },
+  "--service-name": {
+   "short": null,
+   "value": true
+  },
+  "--show-error": {
+   "short": "-S",
+   "value": false
+  },
+  "--show-headers": {
+   "short": "-i",
+   "value": false
+  },
+  "--sigalgs": {
+   "short": null,
+   "value": true
+  },
+  "--silent": {
+   "short": "-s",
+   "value": false
+  },
+  "--skip-existing": {
+   "short": null,
+   "value": false
+  },
+  "--socks4": {
+   "short": null,
+   "value": true
+  },
+  "--socks4a": {
+   "short": null,
+   "value": true
+  },
+  "--socks5": {
+   "short": null,
+   "value": true
+  },
+  "--socks5-basic": {
+   "short": null,
+   "value": false
+  },
+  "--socks5-gssapi": {
+   "short": null,
+   "value": false
+  },
+  "--socks5-gssapi-nec": {
+   "short": null,
+   "value": false
+  },
+  "--socks5-gssapi-service": {
+   "short": null,
+   "value": true
+  },
+  "--socks5-hostname": {
+   "short": null,
+   "value": true
+  },
+  "--speed-limit": {
+   "short": "-Y",
+   "value": true
+  },
+  "--speed-time": {
+   "short": "-y",
+   "value": true
+  },
+  "--ssl": {
+   "short": null,
+   "value": false
+  },
+  "--ssl-allow-beast": {
+   "short": null,
+   "value": false
+  },
+  "--ssl-auto-client-cert": {
+   "short": null,
+   "value": false
+  },
+  "--ssl-no-revoke": {
+   "short": null,
+   "value": false
+  },
+  "--ssl-reqd": {
+   "short": null,
+   "value": false
+  },
+  "--ssl-revoke-best-effort": {
+   "short": null,
+   "value": false
+  },
+  "--ssl-sessions": {
+   "short": null,
+   "value": true
+  },
+  "--sslv2": {
+   "short": "-2",
+   "value": false
+  },
+  "--sslv3": {
+   "short": "-3",
+   "value": false
+  },
+  "--stderr": {
+   "short": null,
+   "value": true
+  },
+  "--styled-output": {
+   "short": null,
+   "value": false
+  },
+  "--suppress-connect-headers": {
+   "short": null,
+   "value": false
+  },
+  "--tcp-fastopen": {
+   "short": null,
+   "value": false
+  },
+  "--tcp-nodelay": {
+   "short": null,
+   "value": false
+  },
+  "--telnet-option": {
+   "short": "-t",
+   "value": true
+  },
+  "--tftp-blksize": {
+   "short": null,
+   "value": true
+  },
+  "--tftp-no-options": {
+   "short": null,
+   "value": false
+  },
+  "--time-cond": {
+   "short": "-z",
+   "value": true
+  },
+  "--tls-earlydata": {
+   "short": null,
+   "value": false
+  },
+  "--tls-max": {
+   "short": null,
+   "value": true
+  },
+  "--tls13-ciphers": {
+   "short": null,
+   "value": true
+  },
+  "--tlsauthtype": {
+   "short": null,
+   "value": true
+  },
+  "--tlspassword": {
+   "short": null,
+   "value": true
+  },
+  "--tlsuser": {
+   "short": null,
+   "value": true
+  },
+  "--tlsv1": {
+   "short": "-1",
+   "value": false
+  },
+  "--tlsv1.0": {
+   "short": null,
+   "value": false
+  },
+  "--tlsv1.1": {
+   "short": null,
+   "value": false
+  },
+  "--tlsv1.2": {
+   "short": null,
+   "value": false
+  },
+  "--tlsv1.3": {
+   "short": null,
+   "value": false
+  },
+  "--tr-encoding": {
+   "short": null,
+   "value": false
+  },
+  "--trace": {
+   "short": null,
+   "value": true
+  },
+  "--trace-ascii": {
+   "short": null,
+   "value": true
+  },
+  "--trace-config": {
+   "short": null,
+   "value": true
+  },
+  "--trace-ids": {
+   "short": null,
+   "value": false
+  },
+  "--trace-time": {
+   "short": null,
+   "value": false
+  },
+  "--unix-socket": {
+   "short": null,
+   "value": true
+  },
+  "--upload-file": {
+   "short": "-T",
+   "value": true
+  },
+  "--upload-flags": {
+   "short": null,
+   "value": true
+  },
+  "--url": {
+   "short": null,
+   "value": true
+  },
+  "--url-query": {
+   "short": null,
+   "value": true
+  },
+  "--use-ascii": {
+   "short": "-B",
+   "value": false
+  },
+  "--user": {
+   "short": "-u",
+   "value": true
+  },
+  "--user-agent": {
+   "short": "-A",
+   "value": true
+  },
+  "--variable": {
+   "short": null,
+   "value": true
+  },
+  "--verbose": {
+   "short": "-v",
+   "value": false
+  },
+  "--version": {
+   "short": "-V",
+   "value": false
+  },
+  "--vlan-priority": {
+   "short": null,
+   "value": true
+  },
+  "--write-out": {
+   "short": "-w",
+   "value": true
+  },
+  "--xattr": {
+   "short": null,
+   "value": false
+  }
+ },
+ "openssl req": {
+  "-help": {
+   "value": false
+  },
+  "-cipher": {
+   "value": true
+  },
+  "-engine": {
+   "value": true
+  },
+  "-keygen_engine": {
+   "value": true
+  },
+  "-in": {
+   "value": true
+  },
+  "-inform": {
+   "value": false
+  },
+  "-verify": {
+   "value": false
+  },
+  "-new": {
+   "value": false
+  },
+  "-config": {
+   "value": true
+  },
+  "-section": {
+   "value": true
+  },
+  "-utf8": {
+   "value": false
+  },
+  "-nameopt": {
+   "value": true
+  },
+  "-reqopt": {
+   "value": true
+  },
+  "-text": {
+   "value": false
+  },
+  "-x509": {
+   "value": false
+  },
+  "-x509v1": {
+   "value": false
+  },
+  "-CA": {
+   "value": true
+  },
+  "-CAkey": {
+   "value": true
+  },
+  "-subj": {
+   "value": true
+  },
+  "-subject": {
+   "value": false
+  },
+  "-multivalue-rdn": {
+   "value": false
+  },
+  "-not_before": {
+   "value": true
+  },
+  "-not_after": {
+   "value": true
+  },
+  "-days": {
+   "value": true
+  },
+  "-set_serial": {
+   "value": true
+  },
+  "-copy_extensions": {
+   "value": true
+  },
+  "-extensions": {
+   "value": true
+  },
+  "-reqexts": {
+   "value": true
+  },
+  "-addext": {
+   "value": true
+  },
+  "-precert": {
+   "value": false
+  },
+  "-key": {
+   "value": true
+  },
+  "-keyform": {
+   "value": true
+  },
+  "-pubkey": {
+   "value": false
+  },
+  "-keyout": {
+   "value": true
+  },
+  "-passin": {
+   "value": true
+  },
+  "-passout": {
+   "value": true
+  },
+  "-newkey": {
+   "value": true
+  },
+  "-pkeyopt": {
+   "value": true
+  },
+  "-sigopt": {
+   "value": true
+  },
+  "-vfyopt": {
+   "value": true
+  },
+  "-out": {
+   "value": true
+  },
+  "-outform": {
+   "value": false
+  },
+  "-batch": {
+   "value": false
+  },
+  "-verbose": {
+   "value": false
+  },
+  "-quiet": {
+   "value": false
+  },
+  "-noenc": {
+   "value": false
+  },
+  "-nodes": {
+   "value": false
+  },
+  "-noout": {
+   "value": false
+  },
+  "-newhdr": {
+   "value": false
+  },
+  "-modulus": {
+   "value": false
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl x509": {
+  "-help": {
+   "value": false
+  },
+  "-in": {
+   "value": true
+  },
+  "-passin": {
+   "value": true
+  },
+  "-new": {
+   "value": false
+  },
+  "-x509toreq": {
+   "value": false
+  },
+  "-req": {
+   "value": false
+  },
+  "-copy_extensions": {
+   "value": true
+  },
+  "-inform": {
+   "value": true
+  },
+  "-vfyopt": {
+   "value": true
+  },
+  "-key": {
+   "value": true
+  },
+  "-signkey": {
+   "value": true
+  },
+  "-keyform": {
+   "value": false
+  },
+  "-out": {
+   "value": true
+  },
+  "-outform": {
+   "value": true
+  },
+  "-nocert": {
+   "value": false
+  },
+  "-noout": {
+   "value": false
+  },
+  "-text": {
+   "value": false
+  },
+  "-dateopt": {
+   "value": true
+  },
+  "-certopt": {
+   "value": true
+  },
+  "-fingerprint": {
+   "value": false
+  },
+  "-alias": {
+   "value": false
+  },
+  "-serial": {
+   "value": false
+  },
+  "-startdate": {
+   "value": false
+  },
+  "-enddate": {
+   "value": false
+  },
+  "-dates": {
+   "value": false
+  },
+  "-subject": {
+   "value": false
+  },
+  "-issuer": {
+   "value": false
+  },
+  "-nameopt": {
+   "value": true
+  },
+  "-email": {
+   "value": false
+  },
+  "-hash": {
+   "value": false
+  },
+  "-subject_hash": {
+   "value": false
+  },
+  "-subject_hash_old": {
+   "value": false
+  },
+  "-issuer_hash": {
+   "value": false
+  },
+  "-issuer_hash_old": {
+   "value": false
+  },
+  "-ext": {
+   "value": true
+  },
+  "-ocspid": {
+   "value": false
+  },
+  "-ocsp_uri": {
+   "value": false
+  },
+  "-purpose": {
+   "value": false
+  },
+  "-pubkey": {
+   "value": false
+  },
+  "-modulus": {
+   "value": false
+  },
+  "-checkend": {
+   "value": true
+  },
+  "-checkhost": {
+   "value": true
+  },
+  "-checkemail": {
+   "value": true
+  },
+  "-checkip": {
+   "value": true
+  },
+  "-set_serial": {
+   "value": true
+  },
+  "-next_serial": {
+   "value": false
+  },
+  "-not_before": {
+   "value": true
+  },
+  "-not_after": {
+   "value": true
+  },
+  "-days": {
+   "value": true
+  },
+  "-preserve_dates": {
+   "value": false
+  },
+  "-set_issuer": {
+   "value": true
+  },
+  "-set_subject": {
+   "value": true
+  },
+  "-subj": {
+   "value": true
+  },
+  "-force_pubkey": {
+   "value": true
+  },
+  "-clrext": {
+   "value": false
+  },
+  "-extfile": {
+   "value": true
+  },
+  "-extensions": {
+   "value": true
+  },
+  "-sigopt": {
+   "value": true
+  },
+  "-badsig": {
+   "value": false
+  },
+  "-CA": {
+   "value": true
+  },
+  "-CAform": {
+   "value": false
+  },
+  "-CAkey": {
+   "value": true
+  },
+  "-CAkeyform": {
+   "value": false
+  },
+  "-CAserial": {
+   "value": true
+  },
+  "-CAcreateserial": {
+   "value": false
+  },
+  "-trustout": {
+   "value": false
+  },
+  "-setalias": {
+   "value": true
+  },
+  "-clrtrust": {
+   "value": false
+  },
+  "-addtrust": {
+   "value": true
+  },
+  "-clrreject": {
+   "value": false
+  },
+  "-addreject": {
+   "value": true
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-engine": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl genpkey": {
+  "-help": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-paramfile": {
+   "value": true
+  },
+  "-algorithm": {
+   "value": true
+  },
+  "-verbose": {
+   "value": false
+  },
+  "-quiet": {
+   "value": false
+  },
+  "-pkeyopt": {
+   "value": true
+  },
+  "-config": {
+   "value": true
+  },
+  "-out": {
+   "value": true
+  },
+  "-outpubkey": {
+   "value": true
+  },
+  "-outform": {
+   "value": false
+  },
+  "-pass": {
+   "value": true
+  },
+  "-genparam": {
+   "value": false
+  },
+  "-text": {
+   "value": false
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  }
+ },
+ "openssl verify": {
+  "-help": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-verbose": {
+   "value": false
+  },
+  "-nameopt": {
+   "value": true
+  },
+  "-trusted": {
+   "value": true
+  },
+  "-CAfile": {
+   "value": true
+  },
+  "-CApath": {
+   "value": true
+  },
+  "-CAstore": {
+   "value": true
+  },
+  "-no-CAfile": {
+   "value": false
+  },
+  "-no-CApath": {
+   "value": false
+  },
+  "-no-CAstore": {
+   "value": false
+  },
+  "-untrusted": {
+   "value": true
+  },
+  "-CRLfile": {
+   "value": true
+  },
+  "-crl_download": {
+   "value": false
+  },
+  "-show_chain": {
+   "value": false
+  },
+  "-policy": {
+   "value": true
+  },
+  "-purpose": {
+   "value": true
+  },
+  "-verify_name": {
+   "value": true
+  },
+  "-verify_depth": {
+   "value": true
+  },
+  "-auth_level": {
+   "value": true
+  },
+  "-attime": {
+   "value": true
+  },
+  "-verify_hostname": {
+   "value": true
+  },
+  "-verify_email": {
+   "value": true
+  },
+  "-verify_ip": {
+   "value": true
+  },
+  "-ignore_critical": {
+   "value": false
+  },
+  "-issuer_checks": {
+   "value": false
+  },
+  "-crl_check": {
+   "value": false
+  },
+  "-crl_check_all": {
+   "value": false
+  },
+  "-policy_check": {
+   "value": false
+  },
+  "-explicit_policy": {
+   "value": false
+  },
+  "-inhibit_any": {
+   "value": false
+  },
+  "-inhibit_map": {
+   "value": false
+  },
+  "-x509_strict": {
+   "value": false
+  },
+  "-extended_crl": {
+   "value": false
+  },
+  "-use_deltas": {
+   "value": false
+  },
+  "-policy_print": {
+   "value": false
+  },
+  "-check_ss_sig": {
+   "value": false
+  },
+  "-trusted_first": {
+   "value": false
+  },
+  "-suiteB_128_only": {
+   "value": false
+  },
+  "-suiteB_128": {
+   "value": false
+  },
+  "-suiteB_192": {
+   "value": false
+  },
+  "-partial_chain": {
+   "value": false
+  },
+  "-no_alt_chains": {
+   "value": false
+  },
+  "-no_check_time": {
+   "value": false
+  },
+  "-allow_proxy_certs": {
+   "value": false
+  },
+  "-vfyopt": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl s_client": {
+  "-help": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-ssl_client_engine": {
+   "value": true
+  },
+  "-ssl_config": {
+   "value": true
+  },
+  "-ct": {
+   "value": false
+  },
+  "-noct": {
+   "value": false
+  },
+  "-ctlogfile": {
+   "value": true
+  },
+  "-host": {
+   "value": true
+  },
+  "-port": {
+   "value": true
+  },
+  "-connect": {
+   "value": true
+  },
+  "-bind": {
+   "value": true
+  },
+  "-proxy": {
+   "value": true
+  },
+  "-proxy_user": {
+   "value": true
+  },
+  "-proxy_pass": {
+   "value": true
+  },
+  "-unix": {
+   "value": true
+  },
+  "-4": {
+   "value": false
+  },
+  "-6": {
+   "value": false
+  },
+  "-maxfraglen": {
+   "value": true
+  },
+  "-max_send_frag": {
+   "value": true
+  },
+  "-split_send_frag": {
+   "value": true
+  },
+  "-max_pipelines": {
+   "value": true
+  },
+  "-read_buf": {
+   "value": true
+  },
+  "-fallback_scsv": {
+   "value": false
+  },
+  "-cert": {
+   "value": true
+  },
+  "-certform": {
+   "value": false
+  },
+  "-cert_chain": {
+   "value": true
+  },
+  "-build_chain": {
+   "value": false
+  },
+  "-key": {
+   "value": true
+  },
+  "-keyform": {
+   "value": false
+  },
+  "-pass": {
+   "value": true
+  },
+  "-verify": {
+   "value": true
+  },
+  "-nameopt": {
+   "value": true
+  },
+  "-CApath": {
+   "value": true
+  },
+  "-CAfile": {
+   "value": true
+  },
+  "-CAstore": {
+   "value": true
+  },
+  "-no-CAfile": {
+   "value": false
+  },
+  "-no-CApath": {
+   "value": false
+  },
+  "-no-CAstore": {
+   "value": false
+  },
+  "-requestCAfile": {
+   "value": true
+  },
+  "-tfo": {
+   "value": false
+  },
+  "-dane_tlsa_domain": {
+   "value": true
+  },
+  "-dane_tlsa_rrdata": {
+   "value": true
+  },
+  "-dane_ee_no_namechecks": {
+   "value": false
+  },
+  "-psk_identity": {
+   "value": true
+  },
+  "-psk": {
+   "value": true
+  },
+  "-psk_session": {
+   "value": true
+  },
+  "-name": {
+   "value": true
+  },
+  "-reconnect": {
+   "value": false
+  },
+  "-sess_out": {
+   "value": true
+  },
+  "-sess_in": {
+   "value": true
+  },
+  "-crlf": {
+   "value": false
+  },
+  "-quiet": {
+   "value": false
+  },
+  "-ign_eof": {
+   "value": false
+  },
+  "-no_ign_eof": {
+   "value": false
+  },
+  "-starttls": {
+   "value": true
+  },
+  "-xmpphost": {
+   "value": true
+  },
+  "-brief": {
+   "value": false
+  },
+  "-prexit": {
+   "value": false
+  },
+  "-no-interactive": {
+   "value": false
+  },
+  "-showcerts": {
+   "value": false
+  },
+  "-debug": {
+   "value": false
+  },
+  "-msg": {
+   "value": false
+  },
+  "-msgfile": {
+   "value": true
+  },
+  "-nbio_test": {
+   "value": false
+  },
+  "-state": {
+   "value": false
+  },
+  "-keymatexport": {
+   "value": true
+  },
+  "-keymatexportlen": {
+   "value": true
+  },
+  "-security_debug": {
+   "value": false
+  },
+  "-security_debug_verbose": {
+   "value": false
+  },
+  "-trace": {
+   "value": false
+  },
+  "-keylogfile": {
+   "value": true
+  },
+  "-nocommands": {
+   "value": false
+  },
+  "-adv": {
+   "value": false
+  },
+  "-servername": {
+   "value": true
+  },
+  "-noservername": {
+   "value": false
+  },
+  "-tlsextdebug": {
+   "value": false
+  },
+  "-ignore_unexpected_eof": {
+   "value": false
+  },
+  "-status": {
+   "value": false
+  },
+  "-serverinfo": {
+   "value": true
+  },
+  "-alpn": {
+   "value": true
+  },
+  "-async": {
+   "value": false
+  },
+  "-nbio": {
+   "value": false
+  },
+  "-tls1": {
+   "value": false
+  },
+  "-tls1_1": {
+   "value": false
+  },
+  "-tls1_2": {
+   "value": false
+  },
+  "-tls1_3": {
+   "value": false
+  },
+  "-dtls": {
+   "value": false
+  },
+  "-quic": {
+   "value": false
+  },
+  "-timeout": {
+   "value": false
+  },
+  "-mtu": {
+   "value": true
+  },
+  "-dtls1": {
+   "value": false
+  },
+  "-dtls1_2": {
+   "value": false
+  },
+  "-nextprotoneg": {
+   "value": true
+  },
+  "-early_data": {
+   "value": true
+  },
+  "-enable_pha": {
+   "value": false
+  },
+  "-enable_server_rpk": {
+   "value": false
+  },
+  "-enable_client_rpk": {
+   "value": false
+  },
+  "-use_srtp": {
+   "value": true
+  },
+  "-srpuser": {
+   "value": true
+  },
+  "-srppass": {
+   "value": true
+  },
+  "-srp_lateuser": {
+   "value": false
+  },
+  "-srp_moregroups": {
+   "value": false
+  },
+  "-srp_strength": {
+   "value": true
+  },
+  "-ktls": {
+   "value": false
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-no_ssl3": {
+   "value": false
+  },
+  "-no_tls1": {
+   "value": false
+  },
+  "-no_tls1_1": {
+   "value": false
+  },
+  "-no_tls1_2": {
+   "value": false
+  },
+  "-no_tls1_3": {
+   "value": false
+  },
+  "-bugs": {
+   "value": false
+  },
+  "-no_comp": {
+   "value": false
+  },
+  "-comp": {
+   "value": false
+  },
+  "-no_tx_cert_comp": {
+   "value": false
+  },
+  "-no_rx_cert_comp": {
+   "value": false
+  },
+  "-no_ticket": {
+   "value": false
+  },
+  "-serverpref": {
+   "value": false
+  },
+  "-legacy_renegotiation": {
+   "value": false
+  },
+  "-client_renegotiation": {
+   "value": false
+  },
+  "-no_renegotiation": {
+   "value": false
+  },
+  "-legacy_server_connect": {
+   "value": false
+  },
+  "-no_resumption_on_reneg": {
+   "value": false
+  },
+  "-no_legacy_server_connect": {
+   "value": false
+  },
+  "-allow_no_dhe_kex": {
+   "value": false
+  },
+  "-prefer_no_dhe_kex": {
+   "value": false
+  },
+  "-prioritize_chacha": {
+   "value": false
+  },
+  "-strict": {
+   "value": false
+  },
+  "-sigalgs": {
+   "value": true
+  },
+  "-client_sigalgs": {
+   "value": true
+  },
+  "-groups": {
+   "value": true
+  },
+  "-curves": {
+   "value": true
+  },
+  "-named_curve": {
+   "value": true
+  },
+  "-cipher": {
+   "value": true
+  },
+  "-ciphersuites": {
+   "value": true
+  },
+  "-min_protocol": {
+   "value": true
+  },
+  "-max_protocol": {
+   "value": true
+  },
+  "-record_padding": {
+   "value": true
+  },
+  "-debug_broken_protocol": {
+   "value": false
+  },
+  "-no_middlebox": {
+   "value": false
+  },
+  "-no_etm": {
+   "value": false
+  },
+  "-no_ems": {
+   "value": false
+  },
+  "-policy": {
+   "value": true
+  },
+  "-purpose": {
+   "value": true
+  },
+  "-verify_name": {
+   "value": true
+  },
+  "-verify_depth": {
+   "value": true
+  },
+  "-auth_level": {
+   "value": true
+  },
+  "-attime": {
+   "value": true
+  },
+  "-verify_hostname": {
+   "value": true
+  },
+  "-verify_email": {
+   "value": true
+  },
+  "-verify_ip": {
+   "value": true
+  },
+  "-ignore_critical": {
+   "value": false
+  },
+  "-issuer_checks": {
+   "value": false
+  },
+  "-crl_check": {
+   "value": false
+  },
+  "-crl_check_all": {
+   "value": false
+  },
+  "-policy_check": {
+   "value": false
+  },
+  "-explicit_policy": {
+   "value": false
+  },
+  "-inhibit_any": {
+   "value": false
+  },
+  "-inhibit_map": {
+   "value": false
+  },
+  "-x509_strict": {
+   "value": false
+  },
+  "-extended_crl": {
+   "value": false
+  },
+  "-use_deltas": {
+   "value": false
+  },
+  "-policy_print": {
+   "value": false
+  },
+  "-check_ss_sig": {
+   "value": false
+  },
+  "-trusted_first": {
+   "value": false
+  },
+  "-suiteB_128_only": {
+   "value": false
+  },
+  "-suiteB_128": {
+   "value": false
+  },
+  "-suiteB_192": {
+   "value": false
+  },
+  "-partial_chain": {
+   "value": false
+  },
+  "-no_alt_chains": {
+   "value": false
+  },
+  "-no_check_time": {
+   "value": false
+  },
+  "-allow_proxy_certs": {
+   "value": false
+  },
+  "-CRL": {
+   "value": true
+  },
+  "-crl_download": {
+   "value": false
+  },
+  "-CRLform": {
+   "value": false
+  },
+  "-verify_return_error": {
+   "value": false
+  },
+  "-verify_quiet": {
+   "value": false
+  },
+  "-chainCAfile": {
+   "value": true
+  },
+  "-chainCApath": {
+   "value": true
+  },
+  "-chainCAstore": {
+   "value": true
+  },
+  "-verifyCAfile": {
+   "value": true
+  },
+  "-verifyCApath": {
+   "value": true
+  },
+  "-verifyCAstore": {
+   "value": true
+  },
+  "-xkey": {
+   "value": true
+  },
+  "-xcert": {
+   "value": true
+  },
+  "-xchain": {
+   "value": true
+  },
+  "-xchain_build": {
+   "value": false
+  },
+  "-xcertform": {
+   "value": false
+  },
+  "-xkeyform": {
+   "value": false
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl s_server": {
+  "-help": {
+   "value": false
+  },
+  "-ssl_config": {
+   "value": true
+  },
+  "-trace": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-port": {
+   "value": true
+  },
+  "-accept": {
+   "value": true
+  },
+  "-unix": {
+   "value": true
+  },
+  "-unlink": {
+   "value": false
+  },
+  "-4": {
+   "value": false
+  },
+  "-6": {
+   "value": false
+  },
+  "-tfo": {
+   "value": false
+  },
+  "-context": {
+   "value": true
+  },
+  "-CAfile": {
+   "value": true
+  },
+  "-CApath": {
+   "value": true
+  },
+  "-CAstore": {
+   "value": true
+  },
+  "-no-CAfile": {
+   "value": false
+  },
+  "-no-CApath": {
+   "value": false
+  },
+  "-no-CAstore": {
+   "value": false
+  },
+  "-nocert": {
+   "value": false
+  },
+  "-verify": {
+   "value": true
+  },
+  "-Verify": {
+   "value": true
+  },
+  "-nameopt": {
+   "value": true
+  },
+  "-cert": {
+   "value": true
+  },
+  "-cert2": {
+   "value": true
+  },
+  "-certform": {
+   "value": false
+  },
+  "-cert_chain": {
+   "value": true
+  },
+  "-build_chain": {
+   "value": false
+  },
+  "-serverinfo": {
+   "value": true
+  },
+  "-key": {
+   "value": true
+  },
+  "-key2": {
+   "value": true
+  },
+  "-keyform": {
+   "value": true
+  },
+  "-pass": {
+   "value": true
+  },
+  "-dcert": {
+   "value": true
+  },
+  "-dcertform": {
+   "value": false
+  },
+  "-dcert_chain": {
+   "value": true
+  },
+  "-dkey": {
+   "value": true
+  },
+  "-dkeyform": {
+   "value": true
+  },
+  "-dpass": {
+   "value": true
+  },
+  "-dhparam": {
+   "value": true
+  },
+  "-servername": {
+   "value": true
+  },
+  "-servername_fatal": {
+   "value": false
+  },
+  "-nbio_test": {
+   "value": false
+  },
+  "-crlf": {
+   "value": false
+  },
+  "-quiet": {
+   "value": false
+  },
+  "-no_resume_ephemeral": {
+   "value": false
+  },
+  "-www": {
+   "value": false
+  },
+  "-WWW": {
+   "value": false
+  },
+  "-ignore_unexpected_eof": {
+   "value": false
+  },
+  "-tlsextdebug": {
+   "value": false
+  },
+  "-HTTP": {
+   "value": false
+  },
+  "-id_prefix": {
+   "value": true
+  },
+  "-keymatexport": {
+   "value": true
+  },
+  "-keymatexportlen": {
+   "value": true
+  },
+  "-CRL": {
+   "value": true
+  },
+  "-CRLform": {
+   "value": false
+  },
+  "-crl_download": {
+   "value": false
+  },
+  "-chainCAfile": {
+   "value": true
+  },
+  "-chainCApath": {
+   "value": true
+  },
+  "-chainCAstore": {
+   "value": true
+  },
+  "-verifyCAfile": {
+   "value": true
+  },
+  "-verifyCApath": {
+   "value": true
+  },
+  "-verifyCAstore": {
+   "value": true
+  },
+  "-no_cache": {
+   "value": false
+  },
+  "-ext_cache": {
+   "value": false
+  },
+  "-verify_return_error": {
+   "value": false
+  },
+  "-verify_quiet": {
+   "value": false
+  },
+  "-ign_eof": {
+   "value": false
+  },
+  "-no_ign_eof": {
+   "value": false
+  },
+  "-cert_comp": {
+   "value": false
+  },
+  "-status": {
+   "value": false
+  },
+  "-status_verbose": {
+   "value": false
+  },
+  "-status_timeout": {
+   "value": true
+  },
+  "-status_url": {
+   "value": true
+  },
+  "-proxy": {
+   "value": true
+  },
+  "-no_proxy": {
+   "value": true
+  },
+  "-status_file": {
+   "value": true
+  },
+  "-security_debug": {
+   "value": false
+  },
+  "-security_debug_verbose": {
+   "value": false
+  },
+  "-brief": {
+   "value": false
+  },
+  "-rev": {
+   "value": false
+  },
+  "-debug": {
+   "value": false
+  },
+  "-msg": {
+   "value": false
+  },
+  "-msgfile": {
+   "value": true
+  },
+  "-state": {
+   "value": false
+  },
+  "-async": {
+   "value": false
+  },
+  "-max_pipelines": {
+   "value": true
+  },
+  "-naccept": {
+   "value": true
+  },
+  "-keylogfile": {
+   "value": true
+  },
+  "-nbio": {
+   "value": false
+  },
+  "-timeout": {
+   "value": false
+  },
+  "-mtu": {
+   "value": true
+  },
+  "-read_buf": {
+   "value": true
+  },
+  "-split_send_frag": {
+   "value": true
+  },
+  "-max_send_frag": {
+   "value": true
+  },
+  "-psk_identity": {
+   "value": true
+  },
+  "-psk_hint": {
+   "value": true
+  },
+  "-psk": {
+   "value": true
+  },
+  "-psk_session": {
+   "value": true
+  },
+  "-srpvfile": {
+   "value": true
+  },
+  "-srpuserseed": {
+   "value": true
+  },
+  "-max_early_data": {
+   "value": true
+  },
+  "-recv_max_early_data": {
+   "value": true
+  },
+  "-early_data": {
+   "value": false
+  },
+  "-num_tickets": {
+   "value": true
+  },
+  "-anti_replay": {
+   "value": false
+  },
+  "-no_anti_replay": {
+   "value": false
+  },
+  "-http_server_binmode": {
+   "value": false
+  },
+  "-no_ca_names": {
+   "value": false
+  },
+  "-stateless": {
+   "value": false
+  },
+  "-tls1": {
+   "value": false
+  },
+  "-tls1_1": {
+   "value": false
+  },
+  "-tls1_2": {
+   "value": false
+  },
+  "-tls1_3": {
+   "value": false
+  },
+  "-dtls": {
+   "value": false
+  },
+  "-listen": {
+   "value": false
+  },
+  "-dtls1": {
+   "value": false
+  },
+  "-dtls1_2": {
+   "value": false
+  },
+  "-use_srtp": {
+   "value": true
+  },
+  "-no_dhe": {
+   "value": false
+  },
+  "-nextprotoneg": {
+   "value": true
+  },
+  "-alpn": {
+   "value": true
+  },
+  "-ktls": {
+   "value": false
+  },
+  "-sendfile": {
+   "value": false
+  },
+  "-zerocopy_sendfile": {
+   "value": false
+  },
+  "-enable_server_rpk": {
+   "value": false
+  },
+  "-enable_client_rpk": {
+   "value": false
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-no_ssl3": {
+   "value": false
+  },
+  "-no_tls1": {
+   "value": false
+  },
+  "-no_tls1_1": {
+   "value": false
+  },
+  "-no_tls1_2": {
+   "value": false
+  },
+  "-no_tls1_3": {
+   "value": false
+  },
+  "-bugs": {
+   "value": false
+  },
+  "-no_comp": {
+   "value": false
+  },
+  "-comp": {
+   "value": false
+  },
+  "-no_tx_cert_comp": {
+   "value": false
+  },
+  "-no_rx_cert_comp": {
+   "value": false
+  },
+  "-no_ticket": {
+   "value": false
+  },
+  "-serverpref": {
+   "value": false
+  },
+  "-legacy_renegotiation": {
+   "value": false
+  },
+  "-client_renegotiation": {
+   "value": false
+  },
+  "-no_renegotiation": {
+   "value": false
+  },
+  "-legacy_server_connect": {
+   "value": false
+  },
+  "-no_resumption_on_reneg": {
+   "value": false
+  },
+  "-no_legacy_server_connect": {
+   "value": false
+  },
+  "-allow_no_dhe_kex": {
+   "value": false
+  },
+  "-prefer_no_dhe_kex": {
+   "value": false
+  },
+  "-prioritize_chacha": {
+   "value": false
+  },
+  "-strict": {
+   "value": false
+  },
+  "-sigalgs": {
+   "value": true
+  },
+  "-client_sigalgs": {
+   "value": true
+  },
+  "-groups": {
+   "value": true
+  },
+  "-curves": {
+   "value": true
+  },
+  "-named_curve": {
+   "value": true
+  },
+  "-cipher": {
+   "value": true
+  },
+  "-ciphersuites": {
+   "value": true
+  },
+  "-min_protocol": {
+   "value": true
+  },
+  "-max_protocol": {
+   "value": true
+  },
+  "-record_padding": {
+   "value": true
+  },
+  "-debug_broken_protocol": {
+   "value": false
+  },
+  "-no_middlebox": {
+   "value": false
+  },
+  "-no_etm": {
+   "value": false
+  },
+  "-no_ems": {
+   "value": false
+  },
+  "-policy": {
+   "value": true
+  },
+  "-purpose": {
+   "value": true
+  },
+  "-verify_name": {
+   "value": true
+  },
+  "-verify_depth": {
+   "value": true
+  },
+  "-auth_level": {
+   "value": true
+  },
+  "-attime": {
+   "value": true
+  },
+  "-verify_hostname": {
+   "value": true
+  },
+  "-verify_email": {
+   "value": true
+  },
+  "-verify_ip": {
+   "value": true
+  },
+  "-ignore_critical": {
+   "value": false
+  },
+  "-issuer_checks": {
+   "value": false
+  },
+  "-crl_check": {
+   "value": false
+  },
+  "-crl_check_all": {
+   "value": false
+  },
+  "-policy_check": {
+   "value": false
+  },
+  "-explicit_policy": {
+   "value": false
+  },
+  "-inhibit_any": {
+   "value": false
+  },
+  "-inhibit_map": {
+   "value": false
+  },
+  "-x509_strict": {
+   "value": false
+  },
+  "-extended_crl": {
+   "value": false
+  },
+  "-use_deltas": {
+   "value": false
+  },
+  "-policy_print": {
+   "value": false
+  },
+  "-check_ss_sig": {
+   "value": false
+  },
+  "-trusted_first": {
+   "value": false
+  },
+  "-suiteB_128_only": {
+   "value": false
+  },
+  "-suiteB_128": {
+   "value": false
+  },
+  "-suiteB_192": {
+   "value": false
+  },
+  "-partial_chain": {
+   "value": false
+  },
+  "-no_alt_chains": {
+   "value": false
+  },
+  "-no_check_time": {
+   "value": false
+  },
+  "-allow_proxy_certs": {
+   "value": false
+  },
+  "-xkey": {
+   "value": true
+  },
+  "-xcert": {
+   "value": true
+  },
+  "-xchain": {
+   "value": true
+  },
+  "-xchain_build": {
+   "value": false
+  },
+  "-xcertform": {
+   "value": false
+  },
+  "-xkeyform": {
+   "value": false
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl dgst": {
+  "-help": {
+   "value": false
+  },
+  "-list": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-engine_impl": {
+   "value": false
+  },
+  "-passin": {
+   "value": true
+  },
+  "-c": {
+   "value": false
+  },
+  "-r": {
+   "value": false
+  },
+  "-out": {
+   "value": true
+  },
+  "-keyform": {
+   "value": true
+  },
+  "-hex": {
+   "value": false
+  },
+  "-binary": {
+   "value": false
+  },
+  "-xoflen": {
+   "value": true
+  },
+  "-d": {
+   "value": false
+  },
+  "-debug": {
+   "value": false
+  },
+  "-sign": {
+   "value": true
+  },
+  "-verify": {
+   "value": true
+  },
+  "-prverify": {
+   "value": true
+  },
+  "-sigopt": {
+   "value": true
+  },
+  "-signature": {
+   "value": true
+  },
+  "-hmac": {
+   "value": true
+  },
+  "-mac": {
+   "value": true
+  },
+  "-macopt": {
+   "value": true
+  },
+  "-fips-fingerprint": {
+   "value": false
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl rand": {
+  "-help": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-out": {
+   "value": true
+  },
+  "-base64": {
+   "value": false
+  },
+  "-hex": {
+   "value": false
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl ecparam": {
+  "-help": {
+   "value": false
+  },
+  "-list_curves": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-genkey": {
+   "value": false
+  },
+  "-in": {
+   "value": true
+  },
+  "-inform": {
+   "value": false
+  },
+  "-out": {
+   "value": true
+  },
+  "-outform": {
+   "value": false
+  },
+  "-text": {
+   "value": false
+  },
+  "-noout": {
+   "value": false
+  },
+  "-param_enc": {
+   "value": true
+  },
+  "-check": {
+   "value": false
+  },
+  "-check_named": {
+   "value": false
+  },
+  "-no_seed": {
+   "value": false
+  },
+  "-name": {
+   "value": true
+  },
+  "-conv_form": {
+   "value": true
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl pkcs12": {
+  "-help": {
+   "value": false
+  },
+  "-in": {
+   "value": true
+  },
+  "-out": {
+   "value": true
+  },
+  "-passin": {
+   "value": true
+  },
+  "-passout": {
+   "value": true
+  },
+  "-password": {
+   "value": true
+  },
+  "-twopass": {
+   "value": false
+  },
+  "-nokeys": {
+   "value": false
+  },
+  "-nocerts": {
+   "value": false
+  },
+  "-noout": {
+   "value": false
+  },
+  "-legacy": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-info": {
+   "value": false
+  },
+  "-nomacver": {
+   "value": false
+  },
+  "-clcerts": {
+   "value": false
+  },
+  "-cacerts": {
+   "value": false
+  },
+  "-noenc": {
+   "value": false
+  },
+  "-nodes": {
+   "value": false
+  },
+  "-export": {
+   "value": false
+  },
+  "-inkey": {
+   "value": true
+  },
+  "-certfile": {
+   "value": true
+  },
+  "-passcerts": {
+   "value": true
+  },
+  "-chain": {
+   "value": false
+  },
+  "-untrusted": {
+   "value": true
+  },
+  "-CAfile": {
+   "value": true
+  },
+  "-CApath": {
+   "value": true
+  },
+  "-CAstore": {
+   "value": true
+  },
+  "-no-CAfile": {
+   "value": false
+  },
+  "-no-CApath": {
+   "value": false
+  },
+  "-no-CAstore": {
+   "value": false
+  },
+  "-name": {
+   "value": true
+  },
+  "-caname": {
+   "value": true
+  },
+  "-CSP": {
+   "value": true
+  },
+  "-LMK": {
+   "value": false
+  },
+  "-keyex": {
+   "value": false
+  },
+  "-keysig": {
+   "value": false
+  },
+  "-keypbe": {
+   "value": true
+  },
+  "-certpbe": {
+   "value": true
+  },
+  "-descert": {
+   "value": false
+  },
+  "-macalg": {
+   "value": true
+  },
+  "-pbmac1_pbkdf2": {
+   "value": false
+  },
+  "-pbmac1_pbkdf2_md": {
+   "value": true
+  },
+  "-iter": {
+   "value": true
+  },
+  "-noiter": {
+   "value": false
+  },
+  "-nomaciter": {
+   "value": false
+  },
+  "-maciter": {
+   "value": false
+  },
+  "-macsaltlen": {
+   "value": true
+  },
+  "-nomac": {
+   "value": false
+  },
+  "-jdktrust": {
+   "value": true
+  }
+ },
+ "openssl pkey": {
+  "-help": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  },
+  "-check": {
+   "value": false
+  },
+  "-pubcheck": {
+   "value": false
+  },
+  "-in": {
+   "value": true
+  },
+  "-inform": {
+   "value": true
+  },
+  "-passin": {
+   "value": true
+  },
+  "-pubin": {
+   "value": false
+  },
+  "-out": {
+   "value": true
+  },
+  "-outform": {
+   "value": false
+  },
+  "-passout": {
+   "value": true
+  },
+  "-traditional": {
+   "value": false
+  },
+  "-pubout": {
+   "value": false
+  },
+  "-noout": {
+   "value": false
+  },
+  "-text": {
+   "value": false
+  },
+  "-text_pub": {
+   "value": false
+  },
+  "-ec_conv_form": {
+   "value": true
+  },
+  "-ec_param_enc": {
+   "value": true
+  }
+ },
+ "kubectl get": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--all-namespaces": {
+   "short": "-A",
+   "value": false
+  },
+  "--allow-missing-template-keys": {
+   "short": null,
+   "value": false
+  },
+  "--chunk-size": {
+   "short": null,
+   "value": true
+  },
+  "--field-selector": {
+   "short": null,
+   "value": true
+  },
+  "--filename": {
+   "short": "-f",
+   "value": true
+  },
+  "--ignore-not-found": {
+   "short": null,
+   "value": false
+  },
+  "--kustomize": {
+   "short": "-k",
+   "value": true
+  },
+  "--label-columns": {
+   "short": "-L",
+   "value": true
+  },
+  "--no-headers": {
+   "short": null,
+   "value": false
+  },
+  "--output": {
+   "short": "-o",
+   "value": true
+  },
+  "--output-watch-events": {
+   "short": null,
+   "value": false
+  },
+  "--raw": {
+   "short": null,
+   "value": true
+  },
+  "--recursive": {
+   "short": "-R",
+   "value": false
+  },
+  "--selector": {
+   "short": "-l",
+   "value": true
+  },
+  "--server-print": {
+   "short": null,
+   "value": false
+  },
+  "--show-kind": {
+   "short": null,
+   "value": false
+  },
+  "--show-labels": {
+   "short": null,
+   "value": false
+  },
+  "--show-managed-fields": {
+   "short": null,
+   "value": false
+  },
+  "--sort-by": {
+   "short": null,
+   "value": true
+  },
+  "--subresource": {
+   "short": null,
+   "value": true
+  },
+  "--template": {
+   "short": null,
+   "value": true
+  },
+  "--watch": {
+   "short": "-w",
+   "value": false
+  },
+  "--watch-only": {
+   "short": null,
+   "value": false
+  }
+ },
+ "kubectl describe": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--all-namespaces": {
+   "short": "-A",
+   "value": false
+  },
+  "--chunk-size": {
+   "short": null,
+   "value": true
+  },
+  "--filename": {
+   "short": "-f",
+   "value": true
+  },
+  "--kustomize": {
+   "short": "-k",
+   "value": true
+  },
+  "--recursive": {
+   "short": "-R",
+   "value": false
+  },
+  "--selector": {
+   "short": "-l",
+   "value": true
+  },
+  "--show-events": {
+   "short": null,
+   "value": false
+  }
+ },
+ "kubectl apply": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--all": {
+   "short": null,
+   "value": false
+  },
+  "--allow-missing-template-keys": {
+   "short": null,
+   "value": false
+  },
+  "--cascade": {
+   "short": null,
+   "value": true
+  },
+  "--dry-run": {
+   "short": null,
+   "value": true
+  },
+  "--field-manager": {
+   "short": null,
+   "value": true
+  },
+  "--filename": {
+   "short": "-f",
+   "value": true
+  },
+  "--force": {
+   "short": null,
+   "value": false
+  },
+  "--force-conflicts": {
+   "short": null,
+   "value": false
+  },
+  "--grace-period": {
+   "short": null,
+   "value": true
+  },
+  "--kustomize": {
+   "short": "-k",
+   "value": true
+  },
+  "--openapi-patch": {
+   "short": null,
+   "value": false
+  },
+  "--output": {
+   "short": "-o",
+   "value": true
+  },
+  "--overwrite": {
+   "short": null,
+   "value": false
+  },
+  "--prune": {
+   "short": null,
+   "value": false
+  },
+  "--prune-allowlist": {
+   "short": null,
+   "value": true
+  },
+  "--recursive": {
+   "short": "-R",
+   "value": false
+  },
+  "--selector": {
+   "short": "-l",
+   "value": true
+  },
+  "--server-side": {
+   "short": null,
+   "value": false
+  },
+  "--show-managed-fields": {
+   "short": null,
+   "value": false
+  },
+  "--subresource": {
+   "short": null,
+   "value": true
+  },
+  "--template": {
+   "short": null,
+   "value": true
+  },
+  "--timeout": {
+   "short": null,
+   "value": true
+  },
+  "--validate": {
+   "short": null,
+   "value": true
+  },
+  "--wait": {
+   "short": null,
+   "value": false
+  }
+ },
+ "kubectl auth can-i": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--all-namespaces": {
+   "short": "-A",
+   "value": false
+  },
+  "--list": {
+   "short": null,
+   "value": false
+  },
+  "--no-headers": {
+   "short": null,
+   "value": false
+  },
+  "--quiet": {
+   "short": "-q",
+   "value": false
+  },
+  "--subresource": {
+   "short": null,
+   "value": true
+  }
+ },
+ "kubectl create role": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--allow-missing-template-keys": {
+   "short": null,
+   "value": false
+  },
+  "--dry-run": {
+   "short": null,
+   "value": true
+  },
+  "--field-manager": {
+   "short": null,
+   "value": true
+  },
+  "--output": {
+   "short": "-o",
+   "value": true
+  },
+  "--resource": {
+   "short": null,
+   "value": true
+  },
+  "--resource-name": {
+   "short": null,
+   "value": true
+  },
+  "--save-config": {
+   "short": null,
+   "value": false
+  },
+  "--show-managed-fields": {
+   "short": null,
+   "value": false
+  },
+  "--template": {
+   "short": null,
+   "value": true
+  },
+  "--validate": {
+   "short": null,
+   "value": true
+  },
+  "--verb": {
+   "short": null,
+   "value": true
+  }
+ },
+ "kubectl create rolebinding": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--allow-missing-template-keys": {
+   "short": null,
+   "value": false
+  },
+  "--clusterrole": {
+   "short": null,
+   "value": true
+  },
+  "--dry-run": {
+   "short": null,
+   "value": true
+  },
+  "--field-manager": {
+   "short": null,
+   "value": true
+  },
+  "--group": {
+   "short": null,
+   "value": true
+  },
+  "--output": {
+   "short": "-o",
+   "value": true
+  },
+  "--role": {
+   "short": null,
+   "value": true
+  },
+  "--save-config": {
+   "short": null,
+   "value": false
+  },
+  "--serviceaccount": {
+   "short": null,
+   "value": true
+  },
+  "--show-managed-fields": {
+   "short": null,
+   "value": false
+  },
+  "--template": {
+   "short": null,
+   "value": true
+  },
+  "--validate": {
+   "short": null,
+   "value": true
+  }
+ },
+ "kubectl logs": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--all-containers": {
+   "short": null,
+   "value": false
+  },
+  "--all-pods": {
+   "short": null,
+   "value": false
+  },
+  "--container": {
+   "short": "-c",
+   "value": true
+  },
+  "--follow": {
+   "short": "-f",
+   "value": false
+  },
+  "--ignore-errors": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify-backend": {
+   "short": null,
+   "value": false
+  },
+  "--limit-bytes": {
+   "short": null,
+   "value": true
+  },
+  "--max-log-requests": {
+   "short": null,
+   "value": true
+  },
+  "--pod-running-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--prefix": {
+   "short": null,
+   "value": false
+  },
+  "--previous": {
+   "short": "-p",
+   "value": false
+  },
+  "--selector": {
+   "short": "-l",
+   "value": true
+  },
+  "--since": {
+   "short": null,
+   "value": true
+  },
+  "--since-time": {
+   "short": null,
+   "value": true
+  },
+  "--tail": {
+   "short": null,
+   "value": true
+  },
+  "--timestamps": {
+   "short": null,
+   "value": false
+  }
+ }
+}

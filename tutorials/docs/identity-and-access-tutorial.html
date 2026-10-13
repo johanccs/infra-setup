@@ -1027,6 +1027,617 @@ try {
       </ul></div>
       <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
     </section>
+
+    <!-- ============ 4 ============ -->
+    <section class="step" id="tls" data-step data-level="Intermediate">
+      <div class="step-head"><span class="num">04</span><h2>HTTPS and TLS: the private pipe</h2><span class="lvl-chip">Intermediate</span></div>
+      <p class="goal"><b>Goal:</b> describe the TLS 1.3 handshake step by step, read the TLS lines of <code>curl -v</code> and <code>openssl s_client</code>, and say what TLS does <em>not</em> protect.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Everything else in this module rides on a connection that someone could be watching or changing. TLS is what makes that connection safe enough to carry passwords, cookies and tokens. You will meet it as a padlock, as <code>https://</code>, and as the first cause of "it works on my machine".</p>
+        <p>This lesson builds on step 02 (hashes, key pairs, signatures) and step 01 (who are you?). The certificate itself is step 05.</p>
+      </div>
+
+      <div class="what-is"><h4>What is it? TLS</h4><dl>
+        <dt>What it is</dt><dd>Transport Layer Security: a protocol that lets two programs talk over the Internet in a way designed to prevent eavesdropping, tampering and message forgery (RFC 9846). The current version is TLS 1.3.</dd>
+        <dt>The problem it solves</dt><dd>A request crosses many machines owned by strangers. Without TLS any of them can read it, change it, or pretend to be the server.</dd>
+        <dt>Everyday comparison</dt><dd>A sealed armoured van with a guard who checks the receiving office's identity papers before the doors open. Contents, seals and addressee are all protected.</dd>
+        <dt>What it is not</dt><dd>Not protection once the data arrives: the server sees everything in clear. Not proof that the <em>site</em> is honest, only that you are talking to whoever holds the certificate's key. Not the same as a login.</dd>
+        <dt>Where you meet it</dt><dd>Every <code>https://</code> address, database connections, service-to-service calls, email servers.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? HTTPS</h4><dl>
+        <dt>What it is</dt><dd>Ordinary HTTP sent through a TLS connection. The <code>https</code> scheme names a server that can set up a TLS connection secured for HTTP (RFC 9110).</dd>
+        <dt>The problem it solves</dt><dd>The same as TLS, for the web: the page, the cookies and the form data are private and unchanged.</dd>
+        <dt>Everyday comparison</dt><dd>The letter is the same letter. Only the envelope changed.</dd>
+        <dt>What it is not</dt><dd>Not a different version of HTTP, and not a guarantee that the page is safe to use.</dd>
+        <dt>Where you meet it</dt><dd>The address bar, <code>curl https://…</code>, the <code>Secure</code> cookie attribute from step 03.</dd>
+      </dl></div>
+
+      <h3>What TLS promises, and the versions</h3>
+      <ul>
+        <li><b>Confidentiality:</b> nobody on the path can read the data.</li>
+        <li><b>Integrity:</b> nobody on the path can change it without detection.</li>
+        <li><b>Authentication of the server</b> (and, optionally, of the client): you know who is at the other end, by their certificate.</li>
+      </ul>
+      <p>TLS 1.0 and 1.1 are formally deprecated (RFC 8996) and must not be used. TLS 1.2 is still met everywhere. TLS 1.3 is specified in <b>RFC 9846</b> (July 2026), which replaced RFC 8446 and also obsoletes the TLS 1.2 specification, while keeping a few optional changes that TLS 1.2 implementations can adopt (its section 1.4).</p>
+      <p>What changed in 1.3, in the RFC's own list (section 1.3): only modern encryption (AEAD) remains; <b>every key exchange now provides forward secrecy</b>, because static RSA and Diffie-Hellman suites were removed; <b>all handshake messages after the ServerHello are encrypted</b>; the key derivation was redesigned around HKDF; and the handshake got shorter.</p>
+
+      <h3>The handshake</h3>
+      <p>Before any HTTP is sent, the two sides agree on keys. Follow the messages of RFC 9846's full handshake, in order:</p>
+      <figure class="anim" aria-label="Animated diagram: the TLS 1.3 handshake between a client and a server">
+        <div class="anim-stage"><svg viewBox="0 0 760 420" role="img" aria-label="The client sends ClientHello with a key share. The server answers ServerHello with its key share, then, encrypted, EncryptedExtensions, Certificate, CertificateVerify and Finished. The client sends Finished. Then application data flows in both directions.">
+          <rect class="a-zone" x="8" y="8" width="744" height="404" rx="12"/>
+          <g class="a-node on" data-k="cl"><rect x="40" y="20" width="150" height="44" rx="8"/><text class="a-t" x="115" y="48">Client</text></g>
+          <g class="a-node on" data-k="sv"><rect x="570" y="20" width="150" height="44" rx="8"/><text class="a-t" x="645" y="48">Server</text></g>
+          <path class="a-route" d="M115 64 V400" stroke-dasharray="4 5"/>
+          <path class="a-route" d="M645 64 V400" stroke-dasharray="4 5"/>
+          <path class="a-route" data-k="m1" d="M115 100 H645"/><text class="a-lbl" data-k="m1" x="380" y="92"><tspan class="h">ClientHello</tspan> + key_share, supported_versions, server_name →</text>
+          <path class="a-route" data-k="m2" d="M645 140 H115"/><text class="a-lbl" data-k="m2" x="380" y="132">← <tspan class="h">ServerHello</tspan> + key_share</text>
+          <path class="a-route" data-k="m3" d="M645 180 H115"/><text class="a-lbl" data-k="m3" x="380" y="172">← {EncryptedExtensions}</text>
+          <path class="a-route" data-k="m4" d="M645 218 H115"/><text class="a-lbl" data-k="m4" x="380" y="210">← {<tspan class="h">Certificate</tspan>}   the server's certificate chain</text>
+          <path class="a-route" data-k="m5" d="M645 256 H115"/><text class="a-lbl" data-k="m5" x="380" y="248">← {<tspan class="h">CertificateVerify</tspan>}   a signature made with the private key</text>
+          <path class="a-route" data-k="m6" d="M645 294 H115"/><text class="a-lbl" data-k="m6" x="380" y="286">← {<tspan class="h">Finished</tspan>}</text>
+          <path class="a-route" data-k="m7" d="M115 332 H645"/><text class="a-lbl" data-k="m7" x="380" y="324">{<tspan class="h">Finished</tspan>} →</text>
+          <path class="a-route" data-k="m8" d="M115 376 H645"/><text class="a-lbl" data-k="m8" x="380" y="368">[ application data: the HTTP request and response ] ⇄</text>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <text class="a-badge start" data-k="lock" x="40" y="404">🔒 encrypted from here</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "m1", "off": "m2 m3 m4 m5 m6 m7 m8 lock", "path": [[115, 100], [645, 100]], "text": "<b>1. ClientHello.</b> The client says which versions, key exchange groups and signature algorithms it supports, sends its half of a key exchange (the key share), and names the server it wants (<code>server_name</code>)."},
+          {"on": "m1 m2", "off": "m3 m4 m5 m6 m7 m8", "good": "lock", "path": [[645, 140], [115, 140]], "text": "<b>2. ServerHello.</b> The server picks the parameters and sends its key share. Both sides can now compute the same secret keys, which nobody who watched can. Everything from here on is encrypted."},
+          {"on": "m1 m2 m3 m4 m5 m6", "off": "m7 m8", "good": "lock", "path": [[645, 218], [115, 218]], "text": "<b>3. The server proves itself.</b> It sends its certificate, then a signature over the whole handshake made with the certificate's private key (<code>CertificateVerify</code>), then <code>Finished</code>. Only the real key holder can produce that signature."},
+          {"on": "m1 m2 m3 m4 m5 m6 m7", "off": "m8", "good": "lock", "path": [[115, 332], [645, 332]], "text": "<b>4. The client checks and finishes.</b> It validates the certificate chain, the name and the signature (step 05), then sends its own <code>Finished</code>."},
+          {"on": "m1 m2 m3 m4 m5 m6 m7 m8", "good": "lock m8", "path": [[115, 376], [645, 376]], "text": "<b>5. Application data.</b> The HTTP request and response travel inside the encrypted connection, with keys that this connection alone derived."}
+        ]</script>
+      </figure>
+      <p>In a plain sentence: both sides do a key exchange in the open (using key shares, so nobody who watches can compute the secret), the server proves it owns the certificate by signing the conversation, and everything after that is encrypted and checked.</p>
+
+      <details class="lbl"><summary>Line by line: what you see in <code>openssl s_client</code></summary><div><dl>
+        <dt><code>Protocol: TLSv1.3</code></dt><dd>The version that was negotiated.</dd>
+        <dt><code>Cipher is TLS_AES_256_GCM_SHA384</code></dt><dd>A TLS 1.3 cipher suite names only the record encryption (AES-256 in GCM mode) and the hash used for key derivation (SHA-384). RFC 9846 requires <code>TLS_AES_128_GCM_SHA256</code> and recommends <code>TLS_AES_256_GCM_SHA384</code> and <code>TLS_CHACHA20_POLY1305_SHA256</code>.</dd>
+        <dt><code>Negotiated TLS1.3 group: X25519MLKEM768</code></dt><dd>The key exchange used a <em>hybrid</em>: X25519 (classical) combined with ML-KEM-768 (post-quantum), so a future quantum computer cannot read recorded traffic. RFC 10024 (August 2026) defines this group. Your <code>curl</code> and OpenSSL print it if both sides support it.</dd>
+        <dt><code>Peer signature type: ecdsa_secp256r1_sha256</code></dt><dd>How the server signed <code>CertificateVerify</code>: ECDSA on curve P-256 with SHA-256.</dd>
+        <dt><code>Verify return code: 0 (ok)</code></dt><dd>The certificate chain was checked against the trust store and passed. Other codes name the failure (step 05).</dd>
+      </dl></div></details>
+
+      <h3>Details that matter</h3>
+      <ul>
+        <li><b>Forward secrecy.</b> The keys come from a fresh key exchange per connection, so stealing the server's long-term private key later does not unlock recorded traffic.</li>
+        <li><b>Session resumption and 0-RTT.</b> A client can resume a past session and even send data in the first flight ("early data"). That data can be <em>replayed</em> by an attacker, so it is only safe for requests that change nothing. RFC 9846 has a whole section on this (section 8).</li>
+        <li><b>The server name is visible.</b> <code>server_name</code> (SNI) travels in clear in the ClientHello, so anyone on the path learns which site you visit, even though the content is encrypted. <b>Encrypted Client Hello</b> (RFC 9849, March 2026) encrypts the ClientHello under a key the server publishes.</li>
+        <li><b>HSTS.</b> A server can tell browsers "only ever use HTTPS for this site" with <code>Strict-Transport-Security: max-age=…</code> (RFC 6797), so a first plain-HTTP request cannot be downgraded.</li>
+        <li><b>Where TLS ends.</b> In the Todo platform the gateway terminates TLS and talks plain HTTP to the pods behind it unless you add more. TLS protects the part of the path it covers, and no more.</li>
+      </ul>
+
+      <h3>See it yourself</h3>
+      <p>These commands connect to the API you will run over HTTPS in step 06 (<code>https://localhost:5443</code>, certificate in <code>api.pem</code>, signed by <code>root.pem</code>). Type each one; the page checks the flags against the real tool.</p>
+      <div data-cmd="t4-curlv"></div>
+      <div data-cmd="t4-tls13"></div>
+      <div data-cmd="t4-sclient"></div>
+      <div data-cmd="t4-sni"></div>
+      <div data-cmd="t4-tls12"></div>
+
+      <h3>Practice</h3>
+      <div data-ex="t4-order"></div>
+      <div data-ex="t4-hides"></div>
+      <div data-ex="t4-0rtt"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>TLS gives confidentiality, integrity and server authentication. HTTPS is HTTP over TLS.</li>
+        <li>The handshake exchanges key shares, then the server proves itself with a certificate and a signature. After the ServerHello everything is encrypted.</li>
+        <li>TLS 1.3 gives forward secrecy on every connection. The server name is still visible unless Encrypted Client Hello is used.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 5 ============ -->
+    <section class="step" id="certs" data-step data-level="Intermediate">
+      <div class="step-head"><span class="num">05</span><h2>Certificates: tying a key to a name</h2><span class="lvl-chip">Intermediate</span></div>
+      <p class="goal"><b>Goal:</b> read any certificate, explain the chain of trust, and diagnose the usual certificate errors.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>TLS proves that the server holds a private key. That would be worthless if you did not know whose key it is. A certificate is the answer: a signed statement that a public key belongs to a name. Most TLS problems in real life are certificate problems: expired, wrong name, missing intermediate, untrusted root.</p>
+        <p>This lesson builds on step 02 (signatures) and step 04 (where the certificate appears in the handshake).</p>
+      </div>
+
+      <div class="what-is"><h4>What is it? A certificate</h4><dl>
+        <dt>What it is</dt><dd>A signed document that binds a public key to a name (and some rules). Internet certificates use the X.509 format, profiled in RFC 5280.</dd>
+        <dt>The problem it solves</dt><dd>A public key is just numbers. Without a certificate you cannot tell whether a key belongs to your bank or to someone in the middle.</dd>
+        <dt>Everyday comparison</dt><dd>A passport: a document with your name and photo, stamped by an authority that others trust, with an expiry date.</dd>
+        <dt>What it is not</dt><dd>Not secret: a certificate is public by design. It is not the private key. And it does not vouch that the site is honest, only that the key belongs to that name.</dd>
+        <dt>Where you meet it</dt><dd>Every HTTPS site, API gateways, mutual TLS between services, code signing, container registries.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? A certificate authority</h4><dl>
+        <dt>What it is</dt><dd>An organisation that others trust to create and sign certificates after checking that the requester controls the name.</dd>
+        <dt>The problem it solves</dt><dd>Nobody can check every site themselves. A few trusted authorities do it, and everybody relies on their signature.</dd>
+        <dt>Everyday comparison</dt><dd>The passport office.</dd>
+        <dt>What it is not</dt><dd>Not one company: your operating system and browser each ship a list of trusted roots, and you can add your own (step 06).</dd>
+        <dt>Where you meet it</dt><dd>Let's Encrypt, a company's internal CA, the "trusted root certificates" store on your PC.</dd>
+      </dl></div>
+
+      <h3>What is inside</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Field</th><th>What it says</th></tr></thead>
+        <tbody>
+          <tr><td><b>Subject</b></td><td>Who the certificate is for. For a website this used to be the <em>common name</em> (CN). Today the name that counts is in the SAN.</td></tr>
+          <tr><td><b>Subject alternative names (SAN)</b></td><td>The DNS names or IP addresses the certificate is valid for, such as <code>todo.example.com</code> or <code>*.example.com</code>. <b>This is what a client matches the host name against.</b> RFC 9525 says the common name must not be used to identify a service.</td></tr>
+          <tr><td><b>Issuer</b></td><td>Who signed it.</td></tr>
+          <tr><td><b>Validity</b></td><td>Not before and not after. Outside these dates the certificate is invalid.</td></tr>
+          <tr><td><b>Public key</b></td><td>The key being vouched for (RSA, ECDSA P-256, Ed25519 …).</td></tr>
+          <tr><td><b>Basic constraints</b></td><td><code>CA:TRUE</code> if this certificate may sign other certificates, and an optional path length limit.</td></tr>
+          <tr><td><b>Key usage, extended key usage</b></td><td>What the key may be used for: <code>digitalSignature</code>, <code>keyCertSign</code>, and purposes such as <code>serverAuth</code> or <code>clientAuth</code>.</td></tr>
+          <tr><td><b>Signature</b></td><td>The issuer's signature over all of the above.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>The chain of trust</h3>
+      <p>Servers do not send certificates signed directly by a root. They send a <b>chain</b>: the <em>leaf</em> (for the site), signed by an <em>intermediate</em> CA, signed by a <em>root</em> CA. The client already has the root in its trust store, so it only has to check each link. Watch the checks, and then four ways they fail:</p>
+      <figure class="anim" aria-label="Animated diagram: validating a certificate chain, and four ways it fails">
+        <div class="anim-stage"><svg viewBox="0 0 760 330" role="img" aria-label="A leaf certificate for todo.example.com is signed by an intermediate CA, which is signed by a root CA that is in the client's trust store. Each signature is checked, then the dates, then the name. Failures: the root is not in the trust store, an intermediate is missing, the certificate has expired, or the name does not match.">
+          <rect class="a-zone" x="8" y="8" width="744" height="314" rx="12"/>
+          <path class="a-route" data-k="s1" d="M240 108 V148"/>
+          <path class="a-route" data-k="s2" d="M240 218 V258"/>
+          <path class="a-route" data-k="s3" d="M350 290 H520"/>
+          <g class="a-node" data-k="leaf"><rect x="100" y="40" width="280" height="68" rx="8"/><text class="a-t" x="240" y="68">Leaf certificate</text><text class="a-s" x="240" y="90">todo.example.com · valid to 2027-01-10</text></g>
+          <g class="a-node" data-k="int"><rect x="100" y="148" width="280" height="70" rx="8"/><text class="a-t" x="240" y="176">Intermediate CA</text><text class="a-s" x="240" y="198">signed the leaf</text></g>
+          <g class="a-node" data-k="root"><rect x="100" y="258" width="250" height="56" rx="8"/><text class="a-t" x="225" y="282">Root CA</text><text class="a-s" x="225" y="300">signed the intermediate</text></g>
+          <g class="a-node" data-k="store"><rect x="520" y="258" width="200" height="56" rx="8"/><text class="a-t" x="620" y="282">Trust store</text><text class="a-s" x="620" y="300">roots the client trusts</text></g>
+          <text class="a-lbl" data-k="chk1" x="560" y="80">✓ signature · ✓ dates · ✓ name</text>
+          <text class="a-badge bad" data-k="e1" x="560" y="160">✗ root not in the trust store</text>
+          <text class="a-badge bad" data-k="e2" x="560" y="160">✗ intermediate missing: no link to a root</text>
+          <text class="a-badge bad" data-k="e3" x="560" y="160">✗ expired: after the not-after date</text>
+          <text class="a-badge bad" data-k="e4" x="560" y="160">✗ name todo.example.com not in the SAN</text>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "leaf s1 int", "off": "e1 e2 e3 e4 chk1", "path": [[240, 112], [240, 144]], "text": "<b>1. Leaf to intermediate.</b> The client checks the leaf's signature with the intermediate's public key. The leaf must also not be a CA."},
+          {"on": "int s2 root", "off": "e1 e2 e3 e4 chk1", "path": [[240, 222], [240, 254]], "text": "<b>2. Intermediate to root.</b> The same check one level up. The intermediate must be marked <code>CA:TRUE</code> and allowed to sign certificates."},
+          {"on": "root s3 store", "good": "root store", "off": "e1 e2 e3 e4 chk1", "path": [[356, 290], [514, 290]], "text": "<b>3. Root to trust store.</b> The root signs itself, so its signature proves nothing. It is trusted only because it is in the client's trust store."},
+          {"on": "leaf chk1", "good": "leaf", "off": "e1 e2 e3 e4", "text": "<b>4. Dates and name.</b> The leaf must be inside its validity dates, and the host name the client asked for must be in its subject alternative names. Then the chain is accepted."},
+          {"on": "store", "bad": "root e1", "off": "e2 e3 e4 chk1", "text": "<b>Failure: untrusted root.</b> The chain ends at a root the client does not have: <code>unable to get local issuer certificate</code>. This is what your own CA looks like until you trust it."},
+          {"on": "leaf s1 int", "bad": "int e2", "off": "e1 e3 e4 chk1", "text": "<b>Failure: missing intermediate.</b> The server sent only the leaf. Browsers may find the intermediate on their own, <code>curl</code> and .NET often do not: same error, and \"works in Chrome\"."},
+          {"on": "leaf chk1", "bad": "leaf e3", "off": "e1 e2 e4", "text": "<b>Failure: expired.</b> The most common outage of all. Nothing about the key changed; the date passed."},
+          {"on": "leaf chk1", "bad": "leaf e4", "off": "e1 e2 e3", "text": "<b>Failure: wrong name.</b> The certificate is real, but not for the name you used (or only has a common name and no SAN)."}
+        ]</script>
+      </figure>
+
+      <h3>Read a certificate yourself</h3>
+      <p>Paste any certificate, or a whole chain, into the tool. It shows every field, checks each signature and tells you what is wrong. It runs in your browser and sends nothing anywhere. Never paste a private key into a web page: the tool refuses them.</p>
+      <div data-tool="cert"></div>
+      <details class="lbl"><summary>Line by line: the first bytes of a certificate</summary><div><dl>
+        <dt><code>30 82 …</code></dt><dd>A DER <em>SEQUENCE</em> (tag <code>0x30</code>) with a two-byte length (<code>0x82</code>). A certificate is a SEQUENCE of three things.</dd>
+        <dt>First element: <code>tbsCertificate</code></dt><dd>"To be signed": the version, serial number, signature algorithm, issuer, validity, subject, public key and extensions. This is exactly what the issuer signs.</dd>
+        <dt>Second element</dt><dd>The signature algorithm, repeated outside the signed part so a verifier knows what to do before reading the rest.</dd>
+        <dt>Third element</dt><dd>The signature, a BIT STRING.</dd>
+        <dt>PEM</dt><dd>The same bytes, base64-encoded and wrapped between <code>-----BEGIN CERTIFICATE-----</code> and <code>-----END CERTIFICATE-----</code> (RFC 7468).</dd>
+      </dl></div></details>
+
+      <h3>Kinds of certificate</h3>
+      <p>The CA/Browser Forum's Baseline Requirements define policy identifiers for what a CA checked: <b>domain validated</b> (DV, <code>2.23.140.1.2.1</code>: the requester controls the domain), <b>organization validated</b> (OV, <code>2.23.140.1.2.2</code>: the organisation's identity was checked too) and <b>individual validated</b> (<code>2.23.140.1.2.3</code>). A <b>wildcard</b> such as <code>*.example.com</code> covers exactly one label, so <code>shop.example.com</code> but not <code>a.shop.example.com</code> and not <code>example.com</code> itself.</p>
+
+      <h3>The commands</h3>
+      <div data-cmd="t5-text"></div>
+      <div data-cmd="t5-dates"></div>
+      <div data-cmd="t5-san"></div>
+      <div data-cmd="t5-verify"></div>
+      <div data-cmd="t5-showcerts"></div>
+
+      <h3>Practice</h3>
+      <div data-ex="t5-fields"></div>
+      <div data-ex="t5-errors"></div>
+      <div data-ex="t5-wild"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A certificate binds a public key to names, with dates and rules, under an issuer's signature.</li>
+        <li>A client checks the chain link by link up to a root in its trust store, then the dates and the name in the SAN.</li>
+        <li>The usual failures: untrusted root, missing intermediate, expired, wrong name. Each has its own message.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 6 ============ -->
+    <section class="step" id="ca" data-step data-level="Intermediate">
+      <div class="step-head"><span class="num">06</span><h2>Build your own certificate authority</h2><span class="lvl-chip">Intermediate</span></div>
+      <p class="goal"><b>Goal:</b> create a root, issue a server certificate with the right names, serve the API over HTTPS with it, and explain every failure you cause on purpose.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Nothing teaches certificates like making them. You will play the certificate authority, issue a certificate for <code>localhost</code>, serve the Todo API over HTTPS with it, then break it three ways and read the errors. Companies run their own internal CAs the same way, with more care.</p>
+        <p>This lesson builds on steps 04 and 05. You need <code>openssl</code> (it is on any Linux, macOS, or WSL), and <code>curl</code>.</p>
+      </div>
+      <div class="callout"><p><strong>Keep it local.</strong> This root is for your laptop and this lesson. Do not add it to your system trust store unless you know how to remove it later, and never share <code>root.key</code>. Anyone who has it can make a certificate for any name that your machine will trust.</p></div>
+
+      <h3>Who signs what</h3>
+      <figure class="anim" aria-label="Animated diagram: making a root, a server key and a signing request, and signing it">
+        <div class="anim-stage"><svg viewBox="0 0 760 320" role="img" aria-label="The certificate authority makes a root key and a self-signed root certificate. The server makes its own key and a signing request that contains only the public key and the names. The authority signs the request and returns the certificate. The server's private key never leaves the server.">
+          <rect class="a-zone" x="8" y="8" width="744" height="304" rx="12"/>
+          <text class="a-cap" x="24" y="34">YOU, AS THE CA</text><text class="a-cap" x="556" y="34">THE SERVER (THE API)</text>
+          <path class="a-route" data-k="r1" d="M234 120 H348"/>
+          <path class="a-route" data-k="r2" d="M412 190 H556"/>
+          <path class="a-route" data-k="r3" d="M348 224 H234"/>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <g class="a-node" data-k="rootkey"><rect x="24" y="60" width="210" height="62" rx="8"/><text class="a-t" x="129" y="86">root.key</text><text class="a-s" x="129" y="106">private · stays here</text></g>
+          <g class="a-node" data-k="rootpem"><rect x="24" y="150" width="210" height="62" rx="8"/><text class="a-t" x="129" y="176">root.pem</text><text class="a-s" x="129" y="196">self-signed root certificate</text></g>
+          <g class="a-node" data-k="csr"><rect x="348" y="96" width="170" height="62" rx="8"/><text class="a-t" x="433" y="122">api.csr</text><text class="a-s" x="433" y="142">public key + names</text></g>
+          <g class="a-node" data-k="pem"><rect x="348" y="194" width="170" height="62" rx="8"/><text class="a-t" x="433" y="220">api.pem</text><text class="a-s" x="433" y="240">signed certificate</text></g>
+          <g class="a-node" data-k="apikey"><rect x="556" y="60" width="180" height="62" rx="8"/><text class="a-t" x="646" y="86">api.key</text><text class="a-s" x="646" y="106">private · stays here</text></g>
+          <g class="a-node" data-k="srv"><rect x="556" y="160" width="180" height="62" rx="8"/><text class="a-t" x="646" y="186">Kestrel / s_server</text><text class="a-s" x="646" y="206">api.key + api.pem</text></g>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "rootkey rootpem", "text": "<b>1. Make the authority.</b> A root key pair, and a certificate for it that the root signs itself. <code>root.key</code> never leaves the CA."},
+          {"on": "apikey", "text": "<b>2. The server makes its own key.</b> Its private key is created on the server and stays there. Nobody, including the CA, ever needs to see it."},
+          {"on": "apikey csr r1", "path": [[556, 100], [520, 126]], "text": "<b>3. A signing request.</b> The server builds a CSR: its public key, the names it wants, and a signature proving it holds the private key. The CSR is not secret."},
+          {"on": "csr rootkey r1 pem", "path": [[352, 124], [236, 92]], "text": "<b>4. The CA checks and signs.</b> The CA confirms the requester should have these names, then signs with <code>root.key</code> and sets the extensions it wants (not a CA, serverAuth, the names)."},
+          {"on": "pem r2 srv", "good": "srv", "path": [[412, 224], [556, 190]], "text": "<b>5. The server uses the pair.</b> <code>api.pem</code> and <code>api.key</code> go to the server. Clients that trust <code>root.pem</code> now accept it."}
+        ]</script>
+      </figure>
+
+      <h3>Make the root</h3>
+      <p>Work in an empty folder. A root is a key pair and a certificate that signs itself, marked as a CA and allowed to sign certificates:</p>
+      <div data-cmd="t6-rootkey"></div>
+      <div data-cmd="t6-rootcert"></div>
+      <h3>Make the server's key and request</h3>
+      <div data-cmd="t6-apikey"></div>
+      <div data-cmd="t6-csr"></div>
+      <h3>Sign it</h3>
+      <p>The CA decides what goes into the certificate, not the requester. Put those decisions in a file. Create <code>api.ext</code>:</p>
+      <figure class="code"><figcaption>api.ext</figcaption><pre><code>basicConstraints = CA:FALSE
+keyUsage = digitalSignature
+extendedKeyUsage = serverAuth
+subjectAltName = DNS:localhost, IP:127.0.0.1</code></pre></figure>
+      <details class="lbl"><summary>Line by line: api.ext</summary><div><dl>
+        <dt><code>basicConstraints = CA:FALSE</code></dt><dd>This certificate may not sign other certificates.</dd>
+        <dt><code>keyUsage = digitalSignature</code></dt><dd>For an ECDSA key in TLS 1.3 this is the usage that matters: it signs <code>CertificateVerify</code>.</dd>
+        <dt><code>extendedKeyUsage = serverAuth</code></dt><dd>Only for authenticating a TLS server.</dd>
+        <dt><code>subjectAltName = …</code></dt><dd>The names it is valid for. Without this, modern clients reject the certificate even if the common name is right.</dd>
+      </dl></div></details>
+      <div data-cmd="t6-sign"></div>
+      <p>Look at what you made, with the command from step 05:</p>
+      <div data-cmd="t6-inspect"></div>
+      <h3>Serve it</h3>
+      <p>The quickest test server is the one in OpenSSL. In ASP.NET Core you give Kestrel the certificate and key. For the Todo API, in <code>Program.cs</code> before <code>builder.Build()</code>:</p>
+      <figure class="code"><figcaption>src/api/Program.cs (add)</figcaption><pre><code>builder.WebHost.ConfigureKestrel(k =&gt;
+{
+    k.ListenLocalhost(5443, o =&gt; o.UseHttps(
+        X509Certificate2.CreateFromPemFile("api.pem", "api.key")));
+});</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the Kestrel lines</summary><div><dl>
+        <dt><code>ListenLocalhost(5443, …)</code></dt><dd>Listen on the loopback address only, port 5443 (8443 is taken by Argo CD in Part 1).</dd>
+        <dt><code>X509Certificate2.CreateFromPemFile("api.pem", "api.key")</code></dt><dd>Loads the certificate and its private key from PEM files. The file must hold both the certificate (and any intermediates) and a key that matches it.</dd>
+        <dt><code>using System.Security.Cryptography.X509Certificates;</code></dt><dd>Needed at the top of the file for <code>X509Certificate2</code>.</dd>
+      </dl></div></details>
+      <div data-cmd="t6-serve"></div>
+      <h3>Call it, then break it</h3>
+      <div data-cmd="t6-curl-fail"></div>
+      <div data-cmd="t6-curl-ok"></div>
+      <p>Now cause three failures and match each to its message. Each is something you will see in real life:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>You do this</th><th>The error</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Call it without <code>--cacert</code></td><td><code>curl: (60) SSL certificate problem: unable to get local issuer certificate</code></td><td>The client's trust store has no root for this chain.</td></tr>
+          <tr><td>Call <code>https://127.0.0.2:5443/</code> with <code>--cacert root.pem</code></td><td><code>curl: (60) SSL: no alternative certificate subject name matches target ipv4 address '127.0.0.2'</code></td><td>The certificate is for <code>localhost</code> and <code>127.0.0.1</code> only.</td></tr>
+          <tr><td>Use a certificate whose end date has passed</td><td><code>curl: (60) SSL certificate OpenSSL verify result: certificate has expired (10)</code></td><td>The dates. <code>openssl x509 -in api.pem -noout -checkend 86400</code> asks "will it still be valid in a day?".</td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout"><p><strong>Do not "fix" it with <code>-k</code>.</strong> <code>curl -k</code> (or <code>--insecure</code>) skips every check above. It is fine for one experiment on your laptop and wrong everywhere else, because it throws away exactly what TLS is for.</p></div>
+      <h4>The everyday shortcut</h4>
+      <p><code>dotnet dev-certs https</code> creates and trusts a development certificate for <code>localhost</code> for you. It is for development only. In .NET 10 the certificate also covers <code>host.docker.internal</code> and <code>host.containers.internal</code>, and inside WSL <code>dotnet dev-certs https --trust</code> also trusts it on the Windows host. Check it with <code>dotnet dev-certs https --check --trust</code>.</p>
+
+      <h3>Practice</h3>
+      <div data-ex="t6-who"></div>
+      <div data-ex="t6-order"></div>
+      <div data-ex="t6-flaws"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A CA is a key pair plus a self-signed certificate. The server makes its own key and sends only a request. The CA decides the contents and signs.</li>
+        <li>The SAN decides which names a certificate is good for. <code>keyCertSign</code> and <code>CA:TRUE</code> belong only on CAs.</li>
+        <li>Each failure has its own message. Never switch checking off to make one go away.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 7 ============ -->
+    <section class="step" id="prod" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">07</span><h2>Certificates in production</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> explain how a public certificate is issued and renewed with no human, and write the cert-manager objects that give the Todo gateway HTTPS.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Your own CA is fine for a laptop. A public site needs a certificate that every browser trusts, and the rules say it must be renewed far more often than it used to. The only workable answer is automation, so this lesson is about the protocol that does it (ACME) and the Kubernetes tool that speaks it (cert-manager).</p>
+        <p>This lesson builds on steps 05 and 06.</p>
+      </div>
+
+      <div class="what-is"><h4>What is it? ACME</h4><dl>
+        <dt>What it is</dt><dd>Automatic Certificate Management Environment (RFC 8555): a protocol where a client asks a CA for a certificate, proves it controls the name, and downloads the result, with no person in the loop.</dd>
+        <dt>The problem it solves</dt><dd>Manual issuance means emails, forms and a calendar reminder that someone forgets. With short lifetimes that is an outage waiting to happen.</dd>
+        <dt>Everyday comparison</dt><dd>A standing order at the bank instead of remembering to pay each month.</dd>
+        <dt>What it is not</dt><dd>Not a CA: it is the conversation with one. Let's Encrypt is a CA that speaks ACME.</dd>
+        <dt>Where you meet it</dt><dd>Let's Encrypt, other public CAs, cert-manager, Caddy, <code>certbot</code>.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? Certificate Transparency</h4><dl>
+        <dt>What it is</dt><dd>Public, append-only logs where CAs record the certificates they issue (RFC 9162 describes version 2.0).</dd>
+        <dt>The problem it solves</dt><dd>A CA could issue a certificate for your domain to someone else and you would never know. A public log lets domain owners watch for certificates they did not ask for.</dd>
+        <dt>Everyday comparison</dt><dd>A public register of every passport issued, which anyone can search.</dd>
+        <dt>What it is not</dt><dd>Not prevention: it makes mis-issuance <em>visible</em>.</dd>
+        <dt>Where you meet it</dt><dd>Search sites for a domain's certificates, browser and platform policies that ask for proof of logging (Android publishes its policy), monitoring alerts.</dd>
+      </dl></div>
+
+      <h3>How a certificate is proven and issued</h3>
+      <figure class="anim" aria-label="Animated diagram: ACME issuance with the HTTP challenge">
+        <div class="anim-stage"><svg viewBox="0 0 760 320" role="img" aria-label="The ACME client asks the CA for a certificate for todo.example.com. The CA answers with a challenge token. The client publishes the token at a well-known address on the server for that domain. The CA fetches it from outside and, if it matches, the client sends a signing request and receives the certificate.">
+          <rect class="a-zone" x="8" y="8" width="744" height="304" rx="12"/>
+          <path class="a-route" data-k="r1" d="M200 100 H520"/>
+          <path class="a-route" data-k="r2" d="M200 220 H250"/>
+          <path class="a-route" data-k="r3" d="M610 150 L520 212"/>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <g class="a-node" data-k="client"><rect x="24" y="60" width="176" height="90" rx="8"/><text class="a-t" x="112" y="96">ACME client</text><text class="a-s" x="112" y="116">cert-manager, certbot…</text></g>
+          <g class="a-node" data-k="ca"><rect x="520" y="60" width="216" height="90" rx="8"/><text class="a-t" x="628" y="96">CA (ACME server)</text><text class="a-s" x="628" y="116">Let's Encrypt</text></g>
+          <g class="a-node" data-k="site"><rect x="250" y="180" width="270" height="90" rx="8"/><text class="a-t" x="385" y="214">todo.example.com</text><text class="a-s" x="385" y="234">/.well-known/acme-challenge/…</text></g>
+          <text class="a-lbl" data-k="r1" x="360" y="86">order: todo.example.com</text>
+          <text class="a-lbl" data-k="r2" x="130" y="206">token published</text>
+          <text class="a-lbl" data-k="r3" x="640" y="228">CA fetches it</text>
+          <text class="a-badge good" data-k="done" x="628" y="190">certificate issued</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "client r1 ca", "off": "r2 r3 site done", "path": [[206, 100], [514, 100]], "text": "<b>1. Order.</b> The client has an account key with the CA and asks for a certificate for <code>todo.example.com</code>."},
+          {"on": "client r1 ca", "off": "r2 r3 site done", "path": [[514, 120], [206, 120]], "text": "<b>2. Challenge.</b> The CA must be sure the requester controls the name. It sends a random token and a choice of challenges."},
+          {"on": "client r2 site", "off": "r1 r3 done", "path": [[206, 220], [244, 220]], "text": "<b>3. Prove control.</b> For the <b>HTTP-01</b> challenge, the client serves the token at <code>/.well-known/acme-challenge/&lt;token&gt;</code> on port 80. (The <b>DNS-01</b> challenge puts it in a DNS TXT record instead.)"},
+          {"on": "ca r3 site", "off": "r1 r2 done", "path": [[606, 154], [526, 208]], "text": "<b>4. The CA checks from outside.</b> It fetches the token itself. Only someone who controls the name could have put it there."},
+          {"on": "client r1 ca done", "good": "ca done", "path": [[206, 100], [514, 100]], "off": "r2 r3", "text": "<b>5. Finalise.</b> The client sends a CSR (step 06) and the CA returns the signed certificate and chain. The client installs it and does the same again before it expires."}
+        ]</script>
+      </figure>
+      <ul>
+        <li><b>HTTP-01</b> (RFC 8555): serve a file over plain HTTP on port 80. Simple, but cannot issue a wildcard.</li>
+        <li><b>DNS-01</b> (RFC 8555): publish a TXT record. Works for hosts not reachable from the Internet and is required for wildcards (Let's Encrypt: "Wildcard issuance must use the DNS-01 challenge").</li>
+        <li><b>TLS-ALPN-01</b> (RFC 8737): prove control through a special TLS handshake on port 443.</li>
+      </ul>
+
+      <h3>Lifetimes are shrinking</h3>
+      <p>The CA/Browser Forum's Baseline Requirements (version 2.3.1) set the maximum validity of publicly trusted TLS certificates:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Issued on or after</th><th>Longest allowed</th></tr></thead>
+        <tbody>
+          <tr><td>before 2026-03-15</td><td>398 days</td></tr>
+          <tr><td><b>2026-03-15</b></td><td><b>200 days</b></td></tr>
+          <tr><td><b>2027-03-15</b></td><td><b>100 days</b></td></tr>
+          <tr><td><b>2029-03-15</b></td><td><b>47 days</b></td></tr>
+        </tbody>
+      </table></div>
+      <p>Domain validation data may be reused for less time too (200 days now, 100 days from 2027-03-15). Let's Encrypt is moving earlier than the minimum: its <code>tlsserver</code> profile gives 45-day certificates from 13 May 2026, the default profile moves to 64 days on 10 February 2027 and to 45 days on 16 February 2028, and it also offers opt-in certificates valid for six days. <b>The practical meaning: a certificate you install by hand will not last the year.</b></p>
+      <h4>Revocation, and why it matters less now</h4>
+      <p>A CA can <em>revoke</em> a certificate before it expires (for example after a key leak). Checking that live (OCSP) never worked well: Let's Encrypt stopped including OCSP URLs in certificates on 7 May 2025 and turned its OCSP responders off on 6 August 2025. Short lifetimes and automated renewal do most of the work revocation used to be asked to do. You can still limit who may issue for your domain with a <b>CAA</b> DNS record (RFC 8659), and ask the CA when it would like you to renew with <b>ARI</b> (RFC 9773).</p>
+
+      <h3>cert-manager: certificates as Kubernetes objects</h3>
+      <div class="what-is"><h4>What is it? cert-manager</h4><dl>
+        <dt>What it is</dt><dd>A Kubernetes controller that obtains and renews certificates for you and stores them as Secrets.</dd>
+        <dt>The problem it solves</dt><dd>The ACME dance and the renewal timer, run inside the cluster for every site, with no scripts.</dd>
+        <dt>Everyday comparison</dt><dd>The reconcile loop from Part 1: you declare the certificate you want, and a controller keeps reality matching it.</dd>
+        <dt>What it is not</dt><dd>Not a CA. It talks to one (Let's Encrypt, a private CA, a Vault).</dd>
+        <dt>Where you meet it</dt><dd>Any cluster with HTTPS ingress or gateways.</dd>
+      </dl></div>
+      <figure class="anim" aria-label="Animated diagram: cert-manager obtains a certificate for the Gateway and renews it before it expires">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="A Gateway with an issuer annotation and an HTTPS listener names a Secret. cert-manager creates a Certificate, runs the ACME order, and writes the certificate and key into the Secret. The Gateway serves it. When two thirds of the lifetime have passed cert-manager renews and updates the Secret.">
+          <rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+          <path class="a-route" data-k="r1" d="M200 90 H300"/>
+          <path class="a-route" data-k="r2" d="M450 90 H560"/>
+          <path class="a-route" data-k="r3" d="M630 130 V190"/>
+          <path class="a-route" data-k="r4" d="M560 220 H200"/>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <g class="a-node" data-k="gw"><rect x="24" y="50" width="176" height="80" rx="8"/><text class="a-t" x="112" y="82">Gateway</text><text class="a-s" x="112" y="102">annotation + listener</text></g>
+          <g class="a-node" data-k="cm"><rect x="300" y="50" width="150" height="80" rx="8"/><text class="a-t" x="375" y="82">cert-manager</text><text class="a-s" x="375" y="102">controller</text></g>
+          <g class="a-node" data-k="ca"><rect x="560" y="50" width="176" height="80" rx="8"/><text class="a-t" x="648" y="82">CA (ACME)</text><text class="a-s" x="648" y="102">Let's Encrypt</text></g>
+          <g class="a-node" data-k="sec"><rect x="560" y="190" width="176" height="60" rx="8"/><text class="a-t" x="648" y="216">Secret todo-tls</text><text class="a-s" x="648" y="236">tls.crt · tls.key</text></g>
+          <g class="a-node" data-k="gw2"><rect x="24" y="190" width="176" height="60" rx="8"/><text class="a-t" x="112" y="216">Gateway serves</text><text class="a-s" x="112" y="236">HTTPS on 443</text></g>
+          <text class="a-badge" data-k="renew" x="380" y="270">renew at ⅔ of the lifetime</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "gw r1 cm", "off": "renew", "path": [[206, 90], [294, 90]], "text": "<b>1. You declare.</b> The Gateway has an issuer annotation and an HTTPS listener with a <code>hostname</code>, <code>tls.mode: Terminate</code> and a <code>certificateRefs</code> Secret name. cert-manager sees it and creates a <code>Certificate</code>."},
+          {"on": "cm r2 ca", "off": "renew", "path": [[456, 90], [554, 90]], "text": "<b>2. It does the ACME order.</b> cert-manager runs the challenge and the finalise step from the last diagram."},
+          {"on": "ca r3 sec", "off": "renew", "path": [[630, 136], [630, 184]], "text": "<b>3. The result becomes a Secret.</b> The certificate chain and private key are written to <code>todo-tls</code>."},
+          {"on": "sec r4 gw2", "good": "gw2", "off": "renew", "path": [[554, 220], [206, 220]], "text": "<b>4. The Gateway serves it.</b> It reads the Secret and presents the certificate on port 443."},
+          {"on": "cm renew sec ca r2", "good": "sec", "path": [[456, 90], [554, 90]], "text": "<b>5. And it renews.</b> By default cert-manager renews two thirds of the way through the certificate's life, and updates the Secret. Nobody is paged."}
+        ]</script>
+      </figure>
+      <p>You need three objects. First an issuer that knows how to reach Let's Encrypt. For a real domain, with the HTTP-01 challenge solved through the Gateway:</p>
+      <figure class="code"><figcaption>infra/cert-manager/cluster-issuer.yaml</figcaption><pre><code>apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: you@example.com
+    privateKeySecretRef:
+      name: letsencrypt-account-key
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: todo
+                kind: Gateway</code></pre></figure>
+      <p>Then the Gateway gets the annotation and an HTTPS listener (compare with the HTTP-only Gateway in Part 1's chart). cert-manager creates the Certificate for you:</p>
+      <figure class="code"><figcaption>charts/todo/templates/gateway.yaml (the Gateway part)</figcaption><pre><code>apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: todo
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  gatewayClassName: nginx
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+    - name: https
+      hostname: todo.example.com
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: todo-tls</code></pre></figure>
+      <details class="lbl"><summary>Line by line: what cert-manager needs from the Gateway</summary><div><dl>
+        <dt><code>cert-manager.io/cluster-issuer: letsencrypt</code></dt><dd>Which issuer to use. (<code>cert-manager.io/issuer</code> names a namespaced one instead.)</dd>
+        <dt><code>hostname: todo.example.com</code></dt><dd>Must not be empty: it becomes the certificate's DNS name.</dd>
+        <dt><code>tls.mode: Terminate</code></dt><dd>The gateway ends TLS. It must be <code>Terminate</code>, not <code>Passthrough</code>, for cert-manager to act.</dd>
+        <dt><code>certificateRefs[].name</code></dt><dd>The Secret the certificate and key will be stored in. Must not be empty.</dd>
+        <dt>Enabling it</dt><dd>cert-manager needs Gateway API support switched on in its Helm values (<code>config.gatewayAPI.enabled=true</code>), and the Gateway API CRDs installed before cert-manager starts (or cert-manager restarted after).</dd>
+      </dl></div></details>
+      <p>If you prefer to see the <code>Certificate</code> object, it looks like this. cert-manager's default duration is 90 days and it renews at two thirds of it:</p>
+      <figure class="code"><figcaption>certificate.yaml (what cert-manager creates for you)</figcaption><pre><code>apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: todo-tls
+spec:
+  secretName: todo-tls
+  dnsNames:
+    - todo.example.com
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+    group: cert-manager.io</code></pre></figure>
+      <div data-cmd="t7-get"></div>
+      <div data-cmd="t7-describe"></div>
+      <div data-cmd="t7-checkend"></div>
+      <div class="callout"><p><strong>What was not tested here.</strong> A live issuance needs a public domain and an Internet-reachable cluster, which a laptop does not have. The manifests above are checked against the cert-manager and Gateway API schemas and rendered, and the ACME protocol and field names come from the RFCs and cert-manager's documentation. They have not been run against Let's Encrypt from this page.</p></div>
+
+      <h3>Practice</h3>
+      <div data-ex="t7-challenge"></div>
+      <div data-ex="t7-order"></div>
+      <div data-ex="t7-days"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>ACME proves control of a name (HTTP-01 or DNS-01; wildcards need DNS-01) and issues a certificate with no human.</li>
+        <li>Public certificates last 200 days now, 100 from March 2027 and 47 from March 2029. Automate renewal.</li>
+        <li>cert-manager turns a Gateway annotation and an HTTPS listener into a renewed certificate in a Secret.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 8 ============ -->
+    <section class="step" id="mtls" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">08</span><h2>Mutual TLS: the client shows a certificate too</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> explain when mutual TLS fits, issue a client certificate, and require one in Kestrel.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>With ordinary TLS only the server is proven. For a service that must know <em>which other service</em> is calling (and where there is no user to log in), the client can be proven the same way: with a certificate. It is the strongest everyday answer to "who is this machine?".</p>
+        <p>This lesson builds on steps 05 and 06: you reuse your root and the commands for signing.</p>
+      </div>
+
+      <div class="what-is"><h4>What is it? Mutual TLS (mTLS)</h4><dl>
+        <dt>What it is</dt><dd>TLS where the server also asks the client for a certificate and checks it. The handshake gains a <code>CertificateRequest</code> from the server, and a <code>Certificate</code> and <code>CertificateVerify</code> from the client (RFC 9846).</dd>
+        <dt>The problem it solves</dt><dd>It authenticates the calling program with a key it never sends, instead of a shared secret that can be copied from a config file.</dd>
+        <dt>Everyday comparison</dt><dd>Both people at a meeting show ID, not just the visitor.</dd>
+        <dt>What it is not</dt><dd>Not for the public: you cannot hand certificates to every visitor. Not user login: it identifies the machine or app, which is usually what you want between services.</dd>
+        <dt>Where you meet it</dt><dd>Service meshes, partner and bank APIs, Kubernetes components, zero-trust networks.</dd>
+      </dl></div>
+
+      <figure class="anim" aria-label="Animated diagram: the extra messages of mutual TLS, and the failure when no certificate is sent">
+        <div class="anim-stage"><svg viewBox="0 0 760 340" role="img" aria-label="During the handshake the server sends a CertificateRequest. The client answers with its own Certificate and a CertificateVerify signature. The server checks the client certificate against the CA it trusts for clients. If the client has no certificate, or one from another CA, the handshake fails.">
+          <rect class="a-zone" x="8" y="8" width="744" height="324" rx="12"/>
+          <g class="a-node on" data-k="cl"><rect x="40" y="20" width="150" height="44" rx="8"/><text class="a-t" x="115" y="48">Client (service A)</text></g>
+          <g class="a-node on" data-k="sv"><rect x="570" y="20" width="150" height="44" rx="8"/><text class="a-t" x="645" y="48">Server (the API)</text></g>
+          <path class="a-route" d="M115 64 V320" stroke-dasharray="4 5"/>
+          <path class="a-route" d="M645 64 V320" stroke-dasharray="4 5"/>
+          <path class="a-route" data-k="m1" d="M645 100 H115"/><text class="a-lbl" data-k="m1" x="380" y="92">← {<tspan class="h">CertificateRequest</tspan>}   "show me a certificate from a CA I trust"</text>
+          <path class="a-route" data-k="m2" d="M115 150 H645"/><text class="a-lbl" data-k="m2" x="380" y="142">{<tspan class="h">Certificate</tspan>} →   the client's certificate chain</text>
+          <path class="a-route" data-k="m3" d="M115 200 H645"/><text class="a-lbl" data-k="m3" x="380" y="192">{<tspan class="h">CertificateVerify</tspan>} →   signature made with the client's private key</text>
+          <path class="a-route" data-k="m4" d="M115 250 H645"/><text class="a-lbl" data-k="m4" x="380" y="242">{Finished} →</text>
+          <text class="a-badge good" data-k="ok" x="380" y="304">✓ server knows the caller is service A</text>
+          <text class="a-badge bad" data-k="no" x="380" y="304">✗ no certificate, or one from another CA: refused</text>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "m1", "off": "m2 m3 m4 ok no", "path": [[645, 100], [115, 100]], "text": "<b>1. The server asks.</b> In its first encrypted flight the server adds a <code>CertificateRequest</code>: it wants a client certificate, and says which CAs it accepts."},
+          {"on": "m1 m2", "off": "m3 m4 ok no", "path": [[115, 150], [645, 150]], "text": "<b>2. The client presents.</b> It sends its certificate chain, just as the server sent its own in step 04."},
+          {"on": "m1 m2 m3 m4", "off": "ok no", "path": [[115, 200], [645, 200]], "text": "<b>3. The client proves the key.</b> A certificate alone could be copied. The client also signs the handshake with its private key (<code>CertificateVerify</code>), which only the real holder can do."},
+          {"on": "m1 m2 m3 m4 ok", "good": "ok", "off": "no", "text": "<b>4. Both are known.</b> The server validates the client certificate against the CA it trusts for clients, and now knows exactly which service is calling."},
+          {"on": "m1 no", "bad": "no", "off": "m2 m3 m4 ok", "text": "<b>Failure.</b> A client without a certificate, with one from another CA, or with an expired one is refused with a TLS alert (<code>certificate required</code> or a bad-certificate alert). No HTTP response comes back."}
+        ]</script>
+      </figure>
+
+      <h3>Issue a client certificate</h3>
+      <p>Use the root from step 06. The only differences from a server certificate: the key usage is <code>clientAuth</code>, and the name says <em>which service</em> it is. Create <code>client.ext</code>:</p>
+      <figure class="code"><figcaption>client.ext</figcaption><pre><code>basicConstraints = CA:FALSE
+keyUsage = digitalSignature
+extendedKeyUsage = clientAuth</code></pre></figure>
+      <div data-cmd="t8-key"></div>
+      <div data-cmd="t8-csr"></div>
+      <div data-cmd="t8-sign"></div>
+      <h3>Require it in Kestrel</h3>
+      <p>Certificate authentication is not in the shared ASP.NET Core framework, so add its package to the API project first:</p>
+      <figure class="code"><figcaption>bash: in src/api/</figcaption><pre><code>dotnet add package Microsoft.AspNetCore.Authentication.Certificate --version 10.0.12</code></pre></figure>
+      <p>Tell Kestrel to demand a client certificate, and tell ASP.NET Core to authenticate with it. Remember to call <code>app.UseAuthentication()</code> and <code>app.UseAuthorization()</code>, and add <code>.RequireAuthorization()</code> to the endpoints that need a caller:</p>
+      <figure class="code"><figcaption>src/api/Program.cs (replace the Kestrel lines from step 06)</figcaption><pre><code>var root = X509CertificateLoader.LoadCertificateFromFile("root.pem");
+
+builder.WebHost.ConfigureKestrel(k =&gt;
+{
+    k.ListenLocalhost(5443, o =&gt; o.UseHttps(h =&gt;
+    {
+        h.ServerCertificate = X509Certificate2.CreateFromPemFile("api.pem", "api.key");
+        h.ClientCertificateMode = ClientCertificateMode.RequireCertificate;
+        h.ClientCertificateValidation = (cert, chain, errors) =&gt;
+        {
+            chain!.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+            chain.ChainPolicy.CustomTrustStore.Add(root);
+            return chain.Build(cert);
+        };
+    }));
+});
+
+builder.Services.AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
+    .AddCertificate(o =&gt;
+    {
+        o.AllowedCertificateTypes = CertificateTypes.Chained;
+        o.ChainTrustValidationMode = X509ChainTrustMode.CustomRootTrust;
+        o.CustomTrustStore.Add(root);
+        o.RevocationMode = X509RevocationMode.NoCheck;
+    });
+builder.Services.AddAuthorization();</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the client certificate lines</summary><div><dl>
+        <dt><code>h.ClientCertificateMode = ClientCertificateMode.RequireCertificate</code></dt><dd>The connection is refused if the client sends no certificate. (<code>AllowCertificate</code> asks but continues without one.) It is set <em>inside</em> the same <code>UseHttps</code> call as the server certificate, because settings made with <code>ConfigureHttpsDefaults</code> are not applied to an endpoint that was created with <code>Listen</code> before them.</dd>
+        <dt><code>h.ClientCertificateValidation = …</code></dt><dd>Kestrel checks the client certificate during the TLS handshake, before any ASP.NET Core code runs. By default it builds the chain against the <em>operating system's</em> trust store, so a client certificate from your private CA is refused there and the connection just closes ("unexpected eof"). This callback tells Kestrel to build the chain against <em>your</em> root instead.</dd>
+        <dt><code>AddCertificate()</code></dt><dd>The authentication handler that turns a validated client certificate into a user with claims.</dd>
+        <dt><code>AllowedCertificateTypes = Chained</code></dt><dd>The default: only certificates that chain to a CA. Self-signed client certificates would need <code>All</code> or <code>SelfSigned</code>.</dd>
+        <dt><code>CustomRootTrust</code> and <code>CustomTrustStore</code></dt><dd>By default the handler uses the system trust store. Setting a custom root trust makes it accept only certificates that chain to <em>your</em> root, which is what you want between your own services.</dd>
+        <dt><code>RevocationMode = NoCheck</code></dt><dd>The default is an online revocation check. The certificates from your lab CA have no revocation address, so that check cannot complete and the call is refused. <code>NoCheck</code> is right for this lab. With a real CA you would leave revocation on, or rely on short-lived certificates.</dd>
+        <dt>Defaults worth knowing</dt><dd><code>ValidateCertificateUse</code> is on: the certificate must carry the client authentication extended key usage, or none. <code>ValidateValidityPeriod</code> is on.</dd>
+      </dl></div></details>
+      <div class="callout"><p><strong>Behind a gateway it changes.</strong> If a proxy or load balancer ends TLS, the connection the API sees is the proxy's, not the caller's. Certificate authentication then works only if the proxy authenticates the client and passes the result on (for example in a header, with ASP.NET Core's certificate forwarding), and you trust only that proxy. In the Todo platform the gateway ends TLS, so mTLS to the pods needs a mesh or TLS passthrough.</p></div>
+      <h3>Call it</h3>
+      <div data-cmd="t8-curl"></div>
+      <div data-cmd="t8-nocert"></div>
+      <p>The two calls differ only in <code>--cert</code> and <code>--key</code>. Without them the server refuses the connection, and <code>curl</code> reports <code>curl: (56) OpenSSL SSL_read: … tlsv13 alert certificate required</code>. No HTTP response ever comes back. A first look ahead: OAuth can also bind an access token to a client certificate (RFC 8705), so a stolen token is useless without the key. Step 26 returns to it.</p>
+
+      <h3>Practice</h3>
+      <div data-ex="t8-who"></div>
+      <div data-ex="t8-fail"></div>
+      <div data-ex="t8-proxy"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Mutual TLS adds a client certificate and a proof of its private key to the handshake, so the server knows which machine is calling.</li>
+        <li>A client certificate has <code>clientAuth</code> usage and chains to a CA the server trusts for clients.</li>
+        <li>Kestrel's <code>RequireCertificate</code> plus <code>AddCertificate()</code> enforces it. Behind a TLS-ending proxy it must be arranged differently.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
     </main>
 </div>
 
@@ -2430,6 +3041,4736 @@ try {
 
 </script>
 <script>
+// The command judge: checks a typed command line (gh, git, curl, openssl, kubectl, dotnet) against a spec of the flags
+// and arguments it must have. Pure JavaScript with no DOM; shared by the GitHub Actions lab and the Identity and Access lab.
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.GACmdline = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  // ---------------------------------------------------------------- the command judge (gh and git)
+  // Splits a line the way a shell would: quotes group words, a backslash before a newline continues the line.
+  function shellSplit(line) {
+    const out = []; let cur = '', q = null, has = false;
+    const s = line.replace(/\\\r?\n/g, ' ');
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (q) { if (c === q) q = null; else if (c === '\\' && q === '"' && /["\\$`]/.test(s[i + 1] || '')) cur += s[++i]; else cur += c; continue; }
+      if (c === '"' || c === "'") { q = c; has = true; continue; }
+      if (c === '\\' && i + 1 < s.length) { cur += s[++i]; has = true; continue; }
+      if (/\s/.test(c)) { if (cur || has) { out.push(cur); cur = ''; has = false; } continue; }
+      if ((c === '&' && s[i + 1] === '&') || c === ';' || c === '|') {
+        if (cur || has) { out.push(cur); cur = ''; has = false; }
+        if (c === '&') i++;
+        out.push({ sep: c === '&' ? '&&' : c }); continue;
+      }
+      cur += c; has = true;
+    }
+    if (q) return { error: 'a quote is not closed' };
+    if (cur || has) out.push(cur);
+    return { words: out };
+  }
+  function splitCommands(line) {
+    const sp = shellSplit(line);
+    if (sp.error) return sp;
+    const cmds = [[]];
+    for (const w of sp.words) { if (typeof w === 'object') cmds.push([]); else cmds[cmds.length - 1].push(w); }
+    return { commands: cmds.filter((c) => c.length) };
+  }
+  // spec = { cmd: ['gh','workflow','run'], positionals: [ 'deploy.yml' | /re/ | fn ], flags: { '--ref': { alias: ['-r'], value: 'main'|/re/|fn|true|false, required: true, repeat: true } }, note }
+  // Judge one command's words against a spec. Returns { ok, problems: [html], tokens: [{t, why}] }.
+  function judgeCommand(words, spec) {
+    const problems = [], tokens = [];
+    const cmd = spec.cmd;
+    for (let i = 0; i < cmd.length; i++) {
+      if (words[i] !== cmd[i]) {
+        const got = words.slice(0, cmd.length).join(' ');
+        return { ok: false, problems: [`This should start with <code>${cmd.join(' ')}</code>${got ? `, not <code>${escHtml(got)}</code>` : ''}.`], tokens };
+      }
+    }
+    tokens.push({ t: cmd.join(' '), why: spec.what || 'the command' });
+    const flagDefs = spec.flags || {};
+    const byName = {};
+    for (const [name, def] of Object.entries(flagDefs)) { byName[name] = name; for (const a of def.alias || []) byName[a] = name; }
+    const seen = {}, pos = [];
+    const rest = words.slice(cmd.length);
+    for (let i = 0; i < rest.length; i++) {
+      let w = rest[i], val = null, hasVal = false;
+      if (/^--?[A-Za-z]/.test(w)) {
+        const eq = w.indexOf('=');
+        if (w.startsWith('--') && eq > 0) { val = w.slice(eq + 1); hasVal = true; w = w.slice(0, eq); }
+        let canon = byName[w];
+        // -fkey=value: a short flag with its value attached
+        if (!canon && /^-[A-Za-z]./.test(w) && !w.startsWith('--') && byName[w.slice(0, 2)] && flagDefs[byName[w.slice(0, 2)]].value !== false) { val = w.slice(2); hasVal = true; w = w.slice(0, 2); canon = byName[w]; }
+        if (!canon) {
+          const names = Object.keys(byName);
+          const near = names.filter((n) => n.startsWith('--') === w.startsWith('--')).sort((a, b) => lev(a, w) - lev(b, w))[0];
+          problems.push(`<code>${escHtml(w)}</code> is not a flag of <code>${cmd.join(' ')}</code>${near && lev(near, w) <= 4 ? `. Did you mean <code>${near}</code>?` : '.'}`);
+          continue;
+        }
+        const def = flagDefs[canon];
+        const wantsValue = def.value !== false;
+        if (wantsValue && !hasVal) { val = rest[++i]; hasVal = val !== undefined; if (!hasVal) { problems.push(`<code>${w}</code> needs a value after it.`); continue; } }
+        (seen[canon] = seen[canon] || []).push(val);
+        tokens.push({ t: wantsValue ? `${w} ${shQuote(val)}` : w, why: def.what || canon });
+      } else { pos.push(w); }
+    }
+    const posSpec = spec.positionals || [];
+    posSpec.forEach((p, i) => {
+      const got = pos[i];
+      if (got === undefined) { problems.push(`Missing ${p.label || 'an argument'}${p.hint ? ': ' + p.hint : ''}.`); return; }
+      if (!testVal(p.match, got)) problems.push(p.bad ? p.bad : `<code>${escHtml(got)}</code> is not what this command needs here${p.hint ? ': ' + p.hint : ''}.`);
+      else tokens.splice(1 + i, 0, { t: shQuote(got), why: p.what || p.label || 'argument' });
+    });
+    if (pos.length > posSpec.length) problems.push(`Too many arguments: <code>${escHtml(pos.slice(posSpec.length).join(' '))}</code> is not needed.`);
+    for (const [name, def] of Object.entries(flagDefs)) {
+      const got = seen[name] || [];
+      if (def.required && !got.length) problems.push(def.missing || `Missing <code>${name}</code>${def.hint ? ': ' + def.hint : ''}.`);
+      if (got.length > 1 && !def.repeat) problems.push(`<code>${name}</code> appears more than once, and only the last would be used.`);
+      if (def.forbidden && got.length) problems.push(def.forbidden);
+      for (const g of got) if (def.value !== false && def.value !== true && def.value !== undefined && !testVal(def.value, g)) problems.push(def.bad ? def.bad(g) : `<code>${name} ${escHtml(g)}</code> is not right here${def.hint ? ': ' + def.hint : ''}.`);
+      if (def.each && got.length) { for (const need of def.each) if (!got.some((g) => testVal(need.match, g))) problems.push(need.missing); }
+    }
+    if (spec.check) problems.push(...spec.check({ pos, seen }));
+    return { ok: problems.length === 0, problems, tokens };
+  }
+  function testVal(m, v) { return m === undefined || m === true ? true : typeof m === 'string' ? v === m : m instanceof RegExp ? m.test(v) : typeof m === 'function' ? m(v) : false; }
+  function shQuote(s) { return /^[\w@%+=:,./-]+$/.test(s) ? s : `'${s}'`; }
+  function escHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  function lev(a, b) { const d = Array.from({ length: a.length + 1 }, (_, i) => [i]); for (let j = 1; j <= b.length; j++) d[0][j] = j; for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[a.length][b.length]; }
+  // specs: one spec, or an array of specs for a line like "git tag v1 && git push origin v1"
+  function judgeLine(line, specs) {
+    specs = Array.isArray(specs) ? specs : [specs];
+    const sp = splitCommands(line);
+    if (sp.error) return { ok: false, problems: [sp.error], tokens: [] };
+    if (!sp.commands.length) return { ok: false, problems: [], tokens: [], empty: true };
+    const problems = [], tokens = [];
+    if (sp.commands.length < specs.length) problems.push(`This takes ${specs.length} commands joined with <code>&amp;&amp;</code>; you have ${sp.commands.length}.`);
+    if (sp.commands.length > specs.length) problems.push(`Only ${specs.length} command${specs.length > 1 ? 's are' : ' is'} needed here.`);
+    specs.forEach((spec, i) => {
+      if (!sp.commands[i]) return;
+      const r = judgeCommand(sp.commands[i], spec);
+      problems.push(...r.problems); tokens.push(...r.tokens);
+    });
+    return { ok: problems.length === 0, problems, tokens };
+  }
+
+  return { shellSplit, splitCommands, judgeCommand, judgeLine, escHtml };
+});
+
+</script>
+<script>
+// Builds the specs the command judge (tools/shared/cmdline.js) checks typed commands against, from the real flag tables
+// of curl, openssl and kubectl (vendor/cmd-flags.json, written by gen-cmdflags.js). A flag the real tool has is never rejected.
+// Pure JavaScript with no DOM.
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.IACmdSpec = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+  // cmd: 'curl' | 'openssl s_client' | 'kubectl get' ... ; o: { what, need: { '-connect': { value, required, what } }, pos: [{ match, label, what, hint }], check }
+  function spec(table, cmd, o) {
+    o = o || {};
+    const t = table[cmd] || {};
+    const flags = {};
+    for (const [n, f] of Object.entries(t)) flags[n] = { alias: f.short ? [f.short] : [], value: f.value ? true : false };
+    for (const [n, d] of Object.entries(o.need || {})) {
+      if (!flags[n]) throw new Error(`${cmd} has no flag ${n}`);
+      flags[n] = Object.assign({}, flags[n], d, { required: d.required !== false });
+    }
+    return { cmd: cmd.split(' '), what: o.what, positionals: o.pos || [], flags, check: o.check };
+  }
+  return { spec };
+});
+
+window.IA = window.IA || { exercises: {} };
+IA.cmdFlags = {
+ "curl": {
+  "--abstract-unix-socket": {
+   "short": null,
+   "value": true
+  },
+  "--alt-svc": {
+   "short": null,
+   "value": true
+  },
+  "--anyauth": {
+   "short": null,
+   "value": false
+  },
+  "--append": {
+   "short": "-a",
+   "value": false
+  },
+  "--aws-sigv4": {
+   "short": null,
+   "value": true
+  },
+  "--basic": {
+   "short": null,
+   "value": false
+  },
+  "--ca-native": {
+   "short": null,
+   "value": false
+  },
+  "--cacert": {
+   "short": null,
+   "value": true
+  },
+  "--capath": {
+   "short": null,
+   "value": true
+  },
+  "--cert": {
+   "short": "-E",
+   "value": true
+  },
+  "--cert-status": {
+   "short": null,
+   "value": false
+  },
+  "--cert-type": {
+   "short": null,
+   "value": true
+  },
+  "--ciphers": {
+   "short": null,
+   "value": true
+  },
+  "--compressed": {
+   "short": null,
+   "value": false
+  },
+  "--compressed-ssh": {
+   "short": null,
+   "value": false
+  },
+  "--config": {
+   "short": "-K",
+   "value": true
+  },
+  "--connect-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--connect-to": {
+   "short": null,
+   "value": true
+  },
+  "--continue-at": {
+   "short": "-C",
+   "value": true
+  },
+  "--cookie": {
+   "short": "-b",
+   "value": true
+  },
+  "--cookie-jar": {
+   "short": "-c",
+   "value": true
+  },
+  "--create-dirs": {
+   "short": null,
+   "value": false
+  },
+  "--create-file-mode": {
+   "short": null,
+   "value": true
+  },
+  "--crlf": {
+   "short": null,
+   "value": false
+  },
+  "--crlfile": {
+   "short": null,
+   "value": true
+  },
+  "--curves": {
+   "short": null,
+   "value": true
+  },
+  "--data": {
+   "short": "-d",
+   "value": true
+  },
+  "--data-ascii": {
+   "short": null,
+   "value": true
+  },
+  "--data-binary": {
+   "short": null,
+   "value": true
+  },
+  "--data-raw": {
+   "short": null,
+   "value": true
+  },
+  "--data-urlencode": {
+   "short": null,
+   "value": true
+  },
+  "--delegation": {
+   "short": null,
+   "value": true
+  },
+  "--digest": {
+   "short": null,
+   "value": false
+  },
+  "--disable": {
+   "short": "-q",
+   "value": false
+  },
+  "--disable-eprt": {
+   "short": null,
+   "value": false
+  },
+  "--disable-epsv": {
+   "short": null,
+   "value": false
+  },
+  "--disallow-username-in-url": {
+   "short": null,
+   "value": false
+  },
+  "--dns-interface": {
+   "short": null,
+   "value": true
+  },
+  "--dns-ipv4-addr": {
+   "short": null,
+   "value": true
+  },
+  "--dns-ipv6-addr": {
+   "short": null,
+   "value": true
+  },
+  "--dns-servers": {
+   "short": null,
+   "value": true
+  },
+  "--doh-cert-status": {
+   "short": null,
+   "value": false
+  },
+  "--doh-insecure": {
+   "short": null,
+   "value": false
+  },
+  "--doh-url": {
+   "short": null,
+   "value": true
+  },
+  "--dump-ca-embed": {
+   "short": null,
+   "value": false
+  },
+  "--dump-header": {
+   "short": "-D",
+   "value": true
+  },
+  "--ech": {
+   "short": null,
+   "value": true
+  },
+  "--egd-file": {
+   "short": null,
+   "value": true
+  },
+  "--engine": {
+   "short": null,
+   "value": true
+  },
+  "--etag-compare": {
+   "short": null,
+   "value": true
+  },
+  "--etag-save": {
+   "short": null,
+   "value": true
+  },
+  "--expect100-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--fail": {
+   "short": "-f",
+   "value": false
+  },
+  "--fail-early": {
+   "short": null,
+   "value": false
+  },
+  "--fail-with-body": {
+   "short": null,
+   "value": false
+  },
+  "--false-start": {
+   "short": null,
+   "value": false
+  },
+  "--follow": {
+   "short": null,
+   "value": false
+  },
+  "--form": {
+   "short": "-F",
+   "value": true
+  },
+  "--form-escape": {
+   "short": null,
+   "value": false
+  },
+  "--form-string": {
+   "short": null,
+   "value": true
+  },
+  "--ftp-account": {
+   "short": null,
+   "value": true
+  },
+  "--ftp-alternative-to-user": {
+   "short": null,
+   "value": true
+  },
+  "--ftp-create-dirs": {
+   "short": null,
+   "value": false
+  },
+  "--ftp-method": {
+   "short": null,
+   "value": true
+  },
+  "--ftp-pasv": {
+   "short": null,
+   "value": false
+  },
+  "--ftp-port": {
+   "short": "-P",
+   "value": true
+  },
+  "--ftp-pret": {
+   "short": null,
+   "value": false
+  },
+  "--ftp-skip-pasv-ip": {
+   "short": null,
+   "value": false
+  },
+  "--ftp-ssl-ccc": {
+   "short": null,
+   "value": false
+  },
+  "--ftp-ssl-ccc-mode": {
+   "short": null,
+   "value": true
+  },
+  "--ftp-ssl-control": {
+   "short": null,
+   "value": false
+  },
+  "--get": {
+   "short": "-G",
+   "value": false
+  },
+  "--globoff": {
+   "short": "-g",
+   "value": false
+  },
+  "--happy-eyeballs-timeout-ms": {
+   "short": null,
+   "value": true
+  },
+  "--haproxy-clientip": {
+   "short": null,
+   "value": true
+  },
+  "--haproxy-protocol": {
+   "short": null,
+   "value": false
+  },
+  "--head": {
+   "short": "-I",
+   "value": false
+  },
+  "--header": {
+   "short": "-H",
+   "value": true
+  },
+  "--help": {
+   "short": "-h",
+   "value": true
+  },
+  "--hostpubmd5": {
+   "short": null,
+   "value": true
+  },
+  "--hostpubsha256": {
+   "short": null,
+   "value": true
+  },
+  "--hsts": {
+   "short": null,
+   "value": true
+  },
+  "--http0.9": {
+   "short": null,
+   "value": false
+  },
+  "--http1.0": {
+   "short": "-0",
+   "value": false
+  },
+  "--http1.1": {
+   "short": null,
+   "value": false
+  },
+  "--http2": {
+   "short": null,
+   "value": false
+  },
+  "--http2-prior-knowledge": {
+   "short": null,
+   "value": false
+  },
+  "--http3": {
+   "short": null,
+   "value": false
+  },
+  "--http3-only": {
+   "short": null,
+   "value": false
+  },
+  "--ignore-content-length": {
+   "short": null,
+   "value": false
+  },
+  "--insecure": {
+   "short": "-k",
+   "value": false
+  },
+  "--interface": {
+   "short": null,
+   "value": true
+  },
+  "--ip-tos": {
+   "short": null,
+   "value": true
+  },
+  "--ipfs-gateway": {
+   "short": null,
+   "value": true
+  },
+  "--ipv4": {
+   "short": "-4",
+   "value": false
+  },
+  "--ipv6": {
+   "short": "-6",
+   "value": false
+  },
+  "--json": {
+   "short": null,
+   "value": true
+  },
+  "--junk-session-cookies": {
+   "short": "-j",
+   "value": false
+  },
+  "--keepalive-cnt": {
+   "short": null,
+   "value": true
+  },
+  "--keepalive-time": {
+   "short": null,
+   "value": true
+  },
+  "--key": {
+   "short": null,
+   "value": true
+  },
+  "--key-type": {
+   "short": null,
+   "value": true
+  },
+  "--knownhosts": {
+   "short": null,
+   "value": true
+  },
+  "--krb": {
+   "short": null,
+   "value": true
+  },
+  "--libcurl": {
+   "short": null,
+   "value": true
+  },
+  "--limit-rate": {
+   "short": null,
+   "value": true
+  },
+  "--list-only": {
+   "short": "-l",
+   "value": false
+  },
+  "--local-port": {
+   "short": null,
+   "value": true
+  },
+  "--location": {
+   "short": "-L",
+   "value": false
+  },
+  "--location-trusted": {
+   "short": null,
+   "value": false
+  },
+  "--login-options": {
+   "short": null,
+   "value": true
+  },
+  "--mail-auth": {
+   "short": null,
+   "value": true
+  },
+  "--mail-from": {
+   "short": null,
+   "value": true
+  },
+  "--mail-rcpt": {
+   "short": null,
+   "value": true
+  },
+  "--mail-rcpt-allowfails": {
+   "short": null,
+   "value": false
+  },
+  "--manual": {
+   "short": "-M",
+   "value": false
+  },
+  "--max-filesize": {
+   "short": null,
+   "value": true
+  },
+  "--max-redirs": {
+   "short": null,
+   "value": true
+  },
+  "--max-time": {
+   "short": "-m",
+   "value": true
+  },
+  "--metalink": {
+   "short": null,
+   "value": false
+  },
+  "--mptcp": {
+   "short": null,
+   "value": false
+  },
+  "--negotiate": {
+   "short": null,
+   "value": false
+  },
+  "--netrc": {
+   "short": "-n",
+   "value": false
+  },
+  "--netrc-file": {
+   "short": null,
+   "value": true
+  },
+  "--netrc-optional": {
+   "short": null,
+   "value": false
+  },
+  "--next": {
+   "short": "-:",
+   "value": false
+  },
+  "--no-alpn": {
+   "short": null,
+   "value": false
+  },
+  "--no-buffer": {
+   "short": "-N",
+   "value": false
+  },
+  "--no-clobber": {
+   "short": null,
+   "value": false
+  },
+  "--no-keepalive": {
+   "short": null,
+   "value": false
+  },
+  "--no-npn": {
+   "short": null,
+   "value": false
+  },
+  "--no-progress-meter": {
+   "short": null,
+   "value": false
+  },
+  "--no-sessionid": {
+   "short": null,
+   "value": false
+  },
+  "--noproxy": {
+   "short": null,
+   "value": true
+  },
+  "--ntlm": {
+   "short": null,
+   "value": false
+  },
+  "--ntlm-wb": {
+   "short": null,
+   "value": false
+  },
+  "--oauth2-bearer": {
+   "short": null,
+   "value": true
+  },
+  "--out-null": {
+   "short": null,
+   "value": false
+  },
+  "--output": {
+   "short": "-o",
+   "value": true
+  },
+  "--output-dir": {
+   "short": null,
+   "value": true
+  },
+  "--parallel": {
+   "short": "-Z",
+   "value": false
+  },
+  "--parallel-immediate": {
+   "short": null,
+   "value": false
+  },
+  "--parallel-max": {
+   "short": null,
+   "value": true
+  },
+  "--parallel-max-host": {
+   "short": null,
+   "value": true
+  },
+  "--pass": {
+   "short": null,
+   "value": true
+  },
+  "--path-as-is": {
+   "short": null,
+   "value": false
+  },
+  "--pinnedpubkey": {
+   "short": null,
+   "value": true
+  },
+  "--post301": {
+   "short": null,
+   "value": false
+  },
+  "--post302": {
+   "short": null,
+   "value": false
+  },
+  "--post303": {
+   "short": null,
+   "value": false
+  },
+  "--preproxy": {
+   "short": null,
+   "value": true
+  },
+  "--progress-bar": {
+   "short": "-#",
+   "value": false
+  },
+  "--proto": {
+   "short": null,
+   "value": true
+  },
+  "--proto-default": {
+   "short": null,
+   "value": true
+  },
+  "--proto-redir": {
+   "short": null,
+   "value": true
+  },
+  "--proxy": {
+   "short": "-x",
+   "value": true
+  },
+  "--proxy-anyauth": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-basic": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-ca-native": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-cacert": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-capath": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-cert": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-cert-type": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-ciphers": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-crlfile": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-digest": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-header": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-http2": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-insecure": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-key": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-key-type": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-negotiate": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-ntlm": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-pass": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-pinnedpubkey": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-service-name": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-ssl-allow-beast": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-ssl-auto-client-cert": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-tls13-ciphers": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-tlsauthtype": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-tlspassword": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-tlsuser": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-tlsv1": {
+   "short": null,
+   "value": false
+  },
+  "--proxy-user": {
+   "short": "-U",
+   "value": true
+  },
+  "--proxy1.0": {
+   "short": null,
+   "value": true
+  },
+  "--proxytunnel": {
+   "short": "-p",
+   "value": false
+  },
+  "--pubkey": {
+   "short": null,
+   "value": true
+  },
+  "--quote": {
+   "short": "-Q",
+   "value": true
+  },
+  "--random-file": {
+   "short": null,
+   "value": true
+  },
+  "--range": {
+   "short": "-r",
+   "value": true
+  },
+  "--rate": {
+   "short": null,
+   "value": true
+  },
+  "--raw": {
+   "short": null,
+   "value": false
+  },
+  "--referer": {
+   "short": "-e",
+   "value": true
+  },
+  "--remote-header-name": {
+   "short": "-J",
+   "value": false
+  },
+  "--remote-name": {
+   "short": "-O",
+   "value": false
+  },
+  "--remote-name-all": {
+   "short": null,
+   "value": false
+  },
+  "--remote-time": {
+   "short": "-R",
+   "value": false
+  },
+  "--remove-on-error": {
+   "short": null,
+   "value": false
+  },
+  "--request": {
+   "short": "-X",
+   "value": true
+  },
+  "--request-target": {
+   "short": null,
+   "value": true
+  },
+  "--resolve": {
+   "short": null,
+   "value": true
+  },
+  "--retry": {
+   "short": null,
+   "value": true
+  },
+  "--retry-all-errors": {
+   "short": null,
+   "value": false
+  },
+  "--retry-connrefused": {
+   "short": null,
+   "value": false
+  },
+  "--retry-delay": {
+   "short": null,
+   "value": true
+  },
+  "--retry-max-time": {
+   "short": null,
+   "value": true
+  },
+  "--sasl-authzid": {
+   "short": null,
+   "value": true
+  },
+  "--sasl-ir": {
+   "short": null,
+   "value": false
+  },
+  "--service-name": {
+   "short": null,
+   "value": true
+  },
+  "--show-error": {
+   "short": "-S",
+   "value": false
+  },
+  "--show-headers": {
+   "short": "-i",
+   "value": false
+  },
+  "--sigalgs": {
+   "short": null,
+   "value": true
+  },
+  "--silent": {
+   "short": "-s",
+   "value": false
+  },
+  "--skip-existing": {
+   "short": null,
+   "value": false
+  },
+  "--socks4": {
+   "short": null,
+   "value": true
+  },
+  "--socks4a": {
+   "short": null,
+   "value": true
+  },
+  "--socks5": {
+   "short": null,
+   "value": true
+  },
+  "--socks5-basic": {
+   "short": null,
+   "value": false
+  },
+  "--socks5-gssapi": {
+   "short": null,
+   "value": false
+  },
+  "--socks5-gssapi-nec": {
+   "short": null,
+   "value": false
+  },
+  "--socks5-gssapi-service": {
+   "short": null,
+   "value": true
+  },
+  "--socks5-hostname": {
+   "short": null,
+   "value": true
+  },
+  "--speed-limit": {
+   "short": "-Y",
+   "value": true
+  },
+  "--speed-time": {
+   "short": "-y",
+   "value": true
+  },
+  "--ssl": {
+   "short": null,
+   "value": false
+  },
+  "--ssl-allow-beast": {
+   "short": null,
+   "value": false
+  },
+  "--ssl-auto-client-cert": {
+   "short": null,
+   "value": false
+  },
+  "--ssl-no-revoke": {
+   "short": null,
+   "value": false
+  },
+  "--ssl-reqd": {
+   "short": null,
+   "value": false
+  },
+  "--ssl-revoke-best-effort": {
+   "short": null,
+   "value": false
+  },
+  "--ssl-sessions": {
+   "short": null,
+   "value": true
+  },
+  "--sslv2": {
+   "short": "-2",
+   "value": false
+  },
+  "--sslv3": {
+   "short": "-3",
+   "value": false
+  },
+  "--stderr": {
+   "short": null,
+   "value": true
+  },
+  "--styled-output": {
+   "short": null,
+   "value": false
+  },
+  "--suppress-connect-headers": {
+   "short": null,
+   "value": false
+  },
+  "--tcp-fastopen": {
+   "short": null,
+   "value": false
+  },
+  "--tcp-nodelay": {
+   "short": null,
+   "value": false
+  },
+  "--telnet-option": {
+   "short": "-t",
+   "value": true
+  },
+  "--tftp-blksize": {
+   "short": null,
+   "value": true
+  },
+  "--tftp-no-options": {
+   "short": null,
+   "value": false
+  },
+  "--time-cond": {
+   "short": "-z",
+   "value": true
+  },
+  "--tls-earlydata": {
+   "short": null,
+   "value": false
+  },
+  "--tls-max": {
+   "short": null,
+   "value": true
+  },
+  "--tls13-ciphers": {
+   "short": null,
+   "value": true
+  },
+  "--tlsauthtype": {
+   "short": null,
+   "value": true
+  },
+  "--tlspassword": {
+   "short": null,
+   "value": true
+  },
+  "--tlsuser": {
+   "short": null,
+   "value": true
+  },
+  "--tlsv1": {
+   "short": "-1",
+   "value": false
+  },
+  "--tlsv1.0": {
+   "short": null,
+   "value": false
+  },
+  "--tlsv1.1": {
+   "short": null,
+   "value": false
+  },
+  "--tlsv1.2": {
+   "short": null,
+   "value": false
+  },
+  "--tlsv1.3": {
+   "short": null,
+   "value": false
+  },
+  "--tr-encoding": {
+   "short": null,
+   "value": false
+  },
+  "--trace": {
+   "short": null,
+   "value": true
+  },
+  "--trace-ascii": {
+   "short": null,
+   "value": true
+  },
+  "--trace-config": {
+   "short": null,
+   "value": true
+  },
+  "--trace-ids": {
+   "short": null,
+   "value": false
+  },
+  "--trace-time": {
+   "short": null,
+   "value": false
+  },
+  "--unix-socket": {
+   "short": null,
+   "value": true
+  },
+  "--upload-file": {
+   "short": "-T",
+   "value": true
+  },
+  "--upload-flags": {
+   "short": null,
+   "value": true
+  },
+  "--url": {
+   "short": null,
+   "value": true
+  },
+  "--url-query": {
+   "short": null,
+   "value": true
+  },
+  "--use-ascii": {
+   "short": "-B",
+   "value": false
+  },
+  "--user": {
+   "short": "-u",
+   "value": true
+  },
+  "--user-agent": {
+   "short": "-A",
+   "value": true
+  },
+  "--variable": {
+   "short": null,
+   "value": true
+  },
+  "--verbose": {
+   "short": "-v",
+   "value": false
+  },
+  "--version": {
+   "short": "-V",
+   "value": false
+  },
+  "--vlan-priority": {
+   "short": null,
+   "value": true
+  },
+  "--write-out": {
+   "short": "-w",
+   "value": true
+  },
+  "--xattr": {
+   "short": null,
+   "value": false
+  }
+ },
+ "openssl req": {
+  "-help": {
+   "value": false
+  },
+  "-cipher": {
+   "value": true
+  },
+  "-engine": {
+   "value": true
+  },
+  "-keygen_engine": {
+   "value": true
+  },
+  "-in": {
+   "value": true
+  },
+  "-inform": {
+   "value": false
+  },
+  "-verify": {
+   "value": false
+  },
+  "-new": {
+   "value": false
+  },
+  "-config": {
+   "value": true
+  },
+  "-section": {
+   "value": true
+  },
+  "-utf8": {
+   "value": false
+  },
+  "-nameopt": {
+   "value": true
+  },
+  "-reqopt": {
+   "value": true
+  },
+  "-text": {
+   "value": false
+  },
+  "-x509": {
+   "value": false
+  },
+  "-x509v1": {
+   "value": false
+  },
+  "-CA": {
+   "value": true
+  },
+  "-CAkey": {
+   "value": true
+  },
+  "-subj": {
+   "value": true
+  },
+  "-subject": {
+   "value": false
+  },
+  "-multivalue-rdn": {
+   "value": false
+  },
+  "-not_before": {
+   "value": true
+  },
+  "-not_after": {
+   "value": true
+  },
+  "-days": {
+   "value": true
+  },
+  "-set_serial": {
+   "value": true
+  },
+  "-copy_extensions": {
+   "value": true
+  },
+  "-extensions": {
+   "value": true
+  },
+  "-reqexts": {
+   "value": true
+  },
+  "-addext": {
+   "value": true
+  },
+  "-precert": {
+   "value": false
+  },
+  "-key": {
+   "value": true
+  },
+  "-keyform": {
+   "value": true
+  },
+  "-pubkey": {
+   "value": false
+  },
+  "-keyout": {
+   "value": true
+  },
+  "-passin": {
+   "value": true
+  },
+  "-passout": {
+   "value": true
+  },
+  "-newkey": {
+   "value": true
+  },
+  "-pkeyopt": {
+   "value": true
+  },
+  "-sigopt": {
+   "value": true
+  },
+  "-vfyopt": {
+   "value": true
+  },
+  "-out": {
+   "value": true
+  },
+  "-outform": {
+   "value": false
+  },
+  "-batch": {
+   "value": false
+  },
+  "-verbose": {
+   "value": false
+  },
+  "-quiet": {
+   "value": false
+  },
+  "-noenc": {
+   "value": false
+  },
+  "-nodes": {
+   "value": false
+  },
+  "-noout": {
+   "value": false
+  },
+  "-newhdr": {
+   "value": false
+  },
+  "-modulus": {
+   "value": false
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl x509": {
+  "-help": {
+   "value": false
+  },
+  "-in": {
+   "value": true
+  },
+  "-passin": {
+   "value": true
+  },
+  "-new": {
+   "value": false
+  },
+  "-x509toreq": {
+   "value": false
+  },
+  "-req": {
+   "value": false
+  },
+  "-copy_extensions": {
+   "value": true
+  },
+  "-inform": {
+   "value": true
+  },
+  "-vfyopt": {
+   "value": true
+  },
+  "-key": {
+   "value": true
+  },
+  "-signkey": {
+   "value": true
+  },
+  "-keyform": {
+   "value": false
+  },
+  "-out": {
+   "value": true
+  },
+  "-outform": {
+   "value": true
+  },
+  "-nocert": {
+   "value": false
+  },
+  "-noout": {
+   "value": false
+  },
+  "-text": {
+   "value": false
+  },
+  "-dateopt": {
+   "value": true
+  },
+  "-certopt": {
+   "value": true
+  },
+  "-fingerprint": {
+   "value": false
+  },
+  "-alias": {
+   "value": false
+  },
+  "-serial": {
+   "value": false
+  },
+  "-startdate": {
+   "value": false
+  },
+  "-enddate": {
+   "value": false
+  },
+  "-dates": {
+   "value": false
+  },
+  "-subject": {
+   "value": false
+  },
+  "-issuer": {
+   "value": false
+  },
+  "-nameopt": {
+   "value": true
+  },
+  "-email": {
+   "value": false
+  },
+  "-hash": {
+   "value": false
+  },
+  "-subject_hash": {
+   "value": false
+  },
+  "-subject_hash_old": {
+   "value": false
+  },
+  "-issuer_hash": {
+   "value": false
+  },
+  "-issuer_hash_old": {
+   "value": false
+  },
+  "-ext": {
+   "value": true
+  },
+  "-ocspid": {
+   "value": false
+  },
+  "-ocsp_uri": {
+   "value": false
+  },
+  "-purpose": {
+   "value": false
+  },
+  "-pubkey": {
+   "value": false
+  },
+  "-modulus": {
+   "value": false
+  },
+  "-checkend": {
+   "value": true
+  },
+  "-checkhost": {
+   "value": true
+  },
+  "-checkemail": {
+   "value": true
+  },
+  "-checkip": {
+   "value": true
+  },
+  "-set_serial": {
+   "value": true
+  },
+  "-next_serial": {
+   "value": false
+  },
+  "-not_before": {
+   "value": true
+  },
+  "-not_after": {
+   "value": true
+  },
+  "-days": {
+   "value": true
+  },
+  "-preserve_dates": {
+   "value": false
+  },
+  "-set_issuer": {
+   "value": true
+  },
+  "-set_subject": {
+   "value": true
+  },
+  "-subj": {
+   "value": true
+  },
+  "-force_pubkey": {
+   "value": true
+  },
+  "-clrext": {
+   "value": false
+  },
+  "-extfile": {
+   "value": true
+  },
+  "-extensions": {
+   "value": true
+  },
+  "-sigopt": {
+   "value": true
+  },
+  "-badsig": {
+   "value": false
+  },
+  "-CA": {
+   "value": true
+  },
+  "-CAform": {
+   "value": false
+  },
+  "-CAkey": {
+   "value": true
+  },
+  "-CAkeyform": {
+   "value": false
+  },
+  "-CAserial": {
+   "value": true
+  },
+  "-CAcreateserial": {
+   "value": false
+  },
+  "-trustout": {
+   "value": false
+  },
+  "-setalias": {
+   "value": true
+  },
+  "-clrtrust": {
+   "value": false
+  },
+  "-addtrust": {
+   "value": true
+  },
+  "-clrreject": {
+   "value": false
+  },
+  "-addreject": {
+   "value": true
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-engine": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl genpkey": {
+  "-help": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-paramfile": {
+   "value": true
+  },
+  "-algorithm": {
+   "value": true
+  },
+  "-verbose": {
+   "value": false
+  },
+  "-quiet": {
+   "value": false
+  },
+  "-pkeyopt": {
+   "value": true
+  },
+  "-config": {
+   "value": true
+  },
+  "-out": {
+   "value": true
+  },
+  "-outpubkey": {
+   "value": true
+  },
+  "-outform": {
+   "value": false
+  },
+  "-pass": {
+   "value": true
+  },
+  "-genparam": {
+   "value": false
+  },
+  "-text": {
+   "value": false
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  }
+ },
+ "openssl verify": {
+  "-help": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-verbose": {
+   "value": false
+  },
+  "-nameopt": {
+   "value": true
+  },
+  "-trusted": {
+   "value": true
+  },
+  "-CAfile": {
+   "value": true
+  },
+  "-CApath": {
+   "value": true
+  },
+  "-CAstore": {
+   "value": true
+  },
+  "-no-CAfile": {
+   "value": false
+  },
+  "-no-CApath": {
+   "value": false
+  },
+  "-no-CAstore": {
+   "value": false
+  },
+  "-untrusted": {
+   "value": true
+  },
+  "-CRLfile": {
+   "value": true
+  },
+  "-crl_download": {
+   "value": false
+  },
+  "-show_chain": {
+   "value": false
+  },
+  "-policy": {
+   "value": true
+  },
+  "-purpose": {
+   "value": true
+  },
+  "-verify_name": {
+   "value": true
+  },
+  "-verify_depth": {
+   "value": true
+  },
+  "-auth_level": {
+   "value": true
+  },
+  "-attime": {
+   "value": true
+  },
+  "-verify_hostname": {
+   "value": true
+  },
+  "-verify_email": {
+   "value": true
+  },
+  "-verify_ip": {
+   "value": true
+  },
+  "-ignore_critical": {
+   "value": false
+  },
+  "-issuer_checks": {
+   "value": false
+  },
+  "-crl_check": {
+   "value": false
+  },
+  "-crl_check_all": {
+   "value": false
+  },
+  "-policy_check": {
+   "value": false
+  },
+  "-explicit_policy": {
+   "value": false
+  },
+  "-inhibit_any": {
+   "value": false
+  },
+  "-inhibit_map": {
+   "value": false
+  },
+  "-x509_strict": {
+   "value": false
+  },
+  "-extended_crl": {
+   "value": false
+  },
+  "-use_deltas": {
+   "value": false
+  },
+  "-policy_print": {
+   "value": false
+  },
+  "-check_ss_sig": {
+   "value": false
+  },
+  "-trusted_first": {
+   "value": false
+  },
+  "-suiteB_128_only": {
+   "value": false
+  },
+  "-suiteB_128": {
+   "value": false
+  },
+  "-suiteB_192": {
+   "value": false
+  },
+  "-partial_chain": {
+   "value": false
+  },
+  "-no_alt_chains": {
+   "value": false
+  },
+  "-no_check_time": {
+   "value": false
+  },
+  "-allow_proxy_certs": {
+   "value": false
+  },
+  "-vfyopt": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl s_client": {
+  "-help": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-ssl_client_engine": {
+   "value": true
+  },
+  "-ssl_config": {
+   "value": true
+  },
+  "-ct": {
+   "value": false
+  },
+  "-noct": {
+   "value": false
+  },
+  "-ctlogfile": {
+   "value": true
+  },
+  "-host": {
+   "value": true
+  },
+  "-port": {
+   "value": true
+  },
+  "-connect": {
+   "value": true
+  },
+  "-bind": {
+   "value": true
+  },
+  "-proxy": {
+   "value": true
+  },
+  "-proxy_user": {
+   "value": true
+  },
+  "-proxy_pass": {
+   "value": true
+  },
+  "-unix": {
+   "value": true
+  },
+  "-4": {
+   "value": false
+  },
+  "-6": {
+   "value": false
+  },
+  "-maxfraglen": {
+   "value": true
+  },
+  "-max_send_frag": {
+   "value": true
+  },
+  "-split_send_frag": {
+   "value": true
+  },
+  "-max_pipelines": {
+   "value": true
+  },
+  "-read_buf": {
+   "value": true
+  },
+  "-fallback_scsv": {
+   "value": false
+  },
+  "-cert": {
+   "value": true
+  },
+  "-certform": {
+   "value": false
+  },
+  "-cert_chain": {
+   "value": true
+  },
+  "-build_chain": {
+   "value": false
+  },
+  "-key": {
+   "value": true
+  },
+  "-keyform": {
+   "value": false
+  },
+  "-pass": {
+   "value": true
+  },
+  "-verify": {
+   "value": true
+  },
+  "-nameopt": {
+   "value": true
+  },
+  "-CApath": {
+   "value": true
+  },
+  "-CAfile": {
+   "value": true
+  },
+  "-CAstore": {
+   "value": true
+  },
+  "-no-CAfile": {
+   "value": false
+  },
+  "-no-CApath": {
+   "value": false
+  },
+  "-no-CAstore": {
+   "value": false
+  },
+  "-requestCAfile": {
+   "value": true
+  },
+  "-tfo": {
+   "value": false
+  },
+  "-dane_tlsa_domain": {
+   "value": true
+  },
+  "-dane_tlsa_rrdata": {
+   "value": true
+  },
+  "-dane_ee_no_namechecks": {
+   "value": false
+  },
+  "-psk_identity": {
+   "value": true
+  },
+  "-psk": {
+   "value": true
+  },
+  "-psk_session": {
+   "value": true
+  },
+  "-name": {
+   "value": true
+  },
+  "-reconnect": {
+   "value": false
+  },
+  "-sess_out": {
+   "value": true
+  },
+  "-sess_in": {
+   "value": true
+  },
+  "-crlf": {
+   "value": false
+  },
+  "-quiet": {
+   "value": false
+  },
+  "-ign_eof": {
+   "value": false
+  },
+  "-no_ign_eof": {
+   "value": false
+  },
+  "-starttls": {
+   "value": true
+  },
+  "-xmpphost": {
+   "value": true
+  },
+  "-brief": {
+   "value": false
+  },
+  "-prexit": {
+   "value": false
+  },
+  "-no-interactive": {
+   "value": false
+  },
+  "-showcerts": {
+   "value": false
+  },
+  "-debug": {
+   "value": false
+  },
+  "-msg": {
+   "value": false
+  },
+  "-msgfile": {
+   "value": true
+  },
+  "-nbio_test": {
+   "value": false
+  },
+  "-state": {
+   "value": false
+  },
+  "-keymatexport": {
+   "value": true
+  },
+  "-keymatexportlen": {
+   "value": true
+  },
+  "-security_debug": {
+   "value": false
+  },
+  "-security_debug_verbose": {
+   "value": false
+  },
+  "-trace": {
+   "value": false
+  },
+  "-keylogfile": {
+   "value": true
+  },
+  "-nocommands": {
+   "value": false
+  },
+  "-adv": {
+   "value": false
+  },
+  "-servername": {
+   "value": true
+  },
+  "-noservername": {
+   "value": false
+  },
+  "-tlsextdebug": {
+   "value": false
+  },
+  "-ignore_unexpected_eof": {
+   "value": false
+  },
+  "-status": {
+   "value": false
+  },
+  "-serverinfo": {
+   "value": true
+  },
+  "-alpn": {
+   "value": true
+  },
+  "-async": {
+   "value": false
+  },
+  "-nbio": {
+   "value": false
+  },
+  "-tls1": {
+   "value": false
+  },
+  "-tls1_1": {
+   "value": false
+  },
+  "-tls1_2": {
+   "value": false
+  },
+  "-tls1_3": {
+   "value": false
+  },
+  "-dtls": {
+   "value": false
+  },
+  "-quic": {
+   "value": false
+  },
+  "-timeout": {
+   "value": false
+  },
+  "-mtu": {
+   "value": true
+  },
+  "-dtls1": {
+   "value": false
+  },
+  "-dtls1_2": {
+   "value": false
+  },
+  "-nextprotoneg": {
+   "value": true
+  },
+  "-early_data": {
+   "value": true
+  },
+  "-enable_pha": {
+   "value": false
+  },
+  "-enable_server_rpk": {
+   "value": false
+  },
+  "-enable_client_rpk": {
+   "value": false
+  },
+  "-use_srtp": {
+   "value": true
+  },
+  "-srpuser": {
+   "value": true
+  },
+  "-srppass": {
+   "value": true
+  },
+  "-srp_lateuser": {
+   "value": false
+  },
+  "-srp_moregroups": {
+   "value": false
+  },
+  "-srp_strength": {
+   "value": true
+  },
+  "-ktls": {
+   "value": false
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-no_ssl3": {
+   "value": false
+  },
+  "-no_tls1": {
+   "value": false
+  },
+  "-no_tls1_1": {
+   "value": false
+  },
+  "-no_tls1_2": {
+   "value": false
+  },
+  "-no_tls1_3": {
+   "value": false
+  },
+  "-bugs": {
+   "value": false
+  },
+  "-no_comp": {
+   "value": false
+  },
+  "-comp": {
+   "value": false
+  },
+  "-no_tx_cert_comp": {
+   "value": false
+  },
+  "-no_rx_cert_comp": {
+   "value": false
+  },
+  "-no_ticket": {
+   "value": false
+  },
+  "-serverpref": {
+   "value": false
+  },
+  "-legacy_renegotiation": {
+   "value": false
+  },
+  "-client_renegotiation": {
+   "value": false
+  },
+  "-no_renegotiation": {
+   "value": false
+  },
+  "-legacy_server_connect": {
+   "value": false
+  },
+  "-no_resumption_on_reneg": {
+   "value": false
+  },
+  "-no_legacy_server_connect": {
+   "value": false
+  },
+  "-allow_no_dhe_kex": {
+   "value": false
+  },
+  "-prefer_no_dhe_kex": {
+   "value": false
+  },
+  "-prioritize_chacha": {
+   "value": false
+  },
+  "-strict": {
+   "value": false
+  },
+  "-sigalgs": {
+   "value": true
+  },
+  "-client_sigalgs": {
+   "value": true
+  },
+  "-groups": {
+   "value": true
+  },
+  "-curves": {
+   "value": true
+  },
+  "-named_curve": {
+   "value": true
+  },
+  "-cipher": {
+   "value": true
+  },
+  "-ciphersuites": {
+   "value": true
+  },
+  "-min_protocol": {
+   "value": true
+  },
+  "-max_protocol": {
+   "value": true
+  },
+  "-record_padding": {
+   "value": true
+  },
+  "-debug_broken_protocol": {
+   "value": false
+  },
+  "-no_middlebox": {
+   "value": false
+  },
+  "-no_etm": {
+   "value": false
+  },
+  "-no_ems": {
+   "value": false
+  },
+  "-policy": {
+   "value": true
+  },
+  "-purpose": {
+   "value": true
+  },
+  "-verify_name": {
+   "value": true
+  },
+  "-verify_depth": {
+   "value": true
+  },
+  "-auth_level": {
+   "value": true
+  },
+  "-attime": {
+   "value": true
+  },
+  "-verify_hostname": {
+   "value": true
+  },
+  "-verify_email": {
+   "value": true
+  },
+  "-verify_ip": {
+   "value": true
+  },
+  "-ignore_critical": {
+   "value": false
+  },
+  "-issuer_checks": {
+   "value": false
+  },
+  "-crl_check": {
+   "value": false
+  },
+  "-crl_check_all": {
+   "value": false
+  },
+  "-policy_check": {
+   "value": false
+  },
+  "-explicit_policy": {
+   "value": false
+  },
+  "-inhibit_any": {
+   "value": false
+  },
+  "-inhibit_map": {
+   "value": false
+  },
+  "-x509_strict": {
+   "value": false
+  },
+  "-extended_crl": {
+   "value": false
+  },
+  "-use_deltas": {
+   "value": false
+  },
+  "-policy_print": {
+   "value": false
+  },
+  "-check_ss_sig": {
+   "value": false
+  },
+  "-trusted_first": {
+   "value": false
+  },
+  "-suiteB_128_only": {
+   "value": false
+  },
+  "-suiteB_128": {
+   "value": false
+  },
+  "-suiteB_192": {
+   "value": false
+  },
+  "-partial_chain": {
+   "value": false
+  },
+  "-no_alt_chains": {
+   "value": false
+  },
+  "-no_check_time": {
+   "value": false
+  },
+  "-allow_proxy_certs": {
+   "value": false
+  },
+  "-CRL": {
+   "value": true
+  },
+  "-crl_download": {
+   "value": false
+  },
+  "-CRLform": {
+   "value": false
+  },
+  "-verify_return_error": {
+   "value": false
+  },
+  "-verify_quiet": {
+   "value": false
+  },
+  "-chainCAfile": {
+   "value": true
+  },
+  "-chainCApath": {
+   "value": true
+  },
+  "-chainCAstore": {
+   "value": true
+  },
+  "-verifyCAfile": {
+   "value": true
+  },
+  "-verifyCApath": {
+   "value": true
+  },
+  "-verifyCAstore": {
+   "value": true
+  },
+  "-xkey": {
+   "value": true
+  },
+  "-xcert": {
+   "value": true
+  },
+  "-xchain": {
+   "value": true
+  },
+  "-xchain_build": {
+   "value": false
+  },
+  "-xcertform": {
+   "value": false
+  },
+  "-xkeyform": {
+   "value": false
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl s_server": {
+  "-help": {
+   "value": false
+  },
+  "-ssl_config": {
+   "value": true
+  },
+  "-trace": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-port": {
+   "value": true
+  },
+  "-accept": {
+   "value": true
+  },
+  "-unix": {
+   "value": true
+  },
+  "-unlink": {
+   "value": false
+  },
+  "-4": {
+   "value": false
+  },
+  "-6": {
+   "value": false
+  },
+  "-tfo": {
+   "value": false
+  },
+  "-context": {
+   "value": true
+  },
+  "-CAfile": {
+   "value": true
+  },
+  "-CApath": {
+   "value": true
+  },
+  "-CAstore": {
+   "value": true
+  },
+  "-no-CAfile": {
+   "value": false
+  },
+  "-no-CApath": {
+   "value": false
+  },
+  "-no-CAstore": {
+   "value": false
+  },
+  "-nocert": {
+   "value": false
+  },
+  "-verify": {
+   "value": true
+  },
+  "-Verify": {
+   "value": true
+  },
+  "-nameopt": {
+   "value": true
+  },
+  "-cert": {
+   "value": true
+  },
+  "-cert2": {
+   "value": true
+  },
+  "-certform": {
+   "value": false
+  },
+  "-cert_chain": {
+   "value": true
+  },
+  "-build_chain": {
+   "value": false
+  },
+  "-serverinfo": {
+   "value": true
+  },
+  "-key": {
+   "value": true
+  },
+  "-key2": {
+   "value": true
+  },
+  "-keyform": {
+   "value": true
+  },
+  "-pass": {
+   "value": true
+  },
+  "-dcert": {
+   "value": true
+  },
+  "-dcertform": {
+   "value": false
+  },
+  "-dcert_chain": {
+   "value": true
+  },
+  "-dkey": {
+   "value": true
+  },
+  "-dkeyform": {
+   "value": true
+  },
+  "-dpass": {
+   "value": true
+  },
+  "-dhparam": {
+   "value": true
+  },
+  "-servername": {
+   "value": true
+  },
+  "-servername_fatal": {
+   "value": false
+  },
+  "-nbio_test": {
+   "value": false
+  },
+  "-crlf": {
+   "value": false
+  },
+  "-quiet": {
+   "value": false
+  },
+  "-no_resume_ephemeral": {
+   "value": false
+  },
+  "-www": {
+   "value": false
+  },
+  "-WWW": {
+   "value": false
+  },
+  "-ignore_unexpected_eof": {
+   "value": false
+  },
+  "-tlsextdebug": {
+   "value": false
+  },
+  "-HTTP": {
+   "value": false
+  },
+  "-id_prefix": {
+   "value": true
+  },
+  "-keymatexport": {
+   "value": true
+  },
+  "-keymatexportlen": {
+   "value": true
+  },
+  "-CRL": {
+   "value": true
+  },
+  "-CRLform": {
+   "value": false
+  },
+  "-crl_download": {
+   "value": false
+  },
+  "-chainCAfile": {
+   "value": true
+  },
+  "-chainCApath": {
+   "value": true
+  },
+  "-chainCAstore": {
+   "value": true
+  },
+  "-verifyCAfile": {
+   "value": true
+  },
+  "-verifyCApath": {
+   "value": true
+  },
+  "-verifyCAstore": {
+   "value": true
+  },
+  "-no_cache": {
+   "value": false
+  },
+  "-ext_cache": {
+   "value": false
+  },
+  "-verify_return_error": {
+   "value": false
+  },
+  "-verify_quiet": {
+   "value": false
+  },
+  "-ign_eof": {
+   "value": false
+  },
+  "-no_ign_eof": {
+   "value": false
+  },
+  "-cert_comp": {
+   "value": false
+  },
+  "-status": {
+   "value": false
+  },
+  "-status_verbose": {
+   "value": false
+  },
+  "-status_timeout": {
+   "value": true
+  },
+  "-status_url": {
+   "value": true
+  },
+  "-proxy": {
+   "value": true
+  },
+  "-no_proxy": {
+   "value": true
+  },
+  "-status_file": {
+   "value": true
+  },
+  "-security_debug": {
+   "value": false
+  },
+  "-security_debug_verbose": {
+   "value": false
+  },
+  "-brief": {
+   "value": false
+  },
+  "-rev": {
+   "value": false
+  },
+  "-debug": {
+   "value": false
+  },
+  "-msg": {
+   "value": false
+  },
+  "-msgfile": {
+   "value": true
+  },
+  "-state": {
+   "value": false
+  },
+  "-async": {
+   "value": false
+  },
+  "-max_pipelines": {
+   "value": true
+  },
+  "-naccept": {
+   "value": true
+  },
+  "-keylogfile": {
+   "value": true
+  },
+  "-nbio": {
+   "value": false
+  },
+  "-timeout": {
+   "value": false
+  },
+  "-mtu": {
+   "value": true
+  },
+  "-read_buf": {
+   "value": true
+  },
+  "-split_send_frag": {
+   "value": true
+  },
+  "-max_send_frag": {
+   "value": true
+  },
+  "-psk_identity": {
+   "value": true
+  },
+  "-psk_hint": {
+   "value": true
+  },
+  "-psk": {
+   "value": true
+  },
+  "-psk_session": {
+   "value": true
+  },
+  "-srpvfile": {
+   "value": true
+  },
+  "-srpuserseed": {
+   "value": true
+  },
+  "-max_early_data": {
+   "value": true
+  },
+  "-recv_max_early_data": {
+   "value": true
+  },
+  "-early_data": {
+   "value": false
+  },
+  "-num_tickets": {
+   "value": true
+  },
+  "-anti_replay": {
+   "value": false
+  },
+  "-no_anti_replay": {
+   "value": false
+  },
+  "-http_server_binmode": {
+   "value": false
+  },
+  "-no_ca_names": {
+   "value": false
+  },
+  "-stateless": {
+   "value": false
+  },
+  "-tls1": {
+   "value": false
+  },
+  "-tls1_1": {
+   "value": false
+  },
+  "-tls1_2": {
+   "value": false
+  },
+  "-tls1_3": {
+   "value": false
+  },
+  "-dtls": {
+   "value": false
+  },
+  "-listen": {
+   "value": false
+  },
+  "-dtls1": {
+   "value": false
+  },
+  "-dtls1_2": {
+   "value": false
+  },
+  "-use_srtp": {
+   "value": true
+  },
+  "-no_dhe": {
+   "value": false
+  },
+  "-nextprotoneg": {
+   "value": true
+  },
+  "-alpn": {
+   "value": true
+  },
+  "-ktls": {
+   "value": false
+  },
+  "-sendfile": {
+   "value": false
+  },
+  "-zerocopy_sendfile": {
+   "value": false
+  },
+  "-enable_server_rpk": {
+   "value": false
+  },
+  "-enable_client_rpk": {
+   "value": false
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-no_ssl3": {
+   "value": false
+  },
+  "-no_tls1": {
+   "value": false
+  },
+  "-no_tls1_1": {
+   "value": false
+  },
+  "-no_tls1_2": {
+   "value": false
+  },
+  "-no_tls1_3": {
+   "value": false
+  },
+  "-bugs": {
+   "value": false
+  },
+  "-no_comp": {
+   "value": false
+  },
+  "-comp": {
+   "value": false
+  },
+  "-no_tx_cert_comp": {
+   "value": false
+  },
+  "-no_rx_cert_comp": {
+   "value": false
+  },
+  "-no_ticket": {
+   "value": false
+  },
+  "-serverpref": {
+   "value": false
+  },
+  "-legacy_renegotiation": {
+   "value": false
+  },
+  "-client_renegotiation": {
+   "value": false
+  },
+  "-no_renegotiation": {
+   "value": false
+  },
+  "-legacy_server_connect": {
+   "value": false
+  },
+  "-no_resumption_on_reneg": {
+   "value": false
+  },
+  "-no_legacy_server_connect": {
+   "value": false
+  },
+  "-allow_no_dhe_kex": {
+   "value": false
+  },
+  "-prefer_no_dhe_kex": {
+   "value": false
+  },
+  "-prioritize_chacha": {
+   "value": false
+  },
+  "-strict": {
+   "value": false
+  },
+  "-sigalgs": {
+   "value": true
+  },
+  "-client_sigalgs": {
+   "value": true
+  },
+  "-groups": {
+   "value": true
+  },
+  "-curves": {
+   "value": true
+  },
+  "-named_curve": {
+   "value": true
+  },
+  "-cipher": {
+   "value": true
+  },
+  "-ciphersuites": {
+   "value": true
+  },
+  "-min_protocol": {
+   "value": true
+  },
+  "-max_protocol": {
+   "value": true
+  },
+  "-record_padding": {
+   "value": true
+  },
+  "-debug_broken_protocol": {
+   "value": false
+  },
+  "-no_middlebox": {
+   "value": false
+  },
+  "-no_etm": {
+   "value": false
+  },
+  "-no_ems": {
+   "value": false
+  },
+  "-policy": {
+   "value": true
+  },
+  "-purpose": {
+   "value": true
+  },
+  "-verify_name": {
+   "value": true
+  },
+  "-verify_depth": {
+   "value": true
+  },
+  "-auth_level": {
+   "value": true
+  },
+  "-attime": {
+   "value": true
+  },
+  "-verify_hostname": {
+   "value": true
+  },
+  "-verify_email": {
+   "value": true
+  },
+  "-verify_ip": {
+   "value": true
+  },
+  "-ignore_critical": {
+   "value": false
+  },
+  "-issuer_checks": {
+   "value": false
+  },
+  "-crl_check": {
+   "value": false
+  },
+  "-crl_check_all": {
+   "value": false
+  },
+  "-policy_check": {
+   "value": false
+  },
+  "-explicit_policy": {
+   "value": false
+  },
+  "-inhibit_any": {
+   "value": false
+  },
+  "-inhibit_map": {
+   "value": false
+  },
+  "-x509_strict": {
+   "value": false
+  },
+  "-extended_crl": {
+   "value": false
+  },
+  "-use_deltas": {
+   "value": false
+  },
+  "-policy_print": {
+   "value": false
+  },
+  "-check_ss_sig": {
+   "value": false
+  },
+  "-trusted_first": {
+   "value": false
+  },
+  "-suiteB_128_only": {
+   "value": false
+  },
+  "-suiteB_128": {
+   "value": false
+  },
+  "-suiteB_192": {
+   "value": false
+  },
+  "-partial_chain": {
+   "value": false
+  },
+  "-no_alt_chains": {
+   "value": false
+  },
+  "-no_check_time": {
+   "value": false
+  },
+  "-allow_proxy_certs": {
+   "value": false
+  },
+  "-xkey": {
+   "value": true
+  },
+  "-xcert": {
+   "value": true
+  },
+  "-xchain": {
+   "value": true
+  },
+  "-xchain_build": {
+   "value": false
+  },
+  "-xcertform": {
+   "value": false
+  },
+  "-xkeyform": {
+   "value": false
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl dgst": {
+  "-help": {
+   "value": false
+  },
+  "-list": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-engine_impl": {
+   "value": false
+  },
+  "-passin": {
+   "value": true
+  },
+  "-c": {
+   "value": false
+  },
+  "-r": {
+   "value": false
+  },
+  "-out": {
+   "value": true
+  },
+  "-keyform": {
+   "value": true
+  },
+  "-hex": {
+   "value": false
+  },
+  "-binary": {
+   "value": false
+  },
+  "-xoflen": {
+   "value": true
+  },
+  "-d": {
+   "value": false
+  },
+  "-debug": {
+   "value": false
+  },
+  "-sign": {
+   "value": true
+  },
+  "-verify": {
+   "value": true
+  },
+  "-prverify": {
+   "value": true
+  },
+  "-sigopt": {
+   "value": true
+  },
+  "-signature": {
+   "value": true
+  },
+  "-hmac": {
+   "value": true
+  },
+  "-mac": {
+   "value": true
+  },
+  "-macopt": {
+   "value": true
+  },
+  "-fips-fingerprint": {
+   "value": false
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl rand": {
+  "-help": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-out": {
+   "value": true
+  },
+  "-base64": {
+   "value": false
+  },
+  "-hex": {
+   "value": false
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl ecparam": {
+  "-help": {
+   "value": false
+  },
+  "-list_curves": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-genkey": {
+   "value": false
+  },
+  "-in": {
+   "value": true
+  },
+  "-inform": {
+   "value": false
+  },
+  "-out": {
+   "value": true
+  },
+  "-outform": {
+   "value": false
+  },
+  "-text": {
+   "value": false
+  },
+  "-noout": {
+   "value": false
+  },
+  "-param_enc": {
+   "value": true
+  },
+  "-check": {
+   "value": false
+  },
+  "-check_named": {
+   "value": false
+  },
+  "-no_seed": {
+   "value": false
+  },
+  "-name": {
+   "value": true
+  },
+  "-conv_form": {
+   "value": true
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  }
+ },
+ "openssl pkcs12": {
+  "-help": {
+   "value": false
+  },
+  "-in": {
+   "value": true
+  },
+  "-out": {
+   "value": true
+  },
+  "-passin": {
+   "value": true
+  },
+  "-passout": {
+   "value": true
+  },
+  "-password": {
+   "value": true
+  },
+  "-twopass": {
+   "value": false
+  },
+  "-nokeys": {
+   "value": false
+  },
+  "-nocerts": {
+   "value": false
+  },
+  "-noout": {
+   "value": false
+  },
+  "-legacy": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  },
+  "-rand": {
+   "value": true
+  },
+  "-writerand": {
+   "value": true
+  },
+  "-info": {
+   "value": false
+  },
+  "-nomacver": {
+   "value": false
+  },
+  "-clcerts": {
+   "value": false
+  },
+  "-cacerts": {
+   "value": false
+  },
+  "-noenc": {
+   "value": false
+  },
+  "-nodes": {
+   "value": false
+  },
+  "-export": {
+   "value": false
+  },
+  "-inkey": {
+   "value": true
+  },
+  "-certfile": {
+   "value": true
+  },
+  "-passcerts": {
+   "value": true
+  },
+  "-chain": {
+   "value": false
+  },
+  "-untrusted": {
+   "value": true
+  },
+  "-CAfile": {
+   "value": true
+  },
+  "-CApath": {
+   "value": true
+  },
+  "-CAstore": {
+   "value": true
+  },
+  "-no-CAfile": {
+   "value": false
+  },
+  "-no-CApath": {
+   "value": false
+  },
+  "-no-CAstore": {
+   "value": false
+  },
+  "-name": {
+   "value": true
+  },
+  "-caname": {
+   "value": true
+  },
+  "-CSP": {
+   "value": true
+  },
+  "-LMK": {
+   "value": false
+  },
+  "-keyex": {
+   "value": false
+  },
+  "-keysig": {
+   "value": false
+  },
+  "-keypbe": {
+   "value": true
+  },
+  "-certpbe": {
+   "value": true
+  },
+  "-descert": {
+   "value": false
+  },
+  "-macalg": {
+   "value": true
+  },
+  "-pbmac1_pbkdf2": {
+   "value": false
+  },
+  "-pbmac1_pbkdf2_md": {
+   "value": true
+  },
+  "-iter": {
+   "value": true
+  },
+  "-noiter": {
+   "value": false
+  },
+  "-nomaciter": {
+   "value": false
+  },
+  "-maciter": {
+   "value": false
+  },
+  "-macsaltlen": {
+   "value": true
+  },
+  "-nomac": {
+   "value": false
+  },
+  "-jdktrust": {
+   "value": true
+  }
+ },
+ "openssl pkey": {
+  "-help": {
+   "value": false
+  },
+  "-engine": {
+   "value": true
+  },
+  "-provider-path": {
+   "value": true
+  },
+  "-provider": {
+   "value": true
+  },
+  "-provparam": {
+   "value": true
+  },
+  "-propquery": {
+   "value": true
+  },
+  "-check": {
+   "value": false
+  },
+  "-pubcheck": {
+   "value": false
+  },
+  "-in": {
+   "value": true
+  },
+  "-inform": {
+   "value": true
+  },
+  "-passin": {
+   "value": true
+  },
+  "-pubin": {
+   "value": false
+  },
+  "-out": {
+   "value": true
+  },
+  "-outform": {
+   "value": false
+  },
+  "-passout": {
+   "value": true
+  },
+  "-traditional": {
+   "value": false
+  },
+  "-pubout": {
+   "value": false
+  },
+  "-noout": {
+   "value": false
+  },
+  "-text": {
+   "value": false
+  },
+  "-text_pub": {
+   "value": false
+  },
+  "-ec_conv_form": {
+   "value": true
+  },
+  "-ec_param_enc": {
+   "value": true
+  }
+ },
+ "kubectl get": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--all-namespaces": {
+   "short": "-A",
+   "value": false
+  },
+  "--allow-missing-template-keys": {
+   "short": null,
+   "value": false
+  },
+  "--chunk-size": {
+   "short": null,
+   "value": true
+  },
+  "--field-selector": {
+   "short": null,
+   "value": true
+  },
+  "--filename": {
+   "short": "-f",
+   "value": true
+  },
+  "--ignore-not-found": {
+   "short": null,
+   "value": false
+  },
+  "--kustomize": {
+   "short": "-k",
+   "value": true
+  },
+  "--label-columns": {
+   "short": "-L",
+   "value": true
+  },
+  "--no-headers": {
+   "short": null,
+   "value": false
+  },
+  "--output": {
+   "short": "-o",
+   "value": true
+  },
+  "--output-watch-events": {
+   "short": null,
+   "value": false
+  },
+  "--raw": {
+   "short": null,
+   "value": true
+  },
+  "--recursive": {
+   "short": "-R",
+   "value": false
+  },
+  "--selector": {
+   "short": "-l",
+   "value": true
+  },
+  "--server-print": {
+   "short": null,
+   "value": false
+  },
+  "--show-kind": {
+   "short": null,
+   "value": false
+  },
+  "--show-labels": {
+   "short": null,
+   "value": false
+  },
+  "--show-managed-fields": {
+   "short": null,
+   "value": false
+  },
+  "--sort-by": {
+   "short": null,
+   "value": true
+  },
+  "--subresource": {
+   "short": null,
+   "value": true
+  },
+  "--template": {
+   "short": null,
+   "value": true
+  },
+  "--watch": {
+   "short": "-w",
+   "value": false
+  },
+  "--watch-only": {
+   "short": null,
+   "value": false
+  }
+ },
+ "kubectl describe": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--all-namespaces": {
+   "short": "-A",
+   "value": false
+  },
+  "--chunk-size": {
+   "short": null,
+   "value": true
+  },
+  "--filename": {
+   "short": "-f",
+   "value": true
+  },
+  "--kustomize": {
+   "short": "-k",
+   "value": true
+  },
+  "--recursive": {
+   "short": "-R",
+   "value": false
+  },
+  "--selector": {
+   "short": "-l",
+   "value": true
+  },
+  "--show-events": {
+   "short": null,
+   "value": false
+  }
+ },
+ "kubectl apply": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--all": {
+   "short": null,
+   "value": false
+  },
+  "--allow-missing-template-keys": {
+   "short": null,
+   "value": false
+  },
+  "--cascade": {
+   "short": null,
+   "value": true
+  },
+  "--dry-run": {
+   "short": null,
+   "value": true
+  },
+  "--field-manager": {
+   "short": null,
+   "value": true
+  },
+  "--filename": {
+   "short": "-f",
+   "value": true
+  },
+  "--force": {
+   "short": null,
+   "value": false
+  },
+  "--force-conflicts": {
+   "short": null,
+   "value": false
+  },
+  "--grace-period": {
+   "short": null,
+   "value": true
+  },
+  "--kustomize": {
+   "short": "-k",
+   "value": true
+  },
+  "--openapi-patch": {
+   "short": null,
+   "value": false
+  },
+  "--output": {
+   "short": "-o",
+   "value": true
+  },
+  "--overwrite": {
+   "short": null,
+   "value": false
+  },
+  "--prune": {
+   "short": null,
+   "value": false
+  },
+  "--prune-allowlist": {
+   "short": null,
+   "value": true
+  },
+  "--recursive": {
+   "short": "-R",
+   "value": false
+  },
+  "--selector": {
+   "short": "-l",
+   "value": true
+  },
+  "--server-side": {
+   "short": null,
+   "value": false
+  },
+  "--show-managed-fields": {
+   "short": null,
+   "value": false
+  },
+  "--subresource": {
+   "short": null,
+   "value": true
+  },
+  "--template": {
+   "short": null,
+   "value": true
+  },
+  "--timeout": {
+   "short": null,
+   "value": true
+  },
+  "--validate": {
+   "short": null,
+   "value": true
+  },
+  "--wait": {
+   "short": null,
+   "value": false
+  }
+ },
+ "kubectl auth can-i": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--all-namespaces": {
+   "short": "-A",
+   "value": false
+  },
+  "--list": {
+   "short": null,
+   "value": false
+  },
+  "--no-headers": {
+   "short": null,
+   "value": false
+  },
+  "--quiet": {
+   "short": "-q",
+   "value": false
+  },
+  "--subresource": {
+   "short": null,
+   "value": true
+  }
+ },
+ "kubectl create role": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--allow-missing-template-keys": {
+   "short": null,
+   "value": false
+  },
+  "--dry-run": {
+   "short": null,
+   "value": true
+  },
+  "--field-manager": {
+   "short": null,
+   "value": true
+  },
+  "--output": {
+   "short": "-o",
+   "value": true
+  },
+  "--resource": {
+   "short": null,
+   "value": true
+  },
+  "--resource-name": {
+   "short": null,
+   "value": true
+  },
+  "--save-config": {
+   "short": null,
+   "value": false
+  },
+  "--show-managed-fields": {
+   "short": null,
+   "value": false
+  },
+  "--template": {
+   "short": null,
+   "value": true
+  },
+  "--validate": {
+   "short": null,
+   "value": true
+  },
+  "--verb": {
+   "short": null,
+   "value": true
+  }
+ },
+ "kubectl create rolebinding": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--allow-missing-template-keys": {
+   "short": null,
+   "value": false
+  },
+  "--clusterrole": {
+   "short": null,
+   "value": true
+  },
+  "--dry-run": {
+   "short": null,
+   "value": true
+  },
+  "--field-manager": {
+   "short": null,
+   "value": true
+  },
+  "--group": {
+   "short": null,
+   "value": true
+  },
+  "--output": {
+   "short": "-o",
+   "value": true
+  },
+  "--role": {
+   "short": null,
+   "value": true
+  },
+  "--save-config": {
+   "short": null,
+   "value": false
+  },
+  "--serviceaccount": {
+   "short": null,
+   "value": true
+  },
+  "--show-managed-fields": {
+   "short": null,
+   "value": false
+  },
+  "--template": {
+   "short": null,
+   "value": true
+  },
+  "--validate": {
+   "short": null,
+   "value": true
+  }
+ },
+ "kubectl logs": {
+  "--as": {
+   "short": null,
+   "value": true
+  },
+  "--as-group": {
+   "short": null,
+   "value": true
+  },
+  "--as-uid": {
+   "short": null,
+   "value": true
+  },
+  "--as-user-extra": {
+   "short": null,
+   "value": true
+  },
+  "--cache-dir": {
+   "short": null,
+   "value": true
+  },
+  "--certificate-authority": {
+   "short": null,
+   "value": true
+  },
+  "--client-certificate": {
+   "short": null,
+   "value": true
+  },
+  "--client-key": {
+   "short": null,
+   "value": true
+  },
+  "--cluster": {
+   "short": null,
+   "value": true
+  },
+  "--context": {
+   "short": null,
+   "value": true
+  },
+  "--disable-compression": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify": {
+   "short": null,
+   "value": false
+  },
+  "--kubeconfig": {
+   "short": null,
+   "value": true
+  },
+  "--kuberc": {
+   "short": null,
+   "value": true
+  },
+  "--log-flush-frequency": {
+   "short": null,
+   "value": true
+  },
+  "--match-server-version": {
+   "short": null,
+   "value": false
+  },
+  "--namespace": {
+   "short": "-n",
+   "value": true
+  },
+  "--password": {
+   "short": null,
+   "value": true
+  },
+  "--profile": {
+   "short": null,
+   "value": true
+  },
+  "--profile-output": {
+   "short": null,
+   "value": true
+  },
+  "--proxy-url": {
+   "short": null,
+   "value": true
+  },
+  "--request-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--server": {
+   "short": "-s",
+   "value": true
+  },
+  "--tls-server-name": {
+   "short": null,
+   "value": true
+  },
+  "--token": {
+   "short": null,
+   "value": true
+  },
+  "--user": {
+   "short": null,
+   "value": true
+  },
+  "--username": {
+   "short": null,
+   "value": true
+  },
+  "--v": {
+   "short": "-v",
+   "value": true
+  },
+  "--vmodule": {
+   "short": null,
+   "value": true
+  },
+  "--warnings-as-errors": {
+   "short": null,
+   "value": false
+  },
+  "--all-containers": {
+   "short": null,
+   "value": false
+  },
+  "--all-pods": {
+   "short": null,
+   "value": false
+  },
+  "--container": {
+   "short": "-c",
+   "value": true
+  },
+  "--follow": {
+   "short": "-f",
+   "value": false
+  },
+  "--ignore-errors": {
+   "short": null,
+   "value": false
+  },
+  "--insecure-skip-tls-verify-backend": {
+   "short": null,
+   "value": false
+  },
+  "--limit-bytes": {
+   "short": null,
+   "value": true
+  },
+  "--max-log-requests": {
+   "short": null,
+   "value": true
+  },
+  "--pod-running-timeout": {
+   "short": null,
+   "value": true
+  },
+  "--prefix": {
+   "short": null,
+   "value": false
+  },
+  "--previous": {
+   "short": "-p",
+   "value": false
+  },
+  "--selector": {
+   "short": "-l",
+   "value": true
+  },
+  "--since": {
+   "short": null,
+   "value": true
+  },
+  "--since-time": {
+   "short": null,
+   "value": true
+  },
+  "--tail": {
+   "short": null,
+   "value": true
+  },
+  "--timestamps": {
+   "short": null,
+   "value": false
+  }
+ }
+};
+</script>
+<script>
 // The exercise engine of the Identity and Access Lab. Pure JavaScript with no DOM, so the same file runs in the page and
 // in the tests. An exercise is data; judge() says whether an answer is right and why, and solution() gives the answer.
 //
@@ -2503,6 +7844,7 @@ try {
 </script>
 <script>
 window.IA = window.IA || { exercises: {} };
+IA.cmds = IA.cmds || {};
 // ---- exercises/01-foundations.js
 // Exercises for steps 01 to 03.
 (function () {
@@ -2612,6 +7954,222 @@ window.IA = window.IA || { exercises: {} };
       { t: 'Make the session id much longer, so an attacker cannot guess it before the user signs in.', ok: false, why: 'A long id is good, but fixation works with an id the attacker already knows, however long.' },
       { t: 'Create a new session id after login and destroy the old one.', ok: true, why: 'An id the attacker planted before login becomes worthless.' },
       { t: 'Set the cookie to <code>HttpOnly</code>.', ok: false, why: 'HttpOnly stops script reading the cookie. It does not stop a pre-planted id.' },
+    ] };
+})();
+
+// ---- exercises/02-tls.js
+// Exercises and command drills for steps 04 to 08 (TLS, certificates, your own CA, production, mutual TLS).
+(function () {
+  var IA = window.IA, X = IA.exercises;
+  IA.cmds = IA.cmds || {};
+  var S = function (cmd, o) { return window.IACmdSpec.spec(IA.cmdFlags, cmd, o); };
+  var pos = function (re, label, what, hint) { return { match: re, label: label, what: what, hint: hint }; };
+  var url = /^https:\/\/localhost:5443\/?$/;
+  function drill(id, prompt, specs, answer, hints, after, run) { IA.cmds[id] = { prompt: prompt, specs: specs, answer: answer, hints: hints || [], after: after || '', run: run || null }; }
+  var CA = { '-CAfile': { value: /^root\.pem$/, what: 'trust this root certificate file' } };
+
+  // ------------------------------------------------------------------ 04
+  drill('t4-curlv', '<p>Call <code>https://localhost:5443/</code> with <code>curl</code>. Trust the root in <code>root.pem</code>, and print the handshake details (verbose).</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--verbose': { value: false, what: 'print what happens, including the TLS handshake' }, '--cacert': { value: /^root\.pem$/, what: 'trust the CA certificate in this file', bad: function (g) { return '<code>--cacert ' + g + '</code>: the root certificate file is <code>root.pem</code>.'; } } }, pos: [pos(url, 'the URL', 'what to call', 'https://localhost:5443/')] }),
+    'curl -v --cacert root.pem https://localhost:5443/', ['Verbose is <code>-v</code>.', 'The flag that adds a CA certificate is <code>--cacert</code>.'], 'Look for the lines starting <code>* TLSv1.3 (IN)</code>: they are the handshake messages of the diagram, in order.', { expect: /TLSv1\.3/ });
+  drill('t4-tls13', '<p>Call the same address, trusting <code>root.pem</code>, and make <code>curl</code> use <b>TLS 1.3 only</b>.</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--tlsv1.3': { value: false, what: 'allow TLS 1.3 or newer only' }, '--cacert': { value: /^root\.pem$/, what: 'trust this root certificate file' } }, pos: [pos(url, 'the URL', 'what to call')] }),
+    'curl --tlsv1.3 --cacert root.pem https://localhost:5443/', ['The flag is named after the version: <code>--tlsv1.3</code>.'], 'This is how you prove a server really does TLS 1.3.', { expect: /./ });
+  drill('t4-tls12', '<p>Now force <b>TLS 1.2 only</b>: allow nothing older and nothing newer. Trust <code>root.pem</code>, and print the verbose output.</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--tlsv1.2': { value: false, what: 'allow TLS 1.2 or newer' }, '--tls-max': { value: /^1\.2$/, what: 'but no newer than 1.2' }, '--verbose': { value: false, what: 'print the handshake' }, '--cacert': { value: /^root\.pem$/, what: 'trust this root certificate file' } }, pos: [pos(url, 'the URL', 'what to call')] }),
+    'curl -v --tlsv1.2 --tls-max 1.2 --cacert root.pem https://localhost:5443/', ['<code>--tlsv1.2</code> sets the minimum. A second flag sets the maximum: <code>--tls-max</code>.'], 'In the verbose output the lines now say <code>TLSv1.2</code> and the key exchange has no <code>X25519MLKEM768</code>: the hybrid group is TLS 1.3 only.', { expect: /TLSv1\.2/ });
+  drill('t4-sclient', '<p>Open a TLS connection to <code>localhost</code> port <code>5443</code> with <code>openssl s_client</code>, trusting <code>root.pem</code>.</p>',
+    S('openssl s_client', { what: 'open a TLS connection and show what happened', need: { '-connect': { value: /^localhost:5443$/, what: 'host and port to connect to' }, '-CAfile': { value: /^root\.pem$/, what: 'trust this root certificate file' } } }),
+    'openssl s_client -connect localhost:5443 -CAfile root.pem', ['The flag that names the target is <code>-connect</code>, as <code>host:port</code>.', 'The trust file for OpenSSL is <code>-CAfile</code>.'], 'Read <code>Protocol</code>, <code>Cipher</code> and <code>Verify return code</code> in the output. Press Ctrl+D to leave.', { expect: /Verification: OK/ });
+  drill('t4-sni', '<p>Do the same, and also send the <b>server name</b> <code>localhost</code> in the ClientHello.</p>',
+    S('openssl s_client', { what: 'open a TLS connection', need: { '-connect': { value: /^localhost:5443$/, what: 'host and port' }, '-servername': { value: /^localhost$/, what: 'the server_name (SNI) to send' }, '-CAfile': { value: /^root\.pem$/, what: 'trust this root' } } }),
+    'openssl s_client -connect localhost:5443 -servername localhost -CAfile root.pem', ['The SNI flag is <code>-servername</code>.'], 'One server can hold many certificates and use the name to choose the right one. That name is the part that Encrypted Client Hello hides.', { expect: /Verification: OK/ });
+
+  X['t4-order'] = { kind: 'order', prompt: '<p>Put the TLS 1.3 handshake messages in the order they are sent.</p>',
+    items: ['<code>ClientHello</code> (with the client\'s key share)', '<code>ServerHello</code> (with the server\'s key share)', '<code>Certificate</code> (the server\'s chain, encrypted)', '<code>CertificateVerify</code> (a signature with the private key)', 'Server <code>Finished</code>', 'Client <code>Finished</code>', 'Application data'],
+    hints: ['Keys can only be shared after the ClientHello and ServerHello. The proof of identity comes after the encryption starts.'] };
+  X['t4-hides'] = { kind: 'sort', prompt: '<p>Someone is watching the network between you and an HTTPS site, and Encrypted Client Hello is <b>not</b> in use. What can they see?</p>',
+    groups: ['Hidden from them', 'Visible to them'],
+    items: [
+      { t: 'The text of the page.', g: 0, why: 'The HTTP response is inside the encrypted connection.' },
+      { t: 'The <code>Authorization</code> header and cookies.', g: 0, why: 'Headers are part of the encrypted HTTP request.' },
+      { t: 'The path and query string of the URL (<code>/api/todos?id=7</code>).', g: 0, why: 'Only the host name is used outside the encryption. The path travels inside.' },
+      { t: 'The server name you are connecting to (SNI).', g: 1, why: 'It is in the ClientHello, before encryption starts. Encrypted Client Hello exists to hide it.' },
+      { t: 'The IP address of the server.', g: 1, why: 'Packets must be routed to it.' },
+      { t: 'Roughly how much data moves and when.', g: 1, why: 'TLS hides content, not volume and timing. RFC 9846 discusses this under traffic analysis and offers record padding to reduce it.' },
+    ] };
+  X['t4-0rtt'] = { kind: 'quiz', prompt: '<p>TLS 1.3 allows a returning client to send <b>early data</b> in its first flight, which a network attacker can replay. Which request is the one a client may safely send as early data?</p>',
+    options: [
+      { t: '<code>POST /api/payments</code> to charge a card.', ok: false, why: 'A replay would charge the card again.' },
+      { t: '<code>GET /api/info</code>, which only reads.', ok: true, why: 'RFC 9846: clients must only send early data they deem safe to be replayed. A read that changes nothing is.' },
+      { t: '<code>DELETE /api/todos/5</code>.', ok: false, why: 'Replaying a delete can remove something else, or the same thing twice with side effects.' },
+    ] };
+
+  // ------------------------------------------------------------------ 05
+  drill('t5-text', '<p>Print everything in the certificate <code>api.pem</code> in readable text, and not the encoded certificate itself.</p>',
+    S('openssl x509', { what: 'read a certificate', need: { '-in': { value: /^api\.pem$/, what: 'the certificate file' }, '-noout': { value: false, what: 'do not also print the encoded certificate' }, '-text': { value: false, what: 'print all fields as text' } } }),
+    'openssl x509 -in api.pem -noout -text', ['<code>-text</code> prints the fields. <code>-noout</code> leaves out the base64 block.'], 'Find <code>Subject Alternative Name</code>, <code>Basic Constraints</code> and <code>Not After</code>.', { expect: /Subject Alternative Name/ });
+  drill('t5-dates', '<p>Print only the <b>validity dates</b> of <code>api.pem</code>.</p>',
+    S('openssl x509', { what: 'read a certificate', need: { '-in': { value: /^api\.pem$/, what: 'the certificate file' }, '-noout': { value: false, what: 'print no encoded certificate' }, '-dates': { value: false, what: 'print notBefore and notAfter' } } }),
+    'openssl x509 -in api.pem -noout -dates', ['The flag is named after what it prints.'], 'You will use this the day a certificate "suddenly" stops working.', { expect: /notAfter=/ });
+  drill('t5-san', '<p>Print only the <b>subject alternative names</b> of <code>api.pem</code>.</p>',
+    S('openssl x509', { what: 'read a certificate', need: { '-in': { value: /^api\.pem$/, what: 'the certificate file' }, '-noout': { value: false, what: 'print no encoded certificate' }, '-ext': { value: /^subjectAltName$/i, what: 'print only this extension', bad: function () { return 'Name the extension: <code>subjectAltName</code>.'; } } } }),
+    'openssl x509 -in api.pem -noout -ext subjectAltName', ['Extensions are printed with <code>-ext</code> and the extension\'s name.'], 'This is the list the host name is matched against.', { expect: /DNS:localhost/ });
+  drill('t5-verify', '<p>Check that <code>api.pem</code> chains to the root in <code>root.pem</code>.</p>',
+    S('openssl verify', { what: 'verify a certificate chain', need: { '-CAfile': { value: /^root\.pem$/, what: 'the trusted root' } }, pos: [pos(/^api\.pem$/, 'the certificate to check', 'the certificate', 'api.pem')] }),
+    'openssl verify -CAfile root.pem api.pem', ['The file to check is a plain argument at the end.'], 'It prints <code>api.pem: OK</code>. Without <code>-CAfile</code> it fails with <code>unable to get local issuer certificate</code> because your system store does not hold this root.', { expect: /api\.pem: OK/ });
+  drill('t5-showcerts', '<p>Connect to <code>localhost:5443</code> with <code>openssl s_client</code> and print <b>every certificate the server sends</b>.</p>',
+    S('openssl s_client', { what: 'open a TLS connection', need: { '-connect': { value: /^localhost:5443$/, what: 'host and port' }, '-showcerts': { value: false, what: 'print the whole chain the server sent, in PEM' } } }),
+    'openssl s_client -connect localhost:5443 -showcerts', ['One flag, named after what it does.'], 'This is how you find out whether a server sends its intermediates.', { expect: /BEGIN CERTIFICATE/ });
+
+  X['t5-fields'] = { kind: 'inspect', prompt: '<p>Read this part of a certificate and answer.</p>',
+    artifact: 'Subject:  CN=todo.example.com\nIssuer:   C=US, O=Example CA, CN=Example Issuing CA 1\nNot Before: 2026-09-01 00:00:00 UTC\nNot After:  2026-12-10 00:00:00 UTC\nX509v3 Subject Alternative Name:\n    DNS:todo.example.com, DNS:*.apps.example.com\nX509v3 Basic Constraints: critical\n    CA:FALSE\nX509v3 Extended Key Usage:\n    TLS Web Server Authentication',
+    parts: [
+      { kind: 'quiz', prompt: 'Is it valid for <code>shop.apps.example.com</code>?', options: [{ t: 'Yes, the wildcard covers one label.', ok: true, why: '<code>*.apps.example.com</code> matches exactly one label in front of <code>apps.example.com</code>.' }, { t: 'No, only <code>todo.example.com</code> is listed.', ok: false, why: 'The second SAN is a wildcard.' }] },
+      { kind: 'quiz', prompt: 'Is it valid for <code>a.b.apps.example.com</code>?', options: [{ t: 'Yes, a wildcard covers any depth.', ok: false, why: 'A wildcard covers exactly one label.' }, { t: 'No, that has two labels before <code>apps.example.com</code>.', ok: true, why: 'One label only.' }] },
+      { kind: 'quiz', prompt: 'May this certificate sign other certificates?', options: [{ t: 'Yes, it is signed by a CA.', ok: false, why: 'Being signed by a CA does not make it one.' }, { t: 'No, <code>CA:FALSE</code>.', ok: true, why: 'Basic constraints say it is not a CA.' }] },
+      { kind: 'quiz', prompt: 'It is checked on 2027-01-15. Result?', options: [{ t: 'Expired.', ok: true, why: 'It ended on 2026-12-10.' }, { t: 'Still valid.', ok: false, why: 'The end date has passed.' }] },
+    ] };
+  X['t5-errors'] = { kind: 'sort', prompt: '<p>Match each message to its most likely cause.</p>',
+    groups: ['The certificate is not trusted or the chain is incomplete', 'The name does not match', 'The dates are wrong'],
+    items: [
+      { t: '<code>unable to get local issuer certificate</code>', g: 0, why: 'The client could not build a path to a root it trusts.' },
+      { t: '<code>no alternative certificate subject name matches target host name</code>', g: 1, why: 'The host name is not in the SAN.' },
+      { t: '<code>certificate has expired</code>', g: 2, why: 'Past the not-after date.' },
+      { t: '<code>self-signed certificate</code>', g: 0, why: 'The certificate is its own root, and that root is not in the trust store.' },
+      { t: '<code>certificate is not yet valid</code>', g: 2, why: 'Before the not-before date. Often a wrong clock on the machine.' },
+      { t: 'Works in the browser, fails in <code>curl</code> and .NET with the "issuer" error.', g: 0, why: 'The server probably did not send its intermediate. Browsers can often fetch it; most other clients do not.' },
+    ] };
+  X['t5-wild'] = { kind: 'sort', prompt: '<p>The certificate has the single name <code>*.example.com</code>. Does it cover each host?</p>',
+    groups: ['Covered', 'Not covered'],
+    items: [
+      { t: '<code>shop.example.com</code>', g: 0, why: 'One label in front of <code>example.com</code>.' },
+      { t: '<code>example.com</code>', g: 1, why: 'The wildcard needs a label. The bare domain must be its own name.' },
+      { t: '<code>a.shop.example.com</code>', g: 1, why: 'Two labels.' },
+      { t: '<code>api.example.com</code>', g: 0, why: 'One label.' },
+      { t: '<code>example.org</code>', g: 1, why: 'A different domain.' },
+    ] };
+
+  // ------------------------------------------------------------------ 06
+  var EC = { '-algorithm': { value: /^EC$/i, what: 'an elliptic curve key' }, '-pkeyopt': { value: /^ec_paramgen_curve:P-256$/, what: 'on the P-256 curve' } };
+  drill('t6-rootkey', '<p>Create the root\'s private key: an <b>EC key on the P-256 curve</b>, written to <code>root.key</code>.</p>',
+    S('openssl genpkey', { what: 'generate a private key', need: Object.assign({ '-out': { value: /^root\.key$/, what: 'write it to this file' } }, EC) }),
+    'openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out root.key', ['The algorithm is named with <code>-algorithm</code>, the curve with <code>-pkeyopt ec_paramgen_curve:…</code>.'], 'Never share this file. Whoever has it can issue certificates that your machine trusts.', { expect: /^$/ });
+  drill('t6-rootcert', '<p>Make the root certificate <code>root.pem</code> from <code>root.key</code>: self-signed, valid 3650 days, subject <code>/O=Lab Trust/CN=Lab Root CA</code>, marked <code>CA:TRUE</code> and allowed to sign certificates (<code>keyCertSign</code>).</p>',
+    S('openssl req', { what: 'create a certificate request or self-signed certificate', need: {
+      '-x509': { value: false, what: 'make a certificate directly instead of a request' }, '-new': { value: false, required: false, what: 'a new request' },
+      '-key': { value: /^root\.key$/, what: 'sign with this private key' }, '-days': { value: /^\d+$/, what: 'valid for this many days' },
+      '-subj': { value: /^\/.*CN=Lab Root CA/, what: 'the subject name' },
+      '-addext': { value: true, repeat: true, what: 'add an extension', each: [{ match: /basicConstraints=.*CA:TRUE/i, missing: 'Mark it as a CA: <code>-addext "basicConstraints=critical,CA:TRUE"</code>.' }, { match: /keyUsage=.*keyCertSign/i, missing: 'Allow it to sign certificates: <code>-addext "keyUsage=critical,keyCertSign,cRLSign"</code>.' }] },
+      '-out': { value: /^root\.pem$/, what: 'write the certificate to this file' } } }),
+    'openssl req -x509 -new -key root.key -days 3650 -subj "/O=Lab Trust/CN=Lab Root CA" -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" -out root.pem', ['<code>req -x509</code> makes a self-signed certificate. Extensions go in with <code>-addext</code>, once per extension.', 'The two extensions: <code>basicConstraints=critical,CA:TRUE</code> and <code>keyUsage=critical,keyCertSign,cRLSign</code>.'], 'The issuer and subject of this certificate are the same: it vouches for itself.', { expect: /^$/ });
+  drill('t6-apikey', '<p>Create the API\'s own private key, on the same curve, written to <code>api.key</code>.</p>',
+    S('openssl genpkey', { what: 'generate a private key', need: Object.assign({ '-out': { value: /^api\.key$/, what: 'write it to this file' } }, EC) }),
+    'openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out api.key', ['The same command as for the root, with a different file name.'], 'This file belongs to the server and never goes to the CA.', { expect: /^$/ });
+  drill('t6-csr', '<p>Make a certificate signing request <code>api.csr</code> for <code>api.key</code>, with the subject <code>/CN=localhost</code>.</p>',
+    S('openssl req', { what: 'create a certificate request', need: { '-new': { value: false, what: 'a new request' }, '-key': { value: /^api\.key$/, what: 'the private key to build it from' }, '-subj': { value: /^\/CN=localhost$/, what: 'the subject name' }, '-out': { value: /^api\.csr$/, what: 'write the request here' } } }),
+    'openssl req -new -key api.key -subj "/CN=localhost" -out api.csr', ['<code>req -new</code> without <code>-x509</code> makes a request, not a certificate.'], 'The request holds the public key and the names, signed with the private key to prove possession.', { expect: /^$/ });
+  drill('t6-sign', '<p>Sign <code>api.csr</code> with the root: use <code>root.pem</code> and <code>root.key</code>, take the extensions from <code>api.ext</code>, make it valid for <b>90 days</b>, and write <code>api.pem</code>. Let OpenSSL create the serial number file.</p>',
+    S('openssl x509', { what: 'sign a request', need: {
+      '-req': { value: false, what: 'the input is a request' }, '-in': { value: /^api\.csr$/, what: 'the request to sign' },
+      '-CA': { value: /^root\.pem$/, what: 'the CA certificate' }, '-CAkey': { value: /^root\.key$/, what: 'the CA private key' },
+      '-CAcreateserial': { value: false, what: 'create the serial number file' },
+      '-days': { value: function (v) { return /^\d+$/.test(v) && +v <= 200; }, what: 'valid for this many days', bad: function (g) { return '<code>-days ' + g + '</code>: use a number of days no larger than 200. Public CAs may not issue longer than that since March 2026, and short lives are the right habit for your own CA too.'; } },
+      '-extfile': { value: /^api\.ext$/, what: 'take the extensions from this file' }, '-out': { value: /^api\.pem$/, what: 'write the certificate here' } } }),
+    'openssl x509 -req -in api.csr -CA root.pem -CAkey root.key -CAcreateserial -days 90 -extfile api.ext -out api.pem', ['<code>x509 -req</code> signs a request. The CA is named with <code>-CA</code> and <code>-CAkey</code>.', 'Lifetime: <code>-days 90</code>. Extensions: <code>-extfile api.ext</code>.'], 'Without <code>-extfile</code> you would get a certificate with none of the constraints and no names, and clients would refuse it.', { expect: /Certificate request self-signature ok|subject=/ });
+  drill('t6-inspect', '<p>Print the subject, the issuer, the dates and the subject alternative names of <code>api.pem</code> in one command.</p>',
+    S('openssl x509', { what: 'read a certificate', need: { '-in': { value: /^api\.pem$/, what: 'the certificate' }, '-noout': { value: false, what: 'no encoded certificate' }, '-subject': { value: false, what: 'print the subject' }, '-issuer': { value: false, what: 'print the issuer' }, '-dates': { value: false, what: 'print the validity dates' }, '-ext': { value: /^subjectAltName$/i, what: 'print the names' } } }),
+    'openssl x509 -in api.pem -noout -subject -issuer -dates -ext subjectAltName', ['Combine the flags from the last step: subject, issuer, dates, and the extension.'], 'The subject is <code>CN=localhost</code>, the issuer is <code>Lab Root CA</code>, and the names include <code>127.0.0.1</code>.', { expect: /issuer=.*Lab Root CA/ });
+  drill('t6-serve', '<p>Start a test HTTPS server on port <code>5443</code> using <code>api.pem</code> and <code>api.key</code>, which also answers a plain GET with a small status page (<code>-www</code>).</p>',
+    S('openssl s_server', { what: 'run a test TLS server', need: { '-accept': { value: /^5443$/, what: 'listen on this port' }, '-cert': { value: /^api\.pem$/, what: 'the certificate to present' }, '-key': { value: /^api\.key$/, what: 'its private key' }, '-www': { value: false, what: 'answer GET requests with a status page' } } }),
+    'openssl s_server -accept 5443 -cert api.pem -key api.key -www', ['<code>s_server</code> takes the port with <code>-accept</code>.'], 'Leave it running and open a second terminal for the next commands.', { server: true });
+  drill('t6-curl-fail', '<p>In another terminal, call <code>https://localhost:5443/</code> with <code>curl</code> and <b>no</b> trust file, to see what an untrusted root looks like.</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--cacert': { required: false, forbidden: 'This step is about calling it <em>without</em> a trust file, so leave <code>--cacert</code> off.' }, '--insecure': { required: false, forbidden: 'Not <code>-k</code>: that switches the very check we want to see fail.' } }, pos: [pos(url, 'the URL', 'what to call')] }),
+    'curl https://localhost:5443/', ['Just the command and the address.'], 'The error is <code>curl: (60) SSL certificate problem: unable to get local issuer certificate</code>. Your system store has no root for this chain.', { expectFail: /issuer certificate/ });
+  drill('t6-curl-ok', '<p>Call it again, this time telling <code>curl</code> to trust <code>root.pem</code>.</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--cacert': { value: /^root\.pem$/, what: 'trust this root' } }, pos: [pos(url, 'the URL', 'what to call')] }),
+    'curl --cacert root.pem https://localhost:5443/', ['<code>--cacert</code> and the file.'], 'It works, and nothing about the system trust store changed.', { expect: /./ });
+
+  X['t6-who'] = { kind: 'sort', prompt: '<p>Who creates, who keeps, and who sees each item when you issue a certificate for a server?</p>',
+    groups: ['Stays with the server only', 'Stays with the CA only', 'Travels between them (not secret)'],
+    items: [
+      { t: 'The server\'s private key (<code>api.key</code>)', g: 0, why: 'It never has to leave the server.' },
+      { t: 'The root\'s private key (<code>root.key</code>)', g: 1, why: 'Whoever holds it can issue trusted certificates.' },
+      { t: 'The certificate signing request (<code>api.csr</code>)', g: 2, why: 'Public key and names: nothing secret.' },
+      { t: 'The signed certificate (<code>api.pem</code>)', g: 2, why: 'Certificates are public by design.' },
+      { t: 'The root certificate (<code>root.pem</code>)', g: 2, why: 'Clients need it to trust the chain, so it is handed out freely.' },
+    ] };
+  X['t6-order'] = { kind: 'order', prompt: '<p>Put the steps of issuing a server certificate in order.</p>',
+    items: ['The CA makes its key pair and a self-signed root certificate.', 'The server makes its own key pair.', 'The server builds a signing request from its public key and the names it wants.', 'The CA signs the request, setting the extensions it chooses.', 'The server installs the certificate with its private key.'] };
+  X['t6-flaws'] = { kind: 'inspect', prompt: '<p>A colleague issued a certificate for the API with this extensions file and says "it works in my browser". Find the problems.</p>',
+    artifact: 'basicConstraints = CA:TRUE\nkeyUsage = keyCertSign\nextendedKeyUsage = serverAuth\n# no subjectAltName; the subject is CN=api.internal',
+    parts: [
+      { kind: 'quiz', prompt: 'What is wrong with <code>basicConstraints</code> and <code>keyUsage</code>?', options: [{ t: 'A server certificate must not be a CA, and does not need <code>keyCertSign</code>. Anyone with its key could issue certificates.', ok: true, why: 'Leaf certificates are <code>CA:FALSE</code> with <code>digitalSignature</code>.' }, { t: 'Nothing, a CA certificate is more flexible.', ok: false, why: 'Flexibility is exactly the danger: the server key becomes a signing key.' }] },
+      { kind: 'quiz', prompt: 'What is wrong with the names?', options: [{ t: 'Without a subject alternative name, modern clients refuse the certificate: the common name is not used to identify a service.', ok: true, why: 'RFC 9525 says the common name must not be used.' }, { t: 'Nothing, the common name is enough.', ok: false, why: 'It was in the past. It is not now.' }] },
+    ] };
+
+  // ------------------------------------------------------------------ 07
+  drill('t7-get', '<p>List the <code>Certificate</code> objects in the namespace <code>todo</code>.</p>',
+    S('kubectl get', { what: 'list resources', need: { '--namespace': { value: /^todo$/, what: 'in this namespace' } }, pos: [pos(/^certificates?$/, 'the resource type', 'Certificate objects', 'certificate')] }),
+    'kubectl get certificate -n todo', ['The type is <code>certificate</code> and the namespace flag is <code>-n</code>.'], 'The <code>READY</code> column says whether cert-manager has issued it.', { noRun: 'needs a cluster' });
+  drill('t7-describe', '<p>Show the details and recent events of the Certificate <code>todo-tls</code> in the namespace <code>todo</code>. This is the first thing to run when issuance is stuck.</p>',
+    S('kubectl describe', { what: 'show details of one resource', need: { '--namespace': { value: /^todo$/, what: 'in this namespace' } }, pos: [pos(/^certificates?$/, 'the resource type', 'Certificate', 'certificate'), pos(/^todo-tls$/, 'the name', 'which Certificate', 'todo-tls')] }),
+    'kubectl describe certificate todo-tls -n todo', ['<code>describe</code>, the type, the name, and the namespace.'], 'The <b>Events</b> at the bottom show the order, the challenge and any error from the CA.', { noRun: 'needs a cluster' });
+  drill('t7-checkend', '<p>Ask <code>openssl</code> whether <code>api.pem</code> will <b>still be valid in 24 hours</b> (86400 seconds). It answers with its exit code, which is handy in a monitoring script.</p>',
+    S('openssl x509', { what: 'read a certificate', need: { '-in': { value: /^api\.pem$/, what: 'the certificate' }, '-noout': { value: false, what: 'no encoded certificate' }, '-checkend': { value: /^86400$/, what: 'will it still be valid this many seconds from now?' } } }),
+    'openssl x509 -in api.pem -noout -checkend 86400', ['The flag is <code>-checkend</code> with a number of seconds.'], 'Exit code 0 means "still valid then", 1 means "will have expired".', { expect: /Certificate will not expire/ });
+
+  X['t7-challenge'] = { kind: 'sort', prompt: '<p>Which ACME challenge fits?</p>',
+    groups: ['HTTP-01', 'DNS-01'],
+    items: [
+      { t: 'A normal public site on <code>todo.example.com</code>, reachable on port 80.', g: 0, why: 'Serve a file over HTTP. Simple.' },
+      { t: 'A wildcard certificate for <code>*.example.com</code>.', g: 1, why: 'Wildcards require the DNS challenge.' },
+      { t: 'An internal service with no route from the Internet, with a public domain name.', g: 1, why: 'The CA never has to reach the host: it reads a DNS record.' },
+      { t: 'A test server on a public IP address where you can serve a file but do not control the DNS zone.', g: 0, why: 'Serving the token over HTTP needs no DNS access.' },
+    ] };
+  X['t7-order'] = { kind: 'order', prompt: '<p>Put an ACME issuance in order.</p>',
+    items: ['The client asks the CA for a certificate for a name.', 'The CA sends a challenge with a random token.', 'The client publishes the token where only the name\'s owner could.', 'The CA checks the token from outside.', 'The client sends a CSR and receives the certificate.'] };
+  X['t7-days'] = { kind: 'quiz', prompt: '<p>From 15 March 2027 the longest a public TLS certificate may last is 100 days. Your team renews by hand each year with a calendar reminder. What is the right response?</p>',
+    options: [
+      { t: 'Renew every 100 days by hand and add a second reminder.', ok: false, why: 'It will be 47 days by 2029, and a reminder is one forgotten email from an outage.' },
+      { t: 'Automate it: ACME with cert-manager or the platform\'s own client, with monitoring on the expiry date.', ok: true, why: 'Automation is the only approach that survives the schedule.' },
+      { t: 'Buy a longer certificate from a different CA.', ok: false, why: 'The limit is the same for every publicly trusted CA.' },
+    ] };
+
+  // ------------------------------------------------------------------ 08
+  drill('t8-key', '<p>Make the client\'s private key: EC on P-256, written to <code>client.key</code>.</p>',
+    S('openssl genpkey', { what: 'generate a private key', need: Object.assign({ '-out': { value: /^client\.key$/, what: 'write it here' } }, EC) }),
+    'openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out client.key', ['As in step 06.'], '', { expect: /^$/ });
+  drill('t8-csr', '<p>Make a request <code>client.csr</code> for <code>client.key</code>, with the subject <code>/CN=todo-reporter</code>.</p>',
+    S('openssl req', { what: 'create a certificate request', need: { '-new': { value: false, what: 'a new request' }, '-key': { value: /^client\.key$/, what: 'the client\'s key' }, '-subj': { value: /^\/CN=todo-reporter$/, what: 'the service\'s name' }, '-out': { value: /^client\.csr$/, what: 'write the request here' } } }),
+    'openssl req -new -key client.key -subj "/CN=todo-reporter" -out client.csr', ['As in step 06; the name says <em>which service</em> it is.'], '', { expect: /^$/ });
+  drill('t8-sign', '<p>Sign <code>client.csr</code> with your root, using the extensions in <code>client.ext</code>, valid 90 days, writing <code>client.pem</code>.</p>',
+    S('openssl x509', { what: 'sign a request', need: { '-req': { value: false, what: 'the input is a request' }, '-in': { value: /^client\.csr$/, what: 'the request' }, '-CA': { value: /^root\.pem$/, what: 'the CA certificate' }, '-CAkey': { value: /^root\.key$/, what: 'the CA key' }, '-CAcreateserial': { value: false, required: false, what: 'create the serial file if there is none' }, '-days': { value: function (v) { return /^\d+$/.test(v) && +v <= 200; }, what: 'valid for this many days' }, '-extfile': { value: /^client\.ext$/, what: 'the extensions' }, '-out': { value: /^client\.pem$/, what: 'write it here' } } }),
+    'openssl x509 -req -in client.csr -CA root.pem -CAkey root.key -CAcreateserial -days 90 -extfile client.ext -out client.pem', ['The same command as step 06 with the client files.'], 'The certificate now carries <code>clientAuth</code>, which a server will check.', { expect: /subject=|Certificate request/ });
+  drill('t8-curl', '<p>Call <code>https://localhost:5443/</code>, trusting <code>root.pem</code> and presenting <code>client.pem</code> with its key <code>client.key</code>.</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--cacert': { value: /^root\.pem$/, what: 'trust this root' }, '--cert': { value: /^client\.pem$/, what: 'present this client certificate' }, '--key': { value: /^client\.key$/, what: 'and prove it with this key' } }, pos: [pos(url, 'the URL', 'what to call')] }),
+    'curl --cacert root.pem --cert client.pem --key client.key https://localhost:5443/', ['<code>--cert</code> and <code>--key</code> are the client\'s side.'], 'The server now knows this is <code>todo-reporter</code>.', { expect: /./, mtls: true });
+  drill('t8-nocert', '<p>Call it once <b>without</b> a client certificate, trusting <code>root.pem</code>, to see what a refused caller sees.</p>',
+    S('curl', { what: 'make an HTTP request', need: { '--cacert': { value: /^root\.pem$/, what: 'trust this root' }, '--cert': { required: false, forbidden: 'This step is about <em>not</em> presenting a certificate.' } }, pos: [pos(url, 'the URL', 'what to call')] }),
+    'curl --cacert root.pem https://localhost:5443/', ['Leave out the client flags.'], 'The server refuses with a TLS alert: <code>tlsv13 alert certificate required</code>. No HTTP response comes back.', { expectFail: /certificate required/, mtls: true });
+
+  X['t8-who'] = { kind: 'quiz', prompt: '<p>Service A calls the Todo API. The API must know <b>which service</b> is calling, and there is no user. Which fits best?</p>',
+    options: [
+      { t: 'Ask service A to send a username and password in a header.', ok: false, why: 'A shared secret in a configuration file can be copied, and the API cannot tell copies apart.' },
+      { t: 'Mutual TLS: service A has a certificate from the organisation\'s CA, and proves its private key.', ok: true, why: 'The key never leaves service A, and the certificate names it.' },
+      { t: 'Let anyone on the internal network call it.', ok: false, why: 'Network position is not identity.' },
+    ] };
+  X['t8-fail'] = { kind: 'quiz', prompt: '<p>The API requires a client certificate. A caller sends none. What does it get?</p>',
+    options: [
+      { t: 'An HTTP <code>401</code> with a <code>WWW-Authenticate</code> header.', ok: false, why: 'The refusal happens in TLS, below HTTP, so there is no HTTP response to carry a status code.' },
+      { t: 'A TLS alert (<code>certificate required</code>) and no HTTP response.', ok: true, why: 'With <code>RequireCertificate</code> the TLS layer refuses the connection.' },
+      { t: 'A <code>403</code> from the controller.', ok: false, why: 'The request never reaches a controller.' },
+    ] };
+  X['t8-proxy'] = { kind: 'quiz', prompt: '<p>A gateway in front of the API ends TLS. The API is configured to require client certificates, but every call now fails. Why?</p>',
+    options: [
+      { t: 'The API now sees a connection from the gateway, which has no client certificate for the caller. The gateway must authenticate the client and pass on the result.', ok: true, why: 'TLS terminates at the gateway, so the API cannot see the caller\'s certificate.' },
+      { t: 'Gateways cannot carry client certificates in any form.', ok: false, why: 'They can: they authenticate the client themselves, or pass it in a trusted header that only they can set.' },
+      { t: 'The root certificate expired.', ok: false, why: 'Nothing in the question points to that.' },
     ] };
 })();
 
@@ -2737,12 +8295,47 @@ window.IA = window.IA || { exercises: {} };
     if (saved.ok) root.classList.add('ok');
   }
 
+
+  // ------------------------------------------------------------------ command drills
+  function mountCmd(root) {
+    var id = root.getAttribute('data-cmd'), spec = (IA.cmds || {})[id], J = window.GACmdline;
+    if (!spec || !J) return;
+    var saved = store.get('ia-cmd:' + id) || {};
+    root.classList.add('ex', 'cmd'); root.innerHTML = '';
+    root.appendChild(el('div', 'ex-q', spec.prompt));
+    var ta = el('textarea', 'cmd-in mono'); ta.rows = spec.rows || 2; ta.spellcheck = false; ta.placeholder = 'Type the command here'; ta.value = saved.v || '';
+    ta.setAttribute('aria-label', 'Command');
+    var out = el('div', 'ex-out'), bar = el('div', 'lab-bar');
+    var bHint = button('Hint'), bSol = button('Show answer');
+    if ((spec.hints || []).length) bar.appendChild(bHint); bar.appendChild(bSol);
+    root.appendChild(ta); root.appendChild(bar); root.appendChild(out);
+    var hintBox = el('div', 'lab-hint'); hintBox.hidden = true; root.appendChild(hintBox);
+    var hints = 0;
+    function run() {
+      store.set('ia-cmd:' + id, { v: ta.value, ok: (store.get('ia-cmd:' + id) || {}).ok });
+      var r = J.judgeLine(ta.value, spec.specs);
+      root.classList.toggle('ok', r.ok);
+      if (r.empty) { out.innerHTML = ''; return; }
+      if (r.ok) {
+        out.innerHTML = '<p class="cmd-ok">✓ Correct. This is what each part does:</p><ul class="cmd-tok">' + r.tokens.map(function (t) { return '<li><code>' + esc(t.t) + '</code><span>' + t.why + '</span></li>'; }).join('') + '</ul>' + (spec.after ? '<p class="tool-note">' + spec.after + '</p>' : '');
+        var st = store.get('ia-cmd:' + id) || {}; st.ok = true; store.set('ia-cmd:' + id, st);
+        root.dispatchEvent(new CustomEvent('expass', { bubbles: true }));
+      } else out.innerHTML = '<ul class="cmd-bad">' + r.problems.map(function (p) { return '<li>' + p + '</li>'; }).join('') + '</ul>';
+    }
+    ta.addEventListener('input', function () { clearTimeout(ta._t); ta._t = setTimeout(run, 200); });
+    bHint.addEventListener('click', function () { var hs = spec.hints || []; hints = Math.min(hs.length, hints + 1); hintBox.hidden = false; hintBox.innerHTML = hs.slice(0, hints).map(function (h, i) { return '<p><b>Hint ' + (i + 1) + ' of ' + hs.length + '.</b> ' + h + '</p>'; }).join(''); });
+    bSol.addEventListener('click', function () { ta.value = spec.answer; run(); });
+    if (saved.ok) root.classList.add('ok');
+    run();
+  }
+
   // ------------------------------------------------------------------ a step's tick means: every exercise in it has been passed
+  function exOk(n) { var c = n.getAttribute('data-cmd'); return !!(store.get(c ? 'ia-cmd:' + c : 'ia-ex:' + n.getAttribute('data-ex')) || {}).ok; }
   function syncTicks() {
     $$('section[data-step]').forEach(function (sec) {
-      var box = $('input[data-done]', sec); var ex = $$('[data-ex]', sec);
+      var box = $('input[data-done]', sec); var ex = $$('[data-ex], [data-cmd]', sec);
       if (!box || !ex.length || $('[data-manual-tick]', sec)) return;
-      var done = ex.filter(function (n) { return (store.get('ia-ex:' + n.getAttribute('data-ex')) || {}).ok; }).length, all = done === ex.length;
+      var done = ex.filter(exOk).length, all = done === ex.length;
       box.disabled = true;
       var label = box.parentNode, note = $('.done-note', label);
       if (!note) { while (label.lastChild && label.lastChild !== box) label.removeChild(label.lastChild); note = el('span', 'done-note'); label.appendChild(note); }
@@ -2757,9 +8350,9 @@ window.IA = window.IA || { exercises: {} };
     var levels = {};
     $$('section[data-step]').forEach(function (sec) {
       var lvl = sec.getAttribute('data-level') || 'Other';
-      $$('[data-ex]', sec).forEach(function (n) {
+      $$('[data-ex], [data-cmd]', sec).forEach(function (n) {
         var o = levels[lvl] = levels[lvl] || { n: 0, t: 0 };
-        o.t++; if ((store.get('ia-ex:' + n.getAttribute('data-ex')) || {}).ok) o.n++;
+        o.t++; if (exOk(n)) o.n++;
       });
     });
     var keys = Object.keys(levels);
@@ -3013,10 +8606,11 @@ window.IA = window.IA || { exercises: {} };
 
   function init() {
     $$('[data-ex]').forEach(mountExercise);
+    $$('[data-cmd]').forEach(mountCmd);
     $$('[data-tool]').forEach(mountTool);
     renderProgress(); syncTicks();
   }
-  window.IAUI = { init: init, mountExercise: mountExercise, mountTool: mountTool, syncTicks: syncTicks, renderProgress: renderProgress };
+  window.IAUI = { init: init, mountExercise: mountExercise, mountCmd: mountCmd, mountTool: mountTool, syncTicks: syncTicks, renderProgress: renderProgress };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
 

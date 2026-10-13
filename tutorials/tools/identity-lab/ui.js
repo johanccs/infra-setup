@@ -118,12 +118,47 @@
     if (saved.ok) root.classList.add('ok');
   }
 
+
+  // ------------------------------------------------------------------ command drills
+  function mountCmd(root) {
+    var id = root.getAttribute('data-cmd'), spec = (IA.cmds || {})[id], J = window.GACmdline;
+    if (!spec || !J) return;
+    var saved = store.get('ia-cmd:' + id) || {};
+    root.classList.add('ex', 'cmd'); root.innerHTML = '';
+    root.appendChild(el('div', 'ex-q', spec.prompt));
+    var ta = el('textarea', 'cmd-in mono'); ta.rows = spec.rows || 2; ta.spellcheck = false; ta.placeholder = 'Type the command here'; ta.value = saved.v || '';
+    ta.setAttribute('aria-label', 'Command');
+    var out = el('div', 'ex-out'), bar = el('div', 'lab-bar');
+    var bHint = button('Hint'), bSol = button('Show answer');
+    if ((spec.hints || []).length) bar.appendChild(bHint); bar.appendChild(bSol);
+    root.appendChild(ta); root.appendChild(bar); root.appendChild(out);
+    var hintBox = el('div', 'lab-hint'); hintBox.hidden = true; root.appendChild(hintBox);
+    var hints = 0;
+    function run() {
+      store.set('ia-cmd:' + id, { v: ta.value, ok: (store.get('ia-cmd:' + id) || {}).ok });
+      var r = J.judgeLine(ta.value, spec.specs);
+      root.classList.toggle('ok', r.ok);
+      if (r.empty) { out.innerHTML = ''; return; }
+      if (r.ok) {
+        out.innerHTML = '<p class="cmd-ok">✓ Correct. This is what each part does:</p><ul class="cmd-tok">' + r.tokens.map(function (t) { return '<li><code>' + esc(t.t) + '</code><span>' + t.why + '</span></li>'; }).join('') + '</ul>' + (spec.after ? '<p class="tool-note">' + spec.after + '</p>' : '');
+        var st = store.get('ia-cmd:' + id) || {}; st.ok = true; store.set('ia-cmd:' + id, st);
+        root.dispatchEvent(new CustomEvent('expass', { bubbles: true }));
+      } else out.innerHTML = '<ul class="cmd-bad">' + r.problems.map(function (p) { return '<li>' + p + '</li>'; }).join('') + '</ul>';
+    }
+    ta.addEventListener('input', function () { clearTimeout(ta._t); ta._t = setTimeout(run, 200); });
+    bHint.addEventListener('click', function () { var hs = spec.hints || []; hints = Math.min(hs.length, hints + 1); hintBox.hidden = false; hintBox.innerHTML = hs.slice(0, hints).map(function (h, i) { return '<p><b>Hint ' + (i + 1) + ' of ' + hs.length + '.</b> ' + h + '</p>'; }).join(''); });
+    bSol.addEventListener('click', function () { ta.value = spec.answer; run(); });
+    if (saved.ok) root.classList.add('ok');
+    run();
+  }
+
   // ------------------------------------------------------------------ a step's tick means: every exercise in it has been passed
+  function exOk(n) { var c = n.getAttribute('data-cmd'); return !!(store.get(c ? 'ia-cmd:' + c : 'ia-ex:' + n.getAttribute('data-ex')) || {}).ok; }
   function syncTicks() {
     $$('section[data-step]').forEach(function (sec) {
-      var box = $('input[data-done]', sec); var ex = $$('[data-ex]', sec);
+      var box = $('input[data-done]', sec); var ex = $$('[data-ex], [data-cmd]', sec);
       if (!box || !ex.length || $('[data-manual-tick]', sec)) return;
-      var done = ex.filter(function (n) { return (store.get('ia-ex:' + n.getAttribute('data-ex')) || {}).ok; }).length, all = done === ex.length;
+      var done = ex.filter(exOk).length, all = done === ex.length;
       box.disabled = true;
       var label = box.parentNode, note = $('.done-note', label);
       if (!note) { while (label.lastChild && label.lastChild !== box) label.removeChild(label.lastChild); note = el('span', 'done-note'); label.appendChild(note); }
@@ -138,9 +173,9 @@
     var levels = {};
     $$('section[data-step]').forEach(function (sec) {
       var lvl = sec.getAttribute('data-level') || 'Other';
-      $$('[data-ex]', sec).forEach(function (n) {
+      $$('[data-ex], [data-cmd]', sec).forEach(function (n) {
         var o = levels[lvl] = levels[lvl] || { n: 0, t: 0 };
-        o.t++; if ((store.get('ia-ex:' + n.getAttribute('data-ex')) || {}).ok) o.n++;
+        o.t++; if (exOk(n)) o.n++;
       });
     });
     var keys = Object.keys(levels);
@@ -394,9 +429,10 @@
 
   function init() {
     $$('[data-ex]').forEach(mountExercise);
+    $$('[data-cmd]').forEach(mountCmd);
     $$('[data-tool]').forEach(mountTool);
     renderProgress(); syncTicks();
   }
-  window.IAUI = { init: init, mountExercise: mountExercise, mountTool: mountTool, syncTicks: syncTicks, renderProgress: renderProgress };
+  window.IAUI = { init: init, mountExercise: mountExercise, mountCmd: mountCmd, mountTool: mountTool, syncTicks: syncTicks, renderProgress: renderProgress };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

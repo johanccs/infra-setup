@@ -7,7 +7,7 @@ const path = require('node:path');
 const os = require('node:os');
 const net = require('node:net');
 const { spawn } = require('node:child_process');
-const { check, skip, summary, run, get, sleep } = require('./lib.js');
+const { check, skip, summary, run, get, sleep, find, yamlDocs } = require('./lib.js');
 
 const T = path.join(__dirname, '..');
 const PAGE = path.join(T, 'docs', 'identity-and-access-tutorial.html');
@@ -249,9 +249,7 @@ function cookieTests() {
 // Load the exercises exactly as the page has them and prove every one can be passed and can be failed.
 function exerciseTests(html) {
   const E = require(path.join(LAB, 'engine.js'));
-  const reg = {};
-  const sandbox = { window: { IA: { exercises: reg } } };
-  for (const f of fs.readdirSync(path.join(LAB, 'exercises')).filter((x) => /\.js$/.test(x)).sort()) new (require('node:vm').Script)(read(path.join(LAB, 'exercises', f))).runInNewContext(sandbox);
+  const reg = loadExercises().exercises;
   const ids = Object.keys(reg);
   check(ids.length > 0, `the exercises load (${ids.length})`);
   const used = [...html.matchAll(/data-ex="([^"]+)"/g)].map((m) => m[1]);
@@ -274,6 +272,183 @@ function exerciseTests(html) {
   const quizzes = ids.filter((i) => reg[i].kind === 'quiz' && reg[i].options.length >= 3);
   const longest = quizzes.filter((i) => { const o = reg[i].options; const lens = o.map((x) => x.t.length); const max = Math.max(...lens); return o.filter((x) => x.ok).every((x) => x.t.length === max); });
   check(longest.length <= Math.ceil(quizzes.length * 0.6), 'the right answer is not always the longest option', `${longest.length} of ${quizzes.length} quizzes`);
+}
+
+// ---- the command drills: the answer is accepted, broken versions are not, and the answer really runs
+function loadExercises() {
+  const IA = { exercises: {}, cmds: {}, cmdFlags: JSON.parse(read(path.join(LAB, 'vendor', 'cmd-flags.json'))) };
+  const win = { IA, IACmdSpec: require(path.join(LAB, 'cmdspec.js')) };
+  // run each exercise file in this realm (a separate vm context would make its regular expressions foreign objects)
+  for (const f of fs.readdirSync(path.join(LAB, 'exercises')).filter((n) => /\.js$/.test(n)).sort()) new Function('window', read(path.join(LAB, 'exercises', f)))(win);
+  return IA;
+}
+const unesc = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+function codeBlock(html, caption) {
+  const m = new RegExp('<figcaption>' + caption.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '</figcaption><pre><code>([\\s\\S]*?)</code></pre>').exec(html);
+  return m ? unesc(m[1]) : null;
+}
+function drillJudgeTests() {
+  const J = require(path.join(T, 'tools', 'shared', 'cmdline.js'));
+  const IA = loadExercises();
+  const ids = Object.keys(IA.cmds);
+  check(ids.length >= 20, `command drills load (${ids.length})`);
+  const bad = [];
+  for (const id of ids) {
+    const d = IA.cmds[id], specs = Array.isArray(d.specs) ? d.specs : [d.specs];
+    const r = J.judgeLine(d.answer, d.specs);
+    if (!r.ok) { bad.push(`${id}: its own answer is rejected: ${r.problems.join(' ')}`); continue; }
+    const words = J.shellSplit(d.answer).words;
+    const join = (w) => w.map((x) => (/^[\w@%+=:,./-]+$/.test(x) ? x : `'${x.replace(/'/g, "'\\''")}'`)).join(' ');
+    // wrong tool
+    if (J.judgeLine(join(['wget', ...words.slice(1)]), d.specs).ok) bad.push(`${id}: accepted with the wrong tool`);
+    // each required flag removed
+    const spec = specs[0];
+    for (const [name, def] of Object.entries(spec.flags)) {
+      if (!def.required) continue;
+      const i = words.findIndex((w) => w === name || (def.alias || []).includes(w));
+      if (i < 0) continue;
+      const cut = def.value === false ? 1 : 2;
+      const w2 = words.slice(0, i).concat(words.slice(i + cut));
+      if (J.judgeLine(join(w2), d.specs).ok) bad.push(`${id}: accepted without ${name}`);
+    }
+    // a plain wrong value for each flag that checks its value
+    for (const [name, def] of Object.entries(spec.flags)) {
+      if (!def.required || def.value === false || def.value === true || def.value === undefined) continue;
+      const i = words.indexOf(name); if (i < 0) continue;
+      const w2 = words.slice(); w2[i + 1] = 'wrong-value.xyz';
+      if (J.judgeLine(join(w2), d.specs).ok) bad.push(`${id}: accepted a wrong value for ${name}`);
+    }
+    if (!d.prompt || !d.hints) bad.push(`${id}: missing prompt or hints`);
+  }
+  check(bad.length === 0, 'every drill: its answer is accepted, and the wrong tool, a missing required flag and a wrong value are rejected', bad.join('\n'));
+}
+
+function drillRunTests(html) {
+  const IA = loadExercises();
+  const have = (b) => run('sh', ['-c', 'command -v ' + b]).status === 0;
+  if (!have('openssl') || !have('curl')) return skip('openssl or curl is not installed: the drill answers were not run');
+  if (net.connect && require('node:child_process').spawnSync('sh', ['-c', 'ss -ltn 2>/dev/null | grep -q ":5443 "']).status === 0) return skip('port 5443 is already in use: the drill answers were not run');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ia-drill-'));
+  const sh = (cmd, o = {}) => run('sh', ['-c', cmd], { cwd: dir, input: '', timeout: 30000, ...o });
+  const fails = [];
+  const exec = (id) => {
+    const d = IA.cmds[id], r = sh(d.answer), out = (r.stdout || '') + (r.stderr || '');
+    const rn = d.run || {};
+    if (rn.noRun) return;
+    if (rn.expectFail) { if (r.status === 0 || !rn.expectFail.test(out)) fails.push(`${id}: expected a failure matching ${rn.expectFail}, got exit ${r.status}: ${out.slice(0, 200)}`); return; }
+    if (r.status !== 0) { fails.push(`${id}: exit ${r.status}: ${out.slice(0, 300)}`); return; }
+    if (rn.expect && !rn.expect.test(out)) fails.push(`${id}: output does not match ${rn.expect}: ${out.slice(0, 300)}`);
+  };
+  const apiExt = codeBlock(html, 'api.ext'), clientExt = codeBlock(html, 'client.ext');
+  if (!apiExt || !clientExt) { fails.push('the page does not contain api.ext and client.ext'); }
+  const startServer = (cmd) => new Promise((resolve) => {
+    const p = spawn('sh', ['-c', 'exec ' + cmd], { cwd: dir, stdio: 'ignore' });   // exec: killing p kills the server itself, not just the shell
+    const t0 = Date.now();
+    (function wait() { const s = net.connect(5443, '127.0.0.1'); s.on('connect', () => { s.destroy(); resolve(p); }); s.on('error', () => { if (Date.now() - t0 > 8000) resolve(p); else setTimeout(wait, 150); }); })();
+  });
+  return (async () => {
+    for (const id of ['t6-rootkey', 't6-rootcert', 't6-apikey', 't6-csr']) exec(id);
+    fs.writeFileSync(path.join(dir, 'api.ext'), apiExt || '');
+    for (const id of ['t6-sign', 't6-inspect', 't7-checkend']) exec(id);
+    let srv = await startServer(IA.cmds['t6-serve'].answer);
+    try {
+      for (const id of ['t6-curl-fail', 't6-curl-ok', 't4-curlv', 't4-tls13', 't4-tls12', 't4-sclient', 't4-sni', 't5-text', 't5-dates', 't5-san', 't5-verify', 't5-showcerts']) exec(id);
+    } finally { srv.kill(); }
+    fs.writeFileSync(path.join(dir, 'client.ext'), clientExt || '');
+    for (const id of ['t8-key', 't8-csr', 't8-sign']) exec(id);
+    srv = await startServer('openssl s_server -accept 5443 -cert api.pem -key api.key -CAfile root.pem -Verify 1 -verify_return_error -www');
+    try {
+      for (const id of ['t8-curl', 't8-nocert']) exec(id);
+      // a client certificate from some other CA is refused too
+      sh('openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout other.key -out other.pem -subj /CN=other -days 5 -addext extendedKeyUsage=clientAuth');
+      const wrong = sh('curl -sS --cacert root.pem --cert other.pem --key other.key https://localhost:5443/');
+      if (wrong.status === 0) fails.push('a client certificate from another CA was accepted');
+    } finally { srv.kill(); }
+    check(fails.length === 0, 'the drills\' answers run for real with openssl and curl and give the output the page describes', fails.join('\n'));
+    const ran = Object.keys(IA.cmds).filter((i) => !(IA.cmds[i].run || {}).noRun).length;
+    check(ran >= 18, `${ran} drill answers were run`);
+    // the message the lesson quotes
+    const m = sh('curl --cacert root.pem https://127.0.0.2:5443/');
+    fs.rmSync(dir, { recursive: true, force: true });
+  })();
+}
+
+// ---- the Kubernetes manifests and the C# the lessons show
+function manifestTests(html) {
+  const kc = find('kubeconform');
+  const files = { 'cluster-issuer.yaml': codeBlock(html, 'infra/cert-manager/cluster-issuer.yaml'), 'gateway.yaml': codeBlock(html, 'charts/todo/templates/gateway.yaml (the Gateway part)'), 'certificate.yaml': codeBlock(html, 'certificate.yaml (what cert-manager creates for you)') };
+  check(Object.values(files).every(Boolean), 'the page shows the ClusterIssuer, Gateway and Certificate manifests');
+  if (!kc) return skip('kubeconform is not installed: the manifests were not checked against their schemas');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ia-k8s-'));
+  for (const [n, c] of Object.entries(files)) fs.writeFileSync(path.join(dir, n), c || '');
+  const crds = 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json';
+  const v = run(kc, ['-strict', '-summary', '-schema-location', 'default', '-schema-location', crds, ...Object.keys(files).map((n) => path.join(dir, n))]);
+  const probe = /could not find schema|failed downloading|Retrieving|connection/i.test(v.stdout + v.stderr);
+  if (v.status !== 0 && probe) skip('the CRD schemas could not be fetched: ' + (v.stdout + v.stderr).split('\n')[0]);
+  else check(v.status === 0 && /Valid: 3/.test(v.stdout), 'ClusterIssuer, Gateway and Certificate are valid against the cert-manager and Gateway API schemas', v.stdout + v.stderr);
+  // the Gateway has what cert-manager needs (docs: hostname, tls.mode Terminate, certificateRefs, issuer annotation)
+  let docs; try { docs = yamlDocs(files['gateway.yaml']); } catch (e) { docs = null; }
+  if (docs) {
+    const g = docs[0], l = (g.spec.listeners || []).find((x) => x.protocol === 'HTTPS') || {};
+    check(!!(g.metadata.annotations || {})['cert-manager.io/cluster-issuer'] && l.hostname && l.tls && l.tls.mode === 'Terminate' && l.tls.certificateRefs && l.tls.certificateRefs[0].name, 'the Gateway has the issuer annotation and an HTTPS listener with hostname, tls.mode Terminate and a certificateRefs Secret');
+  } else skip('python yaml is not available: the Gateway fields were not inspected');
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+async function kestrelTests(html) {
+  const dotnet = find('dotnet'), have = (b) => run('sh', ['-c', 'command -v ' + b]).status === 0;
+  if (!dotnet || !have('openssl') || !have('curl')) return skip('dotnet, openssl or curl is missing: the Kestrel snippets were not built and run');
+  const s6 = codeBlock(html, 'src/api/Program.cs (add)'), s8 = codeBlock(html, 'src/api/Program.cs (replace the Kestrel lines from step 06)');
+  if (!s6 || !s8) return check(false, 'the page shows both Kestrel snippets');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ia-kestrel-'));
+  const sh = (cmd, o = {}) => run('sh', ['-c', cmd], { cwd: dir, timeout: 240000, input: '', env: { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_NOLOGO: '1', DOTNET_ROOT: path.dirname(dotnet) }, ...o });
+  const r0 = sh(`${dotnet} new web -n kapp -o app --no-restore`);
+  if (r0.status !== 0) return skip('dotnet new web failed: ' + (r0.stderr || r0.stdout).slice(0, 120));
+  const pkg = (codeBlock(html, 'bash: in src/api/') || '').match(/dotnet add package (\S+) --version (\S+)/);
+  if (!pkg) return check(false, 'the page tells the reader to add the certificate authentication package, with a version');
+  const ap = sh(`${dotnet} add app package ${pkg[1]} --version ${pkg[2]}`);
+  if (ap.status !== 0) return check(false, 'the package named on the page can be added: ' + pkg[1] + ' ' + pkg[2], ap.stdout + ap.stderr);
+  // PKI for the test
+  const ssl = (a) => { const r = run('openssl', a, { cwd: dir }); if (r.status !== 0) throw new Error(r.stderr); };
+  ssl(['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-keyout', 'root.key', '-out', 'root.pem', '-days', '30', '-subj', '/CN=Lab Root', '-addext', 'basicConstraints=critical,CA:TRUE', '-addext', 'keyUsage=critical,keyCertSign']);
+  fs.writeFileSync(path.join(dir, 'api.ext'), codeBlock(html, 'api.ext')); fs.writeFileSync(path.join(dir, 'client.ext'), codeBlock(html, 'client.ext'));
+  for (const [n, subj, ext] of [['api', '/CN=localhost', 'api.ext'], ['client', '/CN=todo-reporter', 'client.ext']]) {
+    ssl(['req', '-new', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-keyout', n + '.key', '-out', n + '.csr', '-subj', subj]);
+    ssl(['x509', '-req', '-in', n + '.csr', '-CA', 'root.pem', '-CAkey', 'root.key', '-CAcreateserial', '-days', '30', '-extfile', ext, '-out', n + '.pem']);
+  }
+  const program = (kestrel, mtls) => `using System.Security.Cryptography.X509Certificates;
+using Microsoft.AspNetCore.Authentication.Certificate;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
+var builder = WebApplication.CreateBuilder(args);
+${kestrel}
+${mtls ? '' : 'builder.Services.AddAuthentication().AddCookie(); builder.Services.AddAuthorization();'}
+var app = builder.Build();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapGet("/", (HttpContext c) => "hello " + (c.User.Identity?.Name ?? "anonymous")).RequireAuthorization(${mtls ? '' : ''});
+app.Run();
+`;
+  const results = [];
+  for (const [label, snippet, mtls] of [['server certificate (step 06)', s6, false], ['client certificate (step 08)', s8, true]]) {
+    fs.writeFileSync(path.join(dir, 'app', 'Program.cs'), program(snippet, mtls));
+    const b = sh(`${dotnet} build app -c Release -warnaserror -nologo -v q`);
+    if (b.status !== 0) { results.push(`${label}: build failed: ${(b.stdout + b.stderr).split('\n').filter((l) => /error/.test(l)).slice(0, 3).join(' | ')}`); continue; }
+    const app = spawn('sh', ['-c', `exec ${dotnet} app/bin/Release/net10.0/kapp.dll`], { cwd: dir, stdio: 'ignore', env: { ...process.env, ASPNETCORE_URLS: '', DOTNET_ROOT: path.dirname(dotnet) } });
+    try {
+      let up = false; for (let i = 0; i < 60 && !up; i++) { up = run('curl', ['-s', '-o', os.devNull, '--cacert', path.join(dir, 'root.pem'), '--cert', path.join(dir, 'client.pem'), '--key', path.join(dir, 'client.key'), 'https://localhost:5443/'], { timeout: 5000 }).status !== 7; if (!up) await sleep(500); }
+      const base = ['-sS', '--cacert', path.join(dir, 'root.pem')];
+      const plain = run('curl', [...base, '-o', os.devNull, '-w', '%{http_code}', 'https://localhost:5443/']);
+      const withCert = run('curl', [...base, '--cert', path.join(dir, 'client.pem'), '--key', path.join(dir, 'client.key'), '-w', ' [%{http_code}]', 'https://localhost:5443/']);
+      if (!mtls) { if (!/^(401|302)$/.test(plain.stdout.trim())) results.push(`${label}: expected the server to answer over HTTPS (401 or 302), got "${plain.stdout}" ${plain.stderr.slice(0, 120)}`); }
+      else {
+        if (plain.status === 0) results.push(`${label}: a call with no client certificate was answered (${plain.stdout})`);
+        if (!/todo-reporter/.test(withCert.stdout) || !/\[200\]/.test(withCert.stdout)) results.push(`${label}: with the certificate expected "hello …todo-reporter" [200], got ${withCert.stdout} ${withCert.stderr.slice(0, 160)}`);
+      }
+    } finally { app.kill(); await sleep(300); }
+  }
+  check(results.length === 0, 'the Kestrel snippets build with no warnings and behave as the lessons say (HTTPS served; a client certificate required and used as the identity)', results.join('\n'));
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 // ---- the certificate reader agrees with OpenSSL on certificates OpenSSL made
@@ -471,7 +646,11 @@ async function main() {
   cookieTests();
   ledger();
   engineTests();
+  drillJudgeTests();
   await cryptoTests();
+  await drillRunTests(typeof html === 'string' ? html : read(PAGE));
+  manifestTests(typeof html === 'string' ? html : read(PAGE));
+  await kestrelTests(typeof html === 'string' ? html : read(PAGE));
   await certTests();
   await browserTests();
   process.exit(summary());

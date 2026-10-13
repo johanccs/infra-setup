@@ -1,0 +1,610 @@
+    <!-- ============ 4 ============ -->
+    <section class="step" id="tls" data-step data-level="Intermediate">
+      <div class="step-head"><span class="num">04</span><h2>HTTPS and TLS: the private pipe</h2><span class="lvl-chip">Intermediate</span></div>
+      <p class="goal"><b>Goal:</b> describe the TLS 1.3 handshake step by step, read the TLS lines of <code>curl -v</code> and <code>openssl s_client</code>, and say what TLS does <em>not</em> protect.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Everything else in this module rides on a connection that someone could be watching or changing. TLS is what makes that connection safe enough to carry passwords, cookies and tokens. You will meet it as a padlock, as <code>https://</code>, and as the first cause of "it works on my machine".</p>
+        <p>This lesson builds on step 02 (hashes, key pairs, signatures) and step 01 (who are you?). The certificate itself is step 05.</p>
+      </div>
+
+      <div class="what-is"><h4>What is it? TLS</h4><dl>
+        <dt>What it is</dt><dd>Transport Layer Security: a protocol that lets two programs talk over the Internet in a way designed to prevent eavesdropping, tampering and message forgery (RFC 9846). The current version is TLS 1.3.</dd>
+        <dt>The problem it solves</dt><dd>A request crosses many machines owned by strangers. Without TLS any of them can read it, change it, or pretend to be the server.</dd>
+        <dt>Everyday comparison</dt><dd>A sealed armoured van with a guard who checks the receiving office's identity papers before the doors open. Contents, seals and addressee are all protected.</dd>
+        <dt>What it is not</dt><dd>Not protection once the data arrives: the server sees everything in clear. Not proof that the <em>site</em> is honest, only that you are talking to whoever holds the certificate's key. Not the same as a login.</dd>
+        <dt>Where you meet it</dt><dd>Every <code>https://</code> address, database connections, service-to-service calls, email servers.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? HTTPS</h4><dl>
+        <dt>What it is</dt><dd>Ordinary HTTP sent through a TLS connection. The <code>https</code> scheme names a server that can set up a TLS connection secured for HTTP (RFC 9110).</dd>
+        <dt>The problem it solves</dt><dd>The same as TLS, for the web: the page, the cookies and the form data are private and unchanged.</dd>
+        <dt>Everyday comparison</dt><dd>The letter is the same letter. Only the envelope changed.</dd>
+        <dt>What it is not</dt><dd>Not a different version of HTTP, and not a guarantee that the page is safe to use.</dd>
+        <dt>Where you meet it</dt><dd>The address bar, <code>curl https://…</code>, the <code>Secure</code> cookie attribute from step 03.</dd>
+      </dl></div>
+
+      <h3>What TLS promises, and the versions</h3>
+      <ul>
+        <li><b>Confidentiality:</b> nobody on the path can read the data.</li>
+        <li><b>Integrity:</b> nobody on the path can change it without detection.</li>
+        <li><b>Authentication of the server</b> (and, optionally, of the client): you know who is at the other end, by their certificate.</li>
+      </ul>
+      <p>TLS 1.0 and 1.1 are formally deprecated (RFC 8996) and must not be used. TLS 1.2 is still met everywhere. TLS 1.3 is specified in <b>RFC 9846</b> (July 2026), which replaced RFC 8446 and also obsoletes the TLS 1.2 specification, while keeping a few optional changes that TLS 1.2 implementations can adopt (its section 1.4).</p>
+      <p>What changed in 1.3, in the RFC's own list (section 1.3): only modern encryption (AEAD) remains; <b>every key exchange now provides forward secrecy</b>, because static RSA and Diffie-Hellman suites were removed; <b>all handshake messages after the ServerHello are encrypted</b>; the key derivation was redesigned around HKDF; and the handshake got shorter.</p>
+
+      <h3>The handshake</h3>
+      <p>Before any HTTP is sent, the two sides agree on keys. Follow the messages of RFC 9846's full handshake, in order:</p>
+      <figure class="anim" aria-label="Animated diagram: the TLS 1.3 handshake between a client and a server">
+        <div class="anim-stage"><svg viewBox="0 0 760 420" role="img" aria-label="The client sends ClientHello with a key share. The server answers ServerHello with its key share, then, encrypted, EncryptedExtensions, Certificate, CertificateVerify and Finished. The client sends Finished. Then application data flows in both directions.">
+          <rect class="a-zone" x="8" y="8" width="744" height="404" rx="12"/>
+          <g class="a-node on" data-k="cl"><rect x="40" y="20" width="150" height="44" rx="8"/><text class="a-t" x="115" y="48">Client</text></g>
+          <g class="a-node on" data-k="sv"><rect x="570" y="20" width="150" height="44" rx="8"/><text class="a-t" x="645" y="48">Server</text></g>
+          <path class="a-route" d="M115 64 V400" stroke-dasharray="4 5"/>
+          <path class="a-route" d="M645 64 V400" stroke-dasharray="4 5"/>
+          <path class="a-route" data-k="m1" d="M115 100 H645"/><text class="a-lbl" data-k="m1" x="380" y="92"><tspan class="h">ClientHello</tspan> + key_share, supported_versions, server_name →</text>
+          <path class="a-route" data-k="m2" d="M645 140 H115"/><text class="a-lbl" data-k="m2" x="380" y="132">← <tspan class="h">ServerHello</tspan> + key_share</text>
+          <path class="a-route" data-k="m3" d="M645 180 H115"/><text class="a-lbl" data-k="m3" x="380" y="172">← {EncryptedExtensions}</text>
+          <path class="a-route" data-k="m4" d="M645 218 H115"/><text class="a-lbl" data-k="m4" x="380" y="210">← {<tspan class="h">Certificate</tspan>}   the server's certificate chain</text>
+          <path class="a-route" data-k="m5" d="M645 256 H115"/><text class="a-lbl" data-k="m5" x="380" y="248">← {<tspan class="h">CertificateVerify</tspan>}   a signature made with the private key</text>
+          <path class="a-route" data-k="m6" d="M645 294 H115"/><text class="a-lbl" data-k="m6" x="380" y="286">← {<tspan class="h">Finished</tspan>}</text>
+          <path class="a-route" data-k="m7" d="M115 332 H645"/><text class="a-lbl" data-k="m7" x="380" y="324">{<tspan class="h">Finished</tspan>} →</text>
+          <path class="a-route" data-k="m8" d="M115 376 H645"/><text class="a-lbl" data-k="m8" x="380" y="368">[ application data: the HTTP request and response ] ⇄</text>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <text class="a-badge start" data-k="lock" x="40" y="404">🔒 encrypted from here</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "m1", "off": "m2 m3 m4 m5 m6 m7 m8 lock", "path": [[115, 100], [645, 100]], "text": "<b>1. ClientHello.</b> The client says which versions, key exchange groups and signature algorithms it supports, sends its half of a key exchange (the key share), and names the server it wants (<code>server_name</code>)."},
+          {"on": "m1 m2", "off": "m3 m4 m5 m6 m7 m8", "good": "lock", "path": [[645, 140], [115, 140]], "text": "<b>2. ServerHello.</b> The server picks the parameters and sends its key share. Both sides can now compute the same secret keys, which nobody who watched can. Everything from here on is encrypted."},
+          {"on": "m1 m2 m3 m4 m5 m6", "off": "m7 m8", "good": "lock", "path": [[645, 218], [115, 218]], "text": "<b>3. The server proves itself.</b> It sends its certificate, then a signature over the whole handshake made with the certificate's private key (<code>CertificateVerify</code>), then <code>Finished</code>. Only the real key holder can produce that signature."},
+          {"on": "m1 m2 m3 m4 m5 m6 m7", "off": "m8", "good": "lock", "path": [[115, 332], [645, 332]], "text": "<b>4. The client checks and finishes.</b> It validates the certificate chain, the name and the signature (step 05), then sends its own <code>Finished</code>."},
+          {"on": "m1 m2 m3 m4 m5 m6 m7 m8", "good": "lock m8", "path": [[115, 376], [645, 376]], "text": "<b>5. Application data.</b> The HTTP request and response travel inside the encrypted connection, with keys that this connection alone derived."}
+        ]</script>
+      </figure>
+      <p>In a plain sentence: both sides do a key exchange in the open (using key shares, so nobody who watches can compute the secret), the server proves it owns the certificate by signing the conversation, and everything after that is encrypted and checked.</p>
+
+      <details class="lbl"><summary>Line by line: what you see in <code>openssl s_client</code></summary><div><dl>
+        <dt><code>Protocol: TLSv1.3</code></dt><dd>The version that was negotiated.</dd>
+        <dt><code>Cipher is TLS_AES_256_GCM_SHA384</code></dt><dd>A TLS 1.3 cipher suite names only the record encryption (AES-256 in GCM mode) and the hash used for key derivation (SHA-384). RFC 9846 requires <code>TLS_AES_128_GCM_SHA256</code> and recommends <code>TLS_AES_256_GCM_SHA384</code> and <code>TLS_CHACHA20_POLY1305_SHA256</code>.</dd>
+        <dt><code>Negotiated TLS1.3 group: X25519MLKEM768</code></dt><dd>The key exchange used a <em>hybrid</em>: X25519 (classical) combined with ML-KEM-768 (post-quantum), so a future quantum computer cannot read recorded traffic. RFC 10024 (August 2026) defines this group. Your <code>curl</code> and OpenSSL print it if both sides support it.</dd>
+        <dt><code>Peer signature type: ecdsa_secp256r1_sha256</code></dt><dd>How the server signed <code>CertificateVerify</code>: ECDSA on curve P-256 with SHA-256.</dd>
+        <dt><code>Verify return code: 0 (ok)</code></dt><dd>The certificate chain was checked against the trust store and passed. Other codes name the failure (step 05).</dd>
+      </dl></div></details>
+
+      <h3>Details that matter</h3>
+      <ul>
+        <li><b>Forward secrecy.</b> The keys come from a fresh key exchange per connection, so stealing the server's long-term private key later does not unlock recorded traffic.</li>
+        <li><b>Session resumption and 0-RTT.</b> A client can resume a past session and even send data in the first flight ("early data"). That data can be <em>replayed</em> by an attacker, so it is only safe for requests that change nothing. RFC 9846 has a whole section on this (section 8).</li>
+        <li><b>The server name is visible.</b> <code>server_name</code> (SNI) travels in clear in the ClientHello, so anyone on the path learns which site you visit, even though the content is encrypted. <b>Encrypted Client Hello</b> (RFC 9849, March 2026) encrypts the ClientHello under a key the server publishes.</li>
+        <li><b>HSTS.</b> A server can tell browsers "only ever use HTTPS for this site" with <code>Strict-Transport-Security: max-age=…</code> (RFC 6797), so a first plain-HTTP request cannot be downgraded.</li>
+        <li><b>Where TLS ends.</b> In the Todo platform the gateway terminates TLS and talks plain HTTP to the pods behind it unless you add more. TLS protects the part of the path it covers, and no more.</li>
+      </ul>
+
+      <h3>See it yourself</h3>
+      <p>These commands connect to the API you will run over HTTPS in step 06 (<code>https://localhost:5443</code>, certificate in <code>api.pem</code>, signed by <code>root.pem</code>). Type each one; the page checks the flags against the real tool.</p>
+      <div data-cmd="t4-curlv"></div>
+      <div data-cmd="t4-tls13"></div>
+      <div data-cmd="t4-sclient"></div>
+      <div data-cmd="t4-sni"></div>
+      <div data-cmd="t4-tls12"></div>
+
+      <h3>Practice</h3>
+      <div data-ex="t4-order"></div>
+      <div data-ex="t4-hides"></div>
+      <div data-ex="t4-0rtt"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>TLS gives confidentiality, integrity and server authentication. HTTPS is HTTP over TLS.</li>
+        <li>The handshake exchanges key shares, then the server proves itself with a certificate and a signature. After the ServerHello everything is encrypted.</li>
+        <li>TLS 1.3 gives forward secrecy on every connection. The server name is still visible unless Encrypted Client Hello is used.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 5 ============ -->
+    <section class="step" id="certs" data-step data-level="Intermediate">
+      <div class="step-head"><span class="num">05</span><h2>Certificates: tying a key to a name</h2><span class="lvl-chip">Intermediate</span></div>
+      <p class="goal"><b>Goal:</b> read any certificate, explain the chain of trust, and diagnose the usual certificate errors.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>TLS proves that the server holds a private key. That would be worthless if you did not know whose key it is. A certificate is the answer: a signed statement that a public key belongs to a name. Most TLS problems in real life are certificate problems: expired, wrong name, missing intermediate, untrusted root.</p>
+        <p>This lesson builds on step 02 (signatures) and step 04 (where the certificate appears in the handshake).</p>
+      </div>
+
+      <div class="what-is"><h4>What is it? A certificate</h4><dl>
+        <dt>What it is</dt><dd>A signed document that binds a public key to a name (and some rules). Internet certificates use the X.509 format, profiled in RFC 5280.</dd>
+        <dt>The problem it solves</dt><dd>A public key is just numbers. Without a certificate you cannot tell whether a key belongs to your bank or to someone in the middle.</dd>
+        <dt>Everyday comparison</dt><dd>A passport: a document with your name and photo, stamped by an authority that others trust, with an expiry date.</dd>
+        <dt>What it is not</dt><dd>Not secret: a certificate is public by design. It is not the private key. And it does not vouch that the site is honest, only that the key belongs to that name.</dd>
+        <dt>Where you meet it</dt><dd>Every HTTPS site, API gateways, mutual TLS between services, code signing, container registries.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? A certificate authority</h4><dl>
+        <dt>What it is</dt><dd>An organisation that others trust to create and sign certificates after checking that the requester controls the name.</dd>
+        <dt>The problem it solves</dt><dd>Nobody can check every site themselves. A few trusted authorities do it, and everybody relies on their signature.</dd>
+        <dt>Everyday comparison</dt><dd>The passport office.</dd>
+        <dt>What it is not</dt><dd>Not one company: your operating system and browser each ship a list of trusted roots, and you can add your own (step 06).</dd>
+        <dt>Where you meet it</dt><dd>Let's Encrypt, a company's internal CA, the "trusted root certificates" store on your PC.</dd>
+      </dl></div>
+
+      <h3>What is inside</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Field</th><th>What it says</th></tr></thead>
+        <tbody>
+          <tr><td><b>Subject</b></td><td>Who the certificate is for. For a website this used to be the <em>common name</em> (CN). Today the name that counts is in the SAN.</td></tr>
+          <tr><td><b>Subject alternative names (SAN)</b></td><td>The DNS names or IP addresses the certificate is valid for, such as <code>todo.example.com</code> or <code>*.example.com</code>. <b>This is what a client matches the host name against.</b> RFC 9525 says the common name must not be used to identify a service.</td></tr>
+          <tr><td><b>Issuer</b></td><td>Who signed it.</td></tr>
+          <tr><td><b>Validity</b></td><td>Not before and not after. Outside these dates the certificate is invalid.</td></tr>
+          <tr><td><b>Public key</b></td><td>The key being vouched for (RSA, ECDSA P-256, Ed25519 …).</td></tr>
+          <tr><td><b>Basic constraints</b></td><td><code>CA:TRUE</code> if this certificate may sign other certificates, and an optional path length limit.</td></tr>
+          <tr><td><b>Key usage, extended key usage</b></td><td>What the key may be used for: <code>digitalSignature</code>, <code>keyCertSign</code>, and purposes such as <code>serverAuth</code> or <code>clientAuth</code>.</td></tr>
+          <tr><td><b>Signature</b></td><td>The issuer's signature over all of the above.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>The chain of trust</h3>
+      <p>Servers do not send certificates signed directly by a root. They send a <b>chain</b>: the <em>leaf</em> (for the site), signed by an <em>intermediate</em> CA, signed by a <em>root</em> CA. The client already has the root in its trust store, so it only has to check each link. Watch the checks, and then four ways they fail:</p>
+      <figure class="anim" aria-label="Animated diagram: validating a certificate chain, and four ways it fails">
+        <div class="anim-stage"><svg viewBox="0 0 760 330" role="img" aria-label="A leaf certificate for todo.example.com is signed by an intermediate CA, which is signed by a root CA that is in the client's trust store. Each signature is checked, then the dates, then the name. Failures: the root is not in the trust store, an intermediate is missing, the certificate has expired, or the name does not match.">
+          <rect class="a-zone" x="8" y="8" width="744" height="314" rx="12"/>
+          <path class="a-route" data-k="s1" d="M240 108 V148"/>
+          <path class="a-route" data-k="s2" d="M240 218 V258"/>
+          <path class="a-route" data-k="s3" d="M350 290 H520"/>
+          <g class="a-node" data-k="leaf"><rect x="100" y="40" width="280" height="68" rx="8"/><text class="a-t" x="240" y="68">Leaf certificate</text><text class="a-s" x="240" y="90">todo.example.com · valid to 2027-01-10</text></g>
+          <g class="a-node" data-k="int"><rect x="100" y="148" width="280" height="70" rx="8"/><text class="a-t" x="240" y="176">Intermediate CA</text><text class="a-s" x="240" y="198">signed the leaf</text></g>
+          <g class="a-node" data-k="root"><rect x="100" y="258" width="250" height="56" rx="8"/><text class="a-t" x="225" y="282">Root CA</text><text class="a-s" x="225" y="300">signed the intermediate</text></g>
+          <g class="a-node" data-k="store"><rect x="520" y="258" width="200" height="56" rx="8"/><text class="a-t" x="620" y="282">Trust store</text><text class="a-s" x="620" y="300">roots the client trusts</text></g>
+          <text class="a-lbl" data-k="chk1" x="560" y="80">✓ signature · ✓ dates · ✓ name</text>
+          <text class="a-badge bad" data-k="e1" x="560" y="160">✗ root not in the trust store</text>
+          <text class="a-badge bad" data-k="e2" x="560" y="160">✗ intermediate missing: no link to a root</text>
+          <text class="a-badge bad" data-k="e3" x="560" y="160">✗ expired: after the not-after date</text>
+          <text class="a-badge bad" data-k="e4" x="560" y="160">✗ name todo.example.com not in the SAN</text>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "leaf s1 int", "off": "e1 e2 e3 e4 chk1", "path": [[240, 112], [240, 144]], "text": "<b>1. Leaf to intermediate.</b> The client checks the leaf's signature with the intermediate's public key. The leaf must also not be a CA."},
+          {"on": "int s2 root", "off": "e1 e2 e3 e4 chk1", "path": [[240, 222], [240, 254]], "text": "<b>2. Intermediate to root.</b> The same check one level up. The intermediate must be marked <code>CA:TRUE</code> and allowed to sign certificates."},
+          {"on": "root s3 store", "good": "root store", "off": "e1 e2 e3 e4 chk1", "path": [[356, 290], [514, 290]], "text": "<b>3. Root to trust store.</b> The root signs itself, so its signature proves nothing. It is trusted only because it is in the client's trust store."},
+          {"on": "leaf chk1", "good": "leaf", "off": "e1 e2 e3 e4", "text": "<b>4. Dates and name.</b> The leaf must be inside its validity dates, and the host name the client asked for must be in its subject alternative names. Then the chain is accepted."},
+          {"on": "store", "bad": "root e1", "off": "e2 e3 e4 chk1", "text": "<b>Failure: untrusted root.</b> The chain ends at a root the client does not have: <code>unable to get local issuer certificate</code>. This is what your own CA looks like until you trust it."},
+          {"on": "leaf s1 int", "bad": "int e2", "off": "e1 e3 e4 chk1", "text": "<b>Failure: missing intermediate.</b> The server sent only the leaf. Browsers may find the intermediate on their own, <code>curl</code> and .NET often do not: same error, and \"works in Chrome\"."},
+          {"on": "leaf chk1", "bad": "leaf e3", "off": "e1 e2 e4", "text": "<b>Failure: expired.</b> The most common outage of all. Nothing about the key changed; the date passed."},
+          {"on": "leaf chk1", "bad": "leaf e4", "off": "e1 e2 e3", "text": "<b>Failure: wrong name.</b> The certificate is real, but not for the name you used (or only has a common name and no SAN)."}
+        ]</script>
+      </figure>
+
+      <h3>Read a certificate yourself</h3>
+      <p>Paste any certificate, or a whole chain, into the tool. It shows every field, checks each signature and tells you what is wrong. It runs in your browser and sends nothing anywhere. Never paste a private key into a web page: the tool refuses them.</p>
+      <div data-tool="cert"></div>
+      <details class="lbl"><summary>Line by line: the first bytes of a certificate</summary><div><dl>
+        <dt><code>30 82 …</code></dt><dd>A DER <em>SEQUENCE</em> (tag <code>0x30</code>) with a two-byte length (<code>0x82</code>). A certificate is a SEQUENCE of three things.</dd>
+        <dt>First element: <code>tbsCertificate</code></dt><dd>"To be signed": the version, serial number, signature algorithm, issuer, validity, subject, public key and extensions. This is exactly what the issuer signs.</dd>
+        <dt>Second element</dt><dd>The signature algorithm, repeated outside the signed part so a verifier knows what to do before reading the rest.</dd>
+        <dt>Third element</dt><dd>The signature, a BIT STRING.</dd>
+        <dt>PEM</dt><dd>The same bytes, base64-encoded and wrapped between <code>-----BEGIN CERTIFICATE-----</code> and <code>-----END CERTIFICATE-----</code> (RFC 7468).</dd>
+      </dl></div></details>
+
+      <h3>Kinds of certificate</h3>
+      <p>The CA/Browser Forum's Baseline Requirements define policy identifiers for what a CA checked: <b>domain validated</b> (DV, <code>2.23.140.1.2.1</code>: the requester controls the domain), <b>organization validated</b> (OV, <code>2.23.140.1.2.2</code>: the organisation's identity was checked too) and <b>individual validated</b> (<code>2.23.140.1.2.3</code>). A <b>wildcard</b> such as <code>*.example.com</code> covers exactly one label, so <code>shop.example.com</code> but not <code>a.shop.example.com</code> and not <code>example.com</code> itself.</p>
+
+      <h3>The commands</h3>
+      <div data-cmd="t5-text"></div>
+      <div data-cmd="t5-dates"></div>
+      <div data-cmd="t5-san"></div>
+      <div data-cmd="t5-verify"></div>
+      <div data-cmd="t5-showcerts"></div>
+
+      <h3>Practice</h3>
+      <div data-ex="t5-fields"></div>
+      <div data-ex="t5-errors"></div>
+      <div data-ex="t5-wild"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A certificate binds a public key to names, with dates and rules, under an issuer's signature.</li>
+        <li>A client checks the chain link by link up to a root in its trust store, then the dates and the name in the SAN.</li>
+        <li>The usual failures: untrusted root, missing intermediate, expired, wrong name. Each has its own message.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 6 ============ -->
+    <section class="step" id="ca" data-step data-level="Intermediate">
+      <div class="step-head"><span class="num">06</span><h2>Build your own certificate authority</h2><span class="lvl-chip">Intermediate</span></div>
+      <p class="goal"><b>Goal:</b> create a root, issue a server certificate with the right names, serve the API over HTTPS with it, and explain every failure you cause on purpose.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Nothing teaches certificates like making them. You will play the certificate authority, issue a certificate for <code>localhost</code>, serve the Todo API over HTTPS with it, then break it three ways and read the errors. Companies run their own internal CAs the same way, with more care.</p>
+        <p>This lesson builds on steps 04 and 05. You need <code>openssl</code> (it is on any Linux, macOS, or WSL), and <code>curl</code>.</p>
+      </div>
+      <div class="callout"><p><strong>Keep it local.</strong> This root is for your laptop and this lesson. Do not add it to your system trust store unless you know how to remove it later, and never share <code>root.key</code>. Anyone who has it can make a certificate for any name that your machine will trust.</p></div>
+
+      <h3>Who signs what</h3>
+      <figure class="anim" aria-label="Animated diagram: making a root, a server key and a signing request, and signing it">
+        <div class="anim-stage"><svg viewBox="0 0 760 320" role="img" aria-label="The certificate authority makes a root key and a self-signed root certificate. The server makes its own key and a signing request that contains only the public key and the names. The authority signs the request and returns the certificate. The server's private key never leaves the server.">
+          <rect class="a-zone" x="8" y="8" width="744" height="304" rx="12"/>
+          <text class="a-cap" x="24" y="34">YOU, AS THE CA</text><text class="a-cap" x="556" y="34">THE SERVER (THE API)</text>
+          <path class="a-route" data-k="r1" d="M234 120 H348"/>
+          <path class="a-route" data-k="r2" d="M412 190 H556"/>
+          <path class="a-route" data-k="r3" d="M348 224 H234"/>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <g class="a-node" data-k="rootkey"><rect x="24" y="60" width="210" height="62" rx="8"/><text class="a-t" x="129" y="86">root.key</text><text class="a-s" x="129" y="106">private · stays here</text></g>
+          <g class="a-node" data-k="rootpem"><rect x="24" y="150" width="210" height="62" rx="8"/><text class="a-t" x="129" y="176">root.pem</text><text class="a-s" x="129" y="196">self-signed root certificate</text></g>
+          <g class="a-node" data-k="csr"><rect x="348" y="96" width="170" height="62" rx="8"/><text class="a-t" x="433" y="122">api.csr</text><text class="a-s" x="433" y="142">public key + names</text></g>
+          <g class="a-node" data-k="pem"><rect x="348" y="194" width="170" height="62" rx="8"/><text class="a-t" x="433" y="220">api.pem</text><text class="a-s" x="433" y="240">signed certificate</text></g>
+          <g class="a-node" data-k="apikey"><rect x="556" y="60" width="180" height="62" rx="8"/><text class="a-t" x="646" y="86">api.key</text><text class="a-s" x="646" y="106">private · stays here</text></g>
+          <g class="a-node" data-k="srv"><rect x="556" y="160" width="180" height="62" rx="8"/><text class="a-t" x="646" y="186">Kestrel / s_server</text><text class="a-s" x="646" y="206">api.key + api.pem</text></g>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "rootkey rootpem", "text": "<b>1. Make the authority.</b> A root key pair, and a certificate for it that the root signs itself. <code>root.key</code> never leaves the CA."},
+          {"on": "apikey", "text": "<b>2. The server makes its own key.</b> Its private key is created on the server and stays there. Nobody, including the CA, ever needs to see it."},
+          {"on": "apikey csr r1", "path": [[556, 100], [520, 126]], "text": "<b>3. A signing request.</b> The server builds a CSR: its public key, the names it wants, and a signature proving it holds the private key. The CSR is not secret."},
+          {"on": "csr rootkey r1 pem", "path": [[352, 124], [236, 92]], "text": "<b>4. The CA checks and signs.</b> The CA confirms the requester should have these names, then signs with <code>root.key</code> and sets the extensions it wants (not a CA, serverAuth, the names)."},
+          {"on": "pem r2 srv", "good": "srv", "path": [[412, 224], [556, 190]], "text": "<b>5. The server uses the pair.</b> <code>api.pem</code> and <code>api.key</code> go to the server. Clients that trust <code>root.pem</code> now accept it."}
+        ]</script>
+      </figure>
+
+      <h3>Make the root</h3>
+      <p>Work in an empty folder. A root is a key pair and a certificate that signs itself, marked as a CA and allowed to sign certificates:</p>
+      <div data-cmd="t6-rootkey"></div>
+      <div data-cmd="t6-rootcert"></div>
+      <h3>Make the server's key and request</h3>
+      <div data-cmd="t6-apikey"></div>
+      <div data-cmd="t6-csr"></div>
+      <h3>Sign it</h3>
+      <p>The CA decides what goes into the certificate, not the requester. Put those decisions in a file. Create <code>api.ext</code>:</p>
+      <figure class="code"><figcaption>api.ext</figcaption><pre><code>basicConstraints = CA:FALSE
+keyUsage = digitalSignature
+extendedKeyUsage = serverAuth
+subjectAltName = DNS:localhost, IP:127.0.0.1</code></pre></figure>
+      <details class="lbl"><summary>Line by line: api.ext</summary><div><dl>
+        <dt><code>basicConstraints = CA:FALSE</code></dt><dd>This certificate may not sign other certificates.</dd>
+        <dt><code>keyUsage = digitalSignature</code></dt><dd>For an ECDSA key in TLS 1.3 this is the usage that matters: it signs <code>CertificateVerify</code>.</dd>
+        <dt><code>extendedKeyUsage = serverAuth</code></dt><dd>Only for authenticating a TLS server.</dd>
+        <dt><code>subjectAltName = …</code></dt><dd>The names it is valid for. Without this, modern clients reject the certificate even if the common name is right.</dd>
+      </dl></div></details>
+      <div data-cmd="t6-sign"></div>
+      <p>Look at what you made, with the command from step 05:</p>
+      <div data-cmd="t6-inspect"></div>
+      <h3>Serve it</h3>
+      <p>The quickest test server is the one in OpenSSL. In ASP.NET Core you give Kestrel the certificate and key. For the Todo API, in <code>Program.cs</code> before <code>builder.Build()</code>:</p>
+      <figure class="code"><figcaption>src/api/Program.cs (add)</figcaption><pre><code>builder.WebHost.ConfigureKestrel(k =&gt;
+{
+    k.ListenLocalhost(5443, o =&gt; o.UseHttps(
+        X509Certificate2.CreateFromPemFile("api.pem", "api.key")));
+});</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the Kestrel lines</summary><div><dl>
+        <dt><code>ListenLocalhost(5443, …)</code></dt><dd>Listen on the loopback address only, port 5443 (8443 is taken by Argo CD in Part 1).</dd>
+        <dt><code>X509Certificate2.CreateFromPemFile("api.pem", "api.key")</code></dt><dd>Loads the certificate and its private key from PEM files. The file must hold both the certificate (and any intermediates) and a key that matches it.</dd>
+        <dt><code>using System.Security.Cryptography.X509Certificates;</code></dt><dd>Needed at the top of the file for <code>X509Certificate2</code>.</dd>
+      </dl></div></details>
+      <div data-cmd="t6-serve"></div>
+      <h3>Call it, then break it</h3>
+      <div data-cmd="t6-curl-fail"></div>
+      <div data-cmd="t6-curl-ok"></div>
+      <p>Now cause three failures and match each to its message. Each is something you will see in real life:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>You do this</th><th>The error</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Call it without <code>--cacert</code></td><td><code>curl: (60) SSL certificate problem: unable to get local issuer certificate</code></td><td>The client's trust store has no root for this chain.</td></tr>
+          <tr><td>Call <code>https://127.0.0.2:5443/</code> with <code>--cacert root.pem</code></td><td><code>curl: (60) SSL: no alternative certificate subject name matches target ipv4 address '127.0.0.2'</code></td><td>The certificate is for <code>localhost</code> and <code>127.0.0.1</code> only.</td></tr>
+          <tr><td>Use a certificate whose end date has passed</td><td><code>curl: (60) SSL certificate OpenSSL verify result: certificate has expired (10)</code></td><td>The dates. <code>openssl x509 -in api.pem -noout -checkend 86400</code> asks "will it still be valid in a day?".</td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout"><p><strong>Do not "fix" it with <code>-k</code>.</strong> <code>curl -k</code> (or <code>--insecure</code>) skips every check above. It is fine for one experiment on your laptop and wrong everywhere else, because it throws away exactly what TLS is for.</p></div>
+      <h4>The everyday shortcut</h4>
+      <p><code>dotnet dev-certs https</code> creates and trusts a development certificate for <code>localhost</code> for you. It is for development only. In .NET 10 the certificate also covers <code>host.docker.internal</code> and <code>host.containers.internal</code>, and inside WSL <code>dotnet dev-certs https --trust</code> also trusts it on the Windows host. Check it with <code>dotnet dev-certs https --check --trust</code>.</p>
+
+      <h3>Practice</h3>
+      <div data-ex="t6-who"></div>
+      <div data-ex="t6-order"></div>
+      <div data-ex="t6-flaws"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A CA is a key pair plus a self-signed certificate. The server makes its own key and sends only a request. The CA decides the contents and signs.</li>
+        <li>The SAN decides which names a certificate is good for. <code>keyCertSign</code> and <code>CA:TRUE</code> belong only on CAs.</li>
+        <li>Each failure has its own message. Never switch checking off to make one go away.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 7 ============ -->
+    <section class="step" id="prod" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">07</span><h2>Certificates in production</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> explain how a public certificate is issued and renewed with no human, and write the cert-manager objects that give the Todo gateway HTTPS.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Your own CA is fine for a laptop. A public site needs a certificate that every browser trusts, and the rules say it must be renewed far more often than it used to. The only workable answer is automation, so this lesson is about the protocol that does it (ACME) and the Kubernetes tool that speaks it (cert-manager).</p>
+        <p>This lesson builds on steps 05 and 06.</p>
+      </div>
+
+      <div class="what-is"><h4>What is it? ACME</h4><dl>
+        <dt>What it is</dt><dd>Automatic Certificate Management Environment (RFC 8555): a protocol where a client asks a CA for a certificate, proves it controls the name, and downloads the result, with no person in the loop.</dd>
+        <dt>The problem it solves</dt><dd>Manual issuance means emails, forms and a calendar reminder that someone forgets. With short lifetimes that is an outage waiting to happen.</dd>
+        <dt>Everyday comparison</dt><dd>A standing order at the bank instead of remembering to pay each month.</dd>
+        <dt>What it is not</dt><dd>Not a CA: it is the conversation with one. Let's Encrypt is a CA that speaks ACME.</dd>
+        <dt>Where you meet it</dt><dd>Let's Encrypt, other public CAs, cert-manager, Caddy, <code>certbot</code>.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? Certificate Transparency</h4><dl>
+        <dt>What it is</dt><dd>Public, append-only logs where CAs record the certificates they issue (RFC 9162 describes version 2.0).</dd>
+        <dt>The problem it solves</dt><dd>A CA could issue a certificate for your domain to someone else and you would never know. A public log lets domain owners watch for certificates they did not ask for.</dd>
+        <dt>Everyday comparison</dt><dd>A public register of every passport issued, which anyone can search.</dd>
+        <dt>What it is not</dt><dd>Not prevention: it makes mis-issuance <em>visible</em>.</dd>
+        <dt>Where you meet it</dt><dd>Search sites for a domain's certificates, browser and platform policies that ask for proof of logging (Android publishes its policy), monitoring alerts.</dd>
+      </dl></div>
+
+      <h3>How a certificate is proven and issued</h3>
+      <figure class="anim" aria-label="Animated diagram: ACME issuance with the HTTP challenge">
+        <div class="anim-stage"><svg viewBox="0 0 760 320" role="img" aria-label="The ACME client asks the CA for a certificate for todo.example.com. The CA answers with a challenge token. The client publishes the token at a well-known address on the server for that domain. The CA fetches it from outside and, if it matches, the client sends a signing request and receives the certificate.">
+          <rect class="a-zone" x="8" y="8" width="744" height="304" rx="12"/>
+          <path class="a-route" data-k="r1" d="M200 100 H520"/>
+          <path class="a-route" data-k="r2" d="M200 220 H250"/>
+          <path class="a-route" data-k="r3" d="M610 150 L520 212"/>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <g class="a-node" data-k="client"><rect x="24" y="60" width="176" height="90" rx="8"/><text class="a-t" x="112" y="96">ACME client</text><text class="a-s" x="112" y="116">cert-manager, certbot…</text></g>
+          <g class="a-node" data-k="ca"><rect x="520" y="60" width="216" height="90" rx="8"/><text class="a-t" x="628" y="96">CA (ACME server)</text><text class="a-s" x="628" y="116">Let's Encrypt</text></g>
+          <g class="a-node" data-k="site"><rect x="250" y="180" width="270" height="90" rx="8"/><text class="a-t" x="385" y="214">todo.example.com</text><text class="a-s" x="385" y="234">/.well-known/acme-challenge/…</text></g>
+          <text class="a-lbl" data-k="r1" x="360" y="86">order: todo.example.com</text>
+          <text class="a-lbl" data-k="r2" x="130" y="206">token published</text>
+          <text class="a-lbl" data-k="r3" x="640" y="228">CA fetches it</text>
+          <text class="a-badge good" data-k="done" x="628" y="190">certificate issued</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "client r1 ca", "off": "r2 r3 site done", "path": [[206, 100], [514, 100]], "text": "<b>1. Order.</b> The client has an account key with the CA and asks for a certificate for <code>todo.example.com</code>."},
+          {"on": "client r1 ca", "off": "r2 r3 site done", "path": [[514, 120], [206, 120]], "text": "<b>2. Challenge.</b> The CA must be sure the requester controls the name. It sends a random token and a choice of challenges."},
+          {"on": "client r2 site", "off": "r1 r3 done", "path": [[206, 220], [244, 220]], "text": "<b>3. Prove control.</b> For the <b>HTTP-01</b> challenge, the client serves the token at <code>/.well-known/acme-challenge/&lt;token&gt;</code> on port 80. (The <b>DNS-01</b> challenge puts it in a DNS TXT record instead.)"},
+          {"on": "ca r3 site", "off": "r1 r2 done", "path": [[606, 154], [526, 208]], "text": "<b>4. The CA checks from outside.</b> It fetches the token itself. Only someone who controls the name could have put it there."},
+          {"on": "client r1 ca done", "good": "ca done", "path": [[206, 100], [514, 100]], "off": "r2 r3", "text": "<b>5. Finalise.</b> The client sends a CSR (step 06) and the CA returns the signed certificate and chain. The client installs it and does the same again before it expires."}
+        ]</script>
+      </figure>
+      <ul>
+        <li><b>HTTP-01</b> (RFC 8555): serve a file over plain HTTP on port 80. Simple, but cannot issue a wildcard.</li>
+        <li><b>DNS-01</b> (RFC 8555): publish a TXT record. Works for hosts not reachable from the Internet and is required for wildcards (Let's Encrypt: "Wildcard issuance must use the DNS-01 challenge").</li>
+        <li><b>TLS-ALPN-01</b> (RFC 8737): prove control through a special TLS handshake on port 443.</li>
+      </ul>
+
+      <h3>Lifetimes are shrinking</h3>
+      <p>The CA/Browser Forum's Baseline Requirements (version 2.3.1) set the maximum validity of publicly trusted TLS certificates:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Issued on or after</th><th>Longest allowed</th></tr></thead>
+        <tbody>
+          <tr><td>before 2026-03-15</td><td>398 days</td></tr>
+          <tr><td><b>2026-03-15</b></td><td><b>200 days</b></td></tr>
+          <tr><td><b>2027-03-15</b></td><td><b>100 days</b></td></tr>
+          <tr><td><b>2029-03-15</b></td><td><b>47 days</b></td></tr>
+        </tbody>
+      </table></div>
+      <p>Domain validation data may be reused for less time too (200 days now, 100 days from 2027-03-15). Let's Encrypt is moving earlier than the minimum: its <code>tlsserver</code> profile gives 45-day certificates from 13 May 2026, the default profile moves to 64 days on 10 February 2027 and to 45 days on 16 February 2028, and it also offers opt-in certificates valid for six days. <b>The practical meaning: a certificate you install by hand will not last the year.</b></p>
+      <h4>Revocation, and why it matters less now</h4>
+      <p>A CA can <em>revoke</em> a certificate before it expires (for example after a key leak). Checking that live (OCSP) never worked well: Let's Encrypt stopped including OCSP URLs in certificates on 7 May 2025 and turned its OCSP responders off on 6 August 2025. Short lifetimes and automated renewal do most of the work revocation used to be asked to do. You can still limit who may issue for your domain with a <b>CAA</b> DNS record (RFC 8659), and ask the CA when it would like you to renew with <b>ARI</b> (RFC 9773).</p>
+
+      <h3>cert-manager: certificates as Kubernetes objects</h3>
+      <div class="what-is"><h4>What is it? cert-manager</h4><dl>
+        <dt>What it is</dt><dd>A Kubernetes controller that obtains and renews certificates for you and stores them as Secrets.</dd>
+        <dt>The problem it solves</dt><dd>The ACME dance and the renewal timer, run inside the cluster for every site, with no scripts.</dd>
+        <dt>Everyday comparison</dt><dd>The reconcile loop from Part 1: you declare the certificate you want, and a controller keeps reality matching it.</dd>
+        <dt>What it is not</dt><dd>Not a CA. It talks to one (Let's Encrypt, a private CA, a Vault).</dd>
+        <dt>Where you meet it</dt><dd>Any cluster with HTTPS ingress or gateways.</dd>
+      </dl></div>
+      <figure class="anim" aria-label="Animated diagram: cert-manager obtains a certificate for the Gateway and renews it before it expires">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="A Gateway with an issuer annotation and an HTTPS listener names a Secret. cert-manager creates a Certificate, runs the ACME order, and writes the certificate and key into the Secret. The Gateway serves it. When two thirds of the lifetime have passed cert-manager renews and updates the Secret.">
+          <rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+          <path class="a-route" data-k="r1" d="M200 90 H300"/>
+          <path class="a-route" data-k="r2" d="M450 90 H560"/>
+          <path class="a-route" data-k="r3" d="M630 130 V190"/>
+          <path class="a-route" data-k="r4" d="M560 220 H200"/>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <g class="a-node" data-k="gw"><rect x="24" y="50" width="176" height="80" rx="8"/><text class="a-t" x="112" y="82">Gateway</text><text class="a-s" x="112" y="102">annotation + listener</text></g>
+          <g class="a-node" data-k="cm"><rect x="300" y="50" width="150" height="80" rx="8"/><text class="a-t" x="375" y="82">cert-manager</text><text class="a-s" x="375" y="102">controller</text></g>
+          <g class="a-node" data-k="ca"><rect x="560" y="50" width="176" height="80" rx="8"/><text class="a-t" x="648" y="82">CA (ACME)</text><text class="a-s" x="648" y="102">Let's Encrypt</text></g>
+          <g class="a-node" data-k="sec"><rect x="560" y="190" width="176" height="60" rx="8"/><text class="a-t" x="648" y="216">Secret todo-tls</text><text class="a-s" x="648" y="236">tls.crt · tls.key</text></g>
+          <g class="a-node" data-k="gw2"><rect x="24" y="190" width="176" height="60" rx="8"/><text class="a-t" x="112" y="216">Gateway serves</text><text class="a-s" x="112" y="236">HTTPS on 443</text></g>
+          <text class="a-badge" data-k="renew" x="380" y="270">renew at ⅔ of the lifetime</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "gw r1 cm", "off": "renew", "path": [[206, 90], [294, 90]], "text": "<b>1. You declare.</b> The Gateway has an issuer annotation and an HTTPS listener with a <code>hostname</code>, <code>tls.mode: Terminate</code> and a <code>certificateRefs</code> Secret name. cert-manager sees it and creates a <code>Certificate</code>."},
+          {"on": "cm r2 ca", "off": "renew", "path": [[456, 90], [554, 90]], "text": "<b>2. It does the ACME order.</b> cert-manager runs the challenge and the finalise step from the last diagram."},
+          {"on": "ca r3 sec", "off": "renew", "path": [[630, 136], [630, 184]], "text": "<b>3. The result becomes a Secret.</b> The certificate chain and private key are written to <code>todo-tls</code>."},
+          {"on": "sec r4 gw2", "good": "gw2", "off": "renew", "path": [[554, 220], [206, 220]], "text": "<b>4. The Gateway serves it.</b> It reads the Secret and presents the certificate on port 443."},
+          {"on": "cm renew sec ca r2", "good": "sec", "path": [[456, 90], [554, 90]], "text": "<b>5. And it renews.</b> By default cert-manager renews two thirds of the way through the certificate's life, and updates the Secret. Nobody is paged."}
+        ]</script>
+      </figure>
+      <p>You need three objects. First an issuer that knows how to reach Let's Encrypt. For a real domain, with the HTTP-01 challenge solved through the Gateway:</p>
+      <figure class="code"><figcaption>infra/cert-manager/cluster-issuer.yaml</figcaption><pre><code>apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: you@example.com
+    privateKeySecretRef:
+      name: letsencrypt-account-key
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: todo
+                kind: Gateway</code></pre></figure>
+      <p>Then the Gateway gets the annotation and an HTTPS listener (compare with the HTTP-only Gateway in Part 1's chart). cert-manager creates the Certificate for you:</p>
+      <figure class="code"><figcaption>charts/todo/templates/gateway.yaml (the Gateway part)</figcaption><pre><code>apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: todo
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  gatewayClassName: nginx
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+    - name: https
+      hostname: todo.example.com
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: todo-tls</code></pre></figure>
+      <details class="lbl"><summary>Line by line: what cert-manager needs from the Gateway</summary><div><dl>
+        <dt><code>cert-manager.io/cluster-issuer: letsencrypt</code></dt><dd>Which issuer to use. (<code>cert-manager.io/issuer</code> names a namespaced one instead.)</dd>
+        <dt><code>hostname: todo.example.com</code></dt><dd>Must not be empty: it becomes the certificate's DNS name.</dd>
+        <dt><code>tls.mode: Terminate</code></dt><dd>The gateway ends TLS. It must be <code>Terminate</code>, not <code>Passthrough</code>, for cert-manager to act.</dd>
+        <dt><code>certificateRefs[].name</code></dt><dd>The Secret the certificate and key will be stored in. Must not be empty.</dd>
+        <dt>Enabling it</dt><dd>cert-manager needs Gateway API support switched on in its Helm values (<code>config.gatewayAPI.enabled=true</code>), and the Gateway API CRDs installed before cert-manager starts (or cert-manager restarted after).</dd>
+      </dl></div></details>
+      <p>If you prefer to see the <code>Certificate</code> object, it looks like this. cert-manager's default duration is 90 days and it renews at two thirds of it:</p>
+      <figure class="code"><figcaption>certificate.yaml (what cert-manager creates for you)</figcaption><pre><code>apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: todo-tls
+spec:
+  secretName: todo-tls
+  dnsNames:
+    - todo.example.com
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+    group: cert-manager.io</code></pre></figure>
+      <div data-cmd="t7-get"></div>
+      <div data-cmd="t7-describe"></div>
+      <div data-cmd="t7-checkend"></div>
+      <div class="callout"><p><strong>What was not tested here.</strong> A live issuance needs a public domain and an Internet-reachable cluster, which a laptop does not have. The manifests above are checked against the cert-manager and Gateway API schemas and rendered, and the ACME protocol and field names come from the RFCs and cert-manager's documentation. They have not been run against Let's Encrypt from this page.</p></div>
+
+      <h3>Practice</h3>
+      <div data-ex="t7-challenge"></div>
+      <div data-ex="t7-order"></div>
+      <div data-ex="t7-days"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>ACME proves control of a name (HTTP-01 or DNS-01; wildcards need DNS-01) and issues a certificate with no human.</li>
+        <li>Public certificates last 200 days now, 100 from March 2027 and 47 from March 2029. Automate renewal.</li>
+        <li>cert-manager turns a Gateway annotation and an HTTPS listener into a renewed certificate in a Secret.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 8 ============ -->
+    <section class="step" id="mtls" data-step data-level="Advanced">
+      <div class="step-head"><span class="num">08</span><h2>Mutual TLS: the client shows a certificate too</h2><span class="lvl-chip">Advanced</span></div>
+      <p class="goal"><b>Goal:</b> explain when mutual TLS fits, issue a client certificate, and require one in Kestrel.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>With ordinary TLS only the server is proven. For a service that must know <em>which other service</em> is calling (and where there is no user to log in), the client can be proven the same way: with a certificate. It is the strongest everyday answer to "who is this machine?".</p>
+        <p>This lesson builds on steps 05 and 06: you reuse your root and the commands for signing.</p>
+      </div>
+
+      <div class="what-is"><h4>What is it? Mutual TLS (mTLS)</h4><dl>
+        <dt>What it is</dt><dd>TLS where the server also asks the client for a certificate and checks it. The handshake gains a <code>CertificateRequest</code> from the server, and a <code>Certificate</code> and <code>CertificateVerify</code> from the client (RFC 9846).</dd>
+        <dt>The problem it solves</dt><dd>It authenticates the calling program with a key it never sends, instead of a shared secret that can be copied from a config file.</dd>
+        <dt>Everyday comparison</dt><dd>Both people at a meeting show ID, not just the visitor.</dd>
+        <dt>What it is not</dt><dd>Not for the public: you cannot hand certificates to every visitor. Not user login: it identifies the machine or app, which is usually what you want between services.</dd>
+        <dt>Where you meet it</dt><dd>Service meshes, partner and bank APIs, Kubernetes components, zero-trust networks.</dd>
+      </dl></div>
+
+      <figure class="anim" aria-label="Animated diagram: the extra messages of mutual TLS, and the failure when no certificate is sent">
+        <div class="anim-stage"><svg viewBox="0 0 760 340" role="img" aria-label="During the handshake the server sends a CertificateRequest. The client answers with its own Certificate and a CertificateVerify signature. The server checks the client certificate against the CA it trusts for clients. If the client has no certificate, or one from another CA, the handshake fails.">
+          <rect class="a-zone" x="8" y="8" width="744" height="324" rx="12"/>
+          <g class="a-node on" data-k="cl"><rect x="40" y="20" width="150" height="44" rx="8"/><text class="a-t" x="115" y="48">Client (service A)</text></g>
+          <g class="a-node on" data-k="sv"><rect x="570" y="20" width="150" height="44" rx="8"/><text class="a-t" x="645" y="48">Server (the API)</text></g>
+          <path class="a-route" d="M115 64 V320" stroke-dasharray="4 5"/>
+          <path class="a-route" d="M645 64 V320" stroke-dasharray="4 5"/>
+          <path class="a-route" data-k="m1" d="M645 100 H115"/><text class="a-lbl" data-k="m1" x="380" y="92">← {<tspan class="h">CertificateRequest</tspan>}   "show me a certificate from a CA I trust"</text>
+          <path class="a-route" data-k="m2" d="M115 150 H645"/><text class="a-lbl" data-k="m2" x="380" y="142">{<tspan class="h">Certificate</tspan>} →   the client's certificate chain</text>
+          <path class="a-route" data-k="m3" d="M115 200 H645"/><text class="a-lbl" data-k="m3" x="380" y="192">{<tspan class="h">CertificateVerify</tspan>} →   signature made with the client's private key</text>
+          <path class="a-route" data-k="m4" d="M115 250 H645"/><text class="a-lbl" data-k="m4" x="380" y="242">{Finished} →</text>
+          <text class="a-badge good" data-k="ok" x="380" y="304">✓ server knows the caller is service A</text>
+          <text class="a-badge bad" data-k="no" x="380" y="304">✗ no certificate, or one from another CA: refused</text>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "m1", "off": "m2 m3 m4 ok no", "path": [[645, 100], [115, 100]], "text": "<b>1. The server asks.</b> In its first encrypted flight the server adds a <code>CertificateRequest</code>: it wants a client certificate, and says which CAs it accepts."},
+          {"on": "m1 m2", "off": "m3 m4 ok no", "path": [[115, 150], [645, 150]], "text": "<b>2. The client presents.</b> It sends its certificate chain, just as the server sent its own in step 04."},
+          {"on": "m1 m2 m3 m4", "off": "ok no", "path": [[115, 200], [645, 200]], "text": "<b>3. The client proves the key.</b> A certificate alone could be copied. The client also signs the handshake with its private key (<code>CertificateVerify</code>), which only the real holder can do."},
+          {"on": "m1 m2 m3 m4 ok", "good": "ok", "off": "no", "text": "<b>4. Both are known.</b> The server validates the client certificate against the CA it trusts for clients, and now knows exactly which service is calling."},
+          {"on": "m1 no", "bad": "no", "off": "m2 m3 m4 ok", "text": "<b>Failure.</b> A client without a certificate, with one from another CA, or with an expired one is refused with a TLS alert (<code>certificate required</code> or a bad-certificate alert). No HTTP response comes back."}
+        ]</script>
+      </figure>
+
+      <h3>Issue a client certificate</h3>
+      <p>Use the root from step 06. The only differences from a server certificate: the key usage is <code>clientAuth</code>, and the name says <em>which service</em> it is. Create <code>client.ext</code>:</p>
+      <figure class="code"><figcaption>client.ext</figcaption><pre><code>basicConstraints = CA:FALSE
+keyUsage = digitalSignature
+extendedKeyUsage = clientAuth</code></pre></figure>
+      <div data-cmd="t8-key"></div>
+      <div data-cmd="t8-csr"></div>
+      <div data-cmd="t8-sign"></div>
+      <h3>Require it in Kestrel</h3>
+      <p>Certificate authentication is not in the shared ASP.NET Core framework, so add its package to the API project first:</p>
+      <figure class="code"><figcaption>bash: in src/api/</figcaption><pre><code>dotnet add package Microsoft.AspNetCore.Authentication.Certificate --version 10.0.12</code></pre></figure>
+      <p>Tell Kestrel to demand a client certificate, and tell ASP.NET Core to authenticate with it. Remember to call <code>app.UseAuthentication()</code> and <code>app.UseAuthorization()</code>, and add <code>.RequireAuthorization()</code> to the endpoints that need a caller:</p>
+      <figure class="code"><figcaption>src/api/Program.cs (replace the Kestrel lines from step 06)</figcaption><pre><code>var root = X509CertificateLoader.LoadCertificateFromFile("root.pem");
+
+builder.WebHost.ConfigureKestrel(k =&gt;
+{
+    k.ListenLocalhost(5443, o =&gt; o.UseHttps(h =&gt;
+    {
+        h.ServerCertificate = X509Certificate2.CreateFromPemFile("api.pem", "api.key");
+        h.ClientCertificateMode = ClientCertificateMode.RequireCertificate;
+        h.ClientCertificateValidation = (cert, chain, errors) =&gt;
+        {
+            chain!.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+            chain.ChainPolicy.CustomTrustStore.Add(root);
+            return chain.Build(cert);
+        };
+    }));
+});
+
+builder.Services.AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
+    .AddCertificate(o =&gt;
+    {
+        o.AllowedCertificateTypes = CertificateTypes.Chained;
+        o.ChainTrustValidationMode = X509ChainTrustMode.CustomRootTrust;
+        o.CustomTrustStore.Add(root);
+        o.RevocationMode = X509RevocationMode.NoCheck;
+    });
+builder.Services.AddAuthorization();</code></pre></figure>
+      <details class="lbl"><summary>Line by line: the client certificate lines</summary><div><dl>
+        <dt><code>h.ClientCertificateMode = ClientCertificateMode.RequireCertificate</code></dt><dd>The connection is refused if the client sends no certificate. (<code>AllowCertificate</code> asks but continues without one.) It is set <em>inside</em> the same <code>UseHttps</code> call as the server certificate, because settings made with <code>ConfigureHttpsDefaults</code> are not applied to an endpoint that was created with <code>Listen</code> before them.</dd>
+        <dt><code>h.ClientCertificateValidation = …</code></dt><dd>Kestrel checks the client certificate during the TLS handshake, before any ASP.NET Core code runs. By default it builds the chain against the <em>operating system's</em> trust store, so a client certificate from your private CA is refused there and the connection just closes ("unexpected eof"). This callback tells Kestrel to build the chain against <em>your</em> root instead.</dd>
+        <dt><code>AddCertificate()</code></dt><dd>The authentication handler that turns a validated client certificate into a user with claims.</dd>
+        <dt><code>AllowedCertificateTypes = Chained</code></dt><dd>The default: only certificates that chain to a CA. Self-signed client certificates would need <code>All</code> or <code>SelfSigned</code>.</dd>
+        <dt><code>CustomRootTrust</code> and <code>CustomTrustStore</code></dt><dd>By default the handler uses the system trust store. Setting a custom root trust makes it accept only certificates that chain to <em>your</em> root, which is what you want between your own services.</dd>
+        <dt><code>RevocationMode = NoCheck</code></dt><dd>The default is an online revocation check. The certificates from your lab CA have no revocation address, so that check cannot complete and the call is refused. <code>NoCheck</code> is right for this lab. With a real CA you would leave revocation on, or rely on short-lived certificates.</dd>
+        <dt>Defaults worth knowing</dt><dd><code>ValidateCertificateUse</code> is on: the certificate must carry the client authentication extended key usage, or none. <code>ValidateValidityPeriod</code> is on.</dd>
+      </dl></div></details>
+      <div class="callout"><p><strong>Behind a gateway it changes.</strong> If a proxy or load balancer ends TLS, the connection the API sees is the proxy's, not the caller's. Certificate authentication then works only if the proxy authenticates the client and passes the result on (for example in a header, with ASP.NET Core's certificate forwarding), and you trust only that proxy. In the Todo platform the gateway ends TLS, so mTLS to the pods needs a mesh or TLS passthrough.</p></div>
+      <h3>Call it</h3>
+      <div data-cmd="t8-curl"></div>
+      <div data-cmd="t8-nocert"></div>
+      <p>The two calls differ only in <code>--cert</code> and <code>--key</code>. Without them the server refuses the connection, and <code>curl</code> reports <code>curl: (56) OpenSSL SSL_read: … tlsv13 alert certificate required</code>. No HTTP response ever comes back. A first look ahead: OAuth can also bind an access token to a client certificate (RFC 8705), so a stolen token is useless without the key. Step 26 returns to it.</p>
+
+      <h3>Practice</h3>
+      <div data-ex="t8-who"></div>
+      <div data-ex="t8-fail"></div>
+      <div data-ex="t8-proxy"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Mutual TLS adds a client certificate and a proof of its private key to the handshake, so the server knows which machine is calling.</li>
+        <li>A client certificate has <code>clientAuth</code> usage and chains to a CA the server trusts for clients.</li>
+        <li>Kestrel's <code>RequireCertificate</code> plus <code>AddCertificate()</code> enforces it. Behind a TLS-ending proxy it must be arranged differently.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
