@@ -195,10 +195,8 @@ async function pageTests(browser, spec) {
   await pg.evaluate((mid) => document.getElementById(mid).scrollIntoView(), spec.mid);
   await pg.waitForFunction((mid) => document.querySelector('#rail-list a[aria-current=step][href="#' + mid + '"]'), spec.mid, { timeout: 6000 }).catch(() => {});   // smooth scrolling takes a moment
   check(await pg.evaluate((mid) => { const a = document.querySelector('#rail-list a[aria-current=step]'); return !!a && a.getAttribute('href') === '#' + mid; }, spec.mid), 'rail highlights the step being read');
-  const auto = await pg.evaluate((mid) => { const secs = [...document.querySelectorAll('section[data-step]')]; const at = secs.findIndex((s) => s.id === mid); const ticked = secs.map((s) => { const b = s.querySelector('input[data-done]'); return b ? b.checked : null; }); return { before: at > 0 && ticked.slice(0, at).every((v) => v !== false), after: ticked.slice(at).some(Boolean) }; }, spec.mid);
-  // On the lab page a tick means "every exercise in the step is passed", so scrolling must not tick anything.
-  if (spec.labTicks) check(!(await pg.evaluate(() => [...document.querySelectorAll('input[data-done]')].some((b) => b.checked))), 'scrolling past a step does not tick it: ticks come from passing the exercises');
-  else check(auto.before && !auto.after, 'steps you scroll past get a tick automatically; later ones do not');
+  // Scrolling or jumping past a step never ticks it: a tick comes from the Done box, or from passing the exercises on a lab page.
+  check(!(await pg.evaluate(() => [...document.querySelectorAll('input[data-done]')].some((b) => b.checked))), 'scrolling past a step does not tick it');
   await pg.evaluate(() => document.querySelectorAll('input[data-done]').forEach((b) => { if (b.checked) { b.checked = false; b.dispatchEvent(new Event('change')); } }));
 
   // tutorial menu

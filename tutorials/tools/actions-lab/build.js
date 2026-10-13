@@ -32,5 +32,5 @@ const scripts = [
   '<script>\n' + read(HERE, 'ui.js') + '\n</script>',
 ].join('\n');
 if (/<\/script/i.test(labs + read(HERE, 'ui.js') + read(HERE, 'engine.js') + read(HERE, '..', 'shared', 'cmdline.js') + read(HERE, 'assist.js'))) throw new Error('a script contains </script');
-const r = buildPage({ tutorialsDir: T, template: 'code-to-cluster-tutorial.html', meta, body, css: read(HERE, 'lab.css'), scripts, stripScrollTick: true });
+const r = buildPage({ tutorialsDir: T, template: 'code-to-cluster-tutorial.html', meta, body, css: read(HERE, 'lab.css'), scripts });
 console.log('wrote', r.file, (r.bytes / 1e6).toFixed(2) + ' MB;', r.sections, 'sections');

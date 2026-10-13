@@ -1482,12 +1482,6 @@ git push</code></pre></figure>
         Object.keys(links).forEach(function (k) { links[k].classList.remove('current'); links[k].removeAttribute('aria-current'); });
         links[en.target.id].classList.add('current');
         links[en.target.id].setAttribute('aria-current', 'step');
-        // Moving past a step marks it done.
-        var at = sections.indexOf(en.target);
-        sections.slice(0, at).forEach(function (p) {
-          var b = p.querySelector('input[data-done]');
-          if (b && !b.checked) { b.checked = true; b.dispatchEvent(new Event('change')); }
-        });
       });
     }, { rootMargin: '-10% 0px -80% 0px' });
     sections.forEach(function (s) { io.observe(s); });

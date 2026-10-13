@@ -4,7 +4,7 @@
 // add the styles and scripts, and write the page.
 //
 //   const { buildPage } = require('../shared/page.js');
-//   buildPage({ tutorialsDir, template, meta, body, css, scripts, stripScrollTick, railLevel });
+//   buildPage({ tutorialsDir, template, meta, body, css, scripts, railLevel });
 const fs = require('fs');
 const path = require('path');
 
@@ -24,8 +24,7 @@ function buildPage(o) {
   if (a < 0 || z < 0) throw new Error('sections not found');
   h = h.slice(0, a) + o.body + '\n  ' + h.slice(z);
   rep(/var KEY = 'code-to-cluster-tutorial-done';/, () => `var KEY = '${meta.key}';`);
-  // On a lab page a tick means "every exercise passed", so scrolling past a step must not tick it.
-  if (o.stripScrollTick) rep(/\n\s*\/\/ Moving past a step marks it done\.[\s\S]*?\n        \}\);\n/, () => '\n');
+  // Scrolling past a step never ticks it: a tick comes from the step's Done box (or, on a lab page, from passing its exercises).
 
   // Show each lesson's level (Easy, Advanced, ...) next to its title in the steps rail.
   if (o.railLevel) rep(/a\.querySelector\('\.t'\)\.textContent = title;/, () => "a.querySelector('.t').textContent = title; var lv = s.getAttribute('data-level'); if (lv) { var c = document.createElement('i'); c.className = 'lvl'; c.textContent = lv; a.querySelector('.t').appendChild(c); }");
