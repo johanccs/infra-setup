@@ -1,22 +1,23 @@
-    <!-- ============ 15 ============ -->
+    <!-- ============ 16 ============ -->
     <section class="step" id="scratch" data-step>
-      <div class="step-head"><span class="num">15</span><h2>Write it from scratch</h2></div>
-      <p class="goal"><b>Goal:</b> write six workflows from an empty editor, from a ten-line greeting to a staged delivery with keyless cloud access, using only a checklist.</p>
+      <div class="step-head"><span class="num">16</span><h2>Write it from scratch</h2></div>
+      <p class="goal"><b>Goal:</b> write twelve pipelines from an empty editor, from a ten-line greeting to three environments and a single-page app, using only a checklist.</p>
       <div class="why"><h4>Why this step</h4>
-        <p>In the guided labs the editor started you off. Now it starts empty, and the right-hand list says <em>what</em> to build and not <em>how</em>. The lab shows an error the moment you type one. When something is not met yet it stays grey. Use hints only when you are stuck for more than a minute: the point is to get the syntax into your fingers.</p>
+        <p>In the guided labs the editor could start you off. Here it always starts empty, and the right-hand list says <em>what</em> to build and not <em>how</em>. The lab shows an error the moment you type one. When something is not met yet it stays grey. Use hints only when you are stuck for more than a minute: the point is to get the syntax into your fingers.</p>
       </div>
-      <p>The challenges get harder one by one. Your work is saved in this browser, so you can leave and come back.</p>
-      <div data-set="scratch" data-ids="B1 B2 B3 B4 B5 B6"></div>
+      <p>The challenges get harder one by one. Your work is saved in this browser, so you can leave and come back. Challenges 6 and 10 have several files: each file is a tab above the editor, and the checklist says which file a requirement is about. The keys that fit on the current line are listed under the editor, <b>Next line</b> shows only the next line you need, and <b>Show solution</b> opens the finished file without touching yours.</p>
+      <div data-set="scratch" data-ids="B1 B2 B8 B3 B4 B9 B10 B5 B6 B11 B12 B13"></div>
       <div class="learn"><h4>What you just learned</h4><ul>
         <li>You can write a workflow's skeleton, its triggers, a matrix, a cache, an image build and a staged deploy without a template.</li>
         <li>The same few patterns come back: a condition used twice, a gate job, one job's permission raised.</li>
+        <li>You can split a pipeline into files, pass variables and secrets the right way, and take one build through dev, uat and prod, for a .NET API and for a single-page app.</li>
       </ul></div>
       <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
     </section>
 
-    <!-- ============ 16 ============ -->
+    <!-- ============ 17 ============ -->
     <section class="step" id="capstone" data-step>
-      <div class="step-head"><span class="num">16</span><h2>The capstone: the enterprise pipeline</h2></div>
+      <div class="step-head"><span class="num">17</span><h2>The capstone: the enterprise pipeline</h2></div>
       <p class="goal"><b>Goal:</b> write one pipeline for the Todo project that a security review would pass: 20 requirements, from an empty editor.</p>
       <div class="why"><h4>Why this step</h4>
         <p>This is the whole job in one file: continuous integration on pull requests and the merge queue, a signed and attested image for each push and release tag, a staged deployment with approval, no stored cloud keys, and every action pinned. If you can write this without looking, you can write the pipeline of a real team.</p>
@@ -30,9 +31,9 @@
       <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
     </section>
 
-    <!-- ============ 17 ============ -->
+    <!-- ============ 18 ============ -->
     <section class="step" id="fix" data-step>
-      <div class="step-head"><span class="num">17</span><h2>Read it and fix it</h2></div>
+      <div class="step-head"><span class="num">18</span><h2>Read it and fix it</h2></div>
       <p class="goal"><b>Goal:</b> given a broken pipeline and what the team saw, find the cause and fix it, from a one-word typo to a pipeline with seven separate faults.</p>
       <div class="why"><h4>Why this step</h4>
         <p>Most of your life with pipelines is reading ones you did not write, at the moment something has gone wrong. That is a different skill from writing. Each scenario starts with the <b>symptom</b>: a message, a log line, a person's complaint. You read the file, form a theory, and fix it. The right-hand list shows only how many problems remain, until you fix each one.</p>
@@ -47,8 +48,8 @@
         <li><b>What can run away?</b> <code>timeout-minutes</code>, <code>concurrency</code>, caches that never hit, artifacts that collide.</li>
         <li><b>What changes production?</b> Environments, approval, concurrency on deploys, image tags.</li>
       </ol>
-      <p>The scenarios are in order of difficulty. Each is a real mistake that people make.</p>
-      <div data-set="fix" data-ids="C1 C2 C3 C4 C5 C6 C7 C8 C9 C10 C11"></div>
+      <p>The first eleven are in order of difficulty. The last three are delivery problems from step 15: the wrong environment, .NET settings that are ignored, and a web app that stays old. Each is a real mistake that people make.</p>
+      <div data-set="fix" data-ids="C1 C2 C3 C4 C5 C6 C7 C8 C9 C10 C11 C12 C13 C14"></div>
       <div class="learn"><h4>What you just learned</h4><ul>
         <li>Start from the symptom, then read in a fixed order: start, permissions, order, text, dependencies, limits, production.</li>
         <li>A skipped job is quiet, a missing permission is loud, and an injected script is invisible until someone uses it.</li>
@@ -56,18 +57,19 @@
       <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
     </section>
 
-    <!-- ============ 18 ============ -->
+    <!-- ============ 19 ============ -->
     <section class="step" id="sandbox" data-step>
-      <div class="step-head"><span class="num">18</span><h2>Sandbox: check your own workflow</h2></div>
+      <div class="step-head"><span class="num">19</span><h2>Sandbox: check your own workflow</h2></div>
       <p class="goal"><b>Goal:</b> paste any workflow from your own repositories and see what the checker and the run preview say.</p>
       <p>The editor below starts with a small example. Replace it with a file of your own. The checker is the same one used in every lab, and the preview shows which jobs would start for each event. Nothing leaves your browser.</p>
       <div data-free data-task="Paste or write any workflow. Problems show as you type, and the preview shows what would run."></div>
       <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
     </section>
 
-    <!-- ============ 19 ============ -->
+    <!-- ============ 20 ============ -->
     <section class="step" id="real" data-step>
-      <div class="step-head"><span class="num">19</span><h2>Run it for real on GitHub</h2></div>
+      <div class="step-head"><span class="num">20</span><h2>Run it for real on GitHub</h2></div>
+      <span data-manual-tick hidden></span>
       <p class="goal"><b>Goal:</b> take any exercise from this page, run it on GitHub, watch it, and read its logs, from the terminal.</p>
       <div class="why"><h4>Why this step</h4>
         <p>The lab checks what you write, but it cannot run it. Only a real run shows you a runner starting, a cache hit, a job waiting for approval, a login that works. You need a repository to push to, and a few commands, most of which you already practised in step 14.</p>
@@ -79,6 +81,7 @@
           <tr><td>Cost</td><td>Free: standard GitHub-hosted runners cost nothing in public repositories</td><td>Uses your plan's free minutes (2,000 a month on GitHub Free), then is billed</td></tr>
           <tr><td>Code to build</td><td>None until you add some</td><td>The real API and UI are already at <code>src/api</code> and <code>src/ui</code></td></tr>
           <tr><td>CodeQL, dependency review</td><td>Work</td><td>Need GitHub Advanced Security</td></tr>
+          <tr><td>Environments with their own variables and secrets</td><td>Work</td><td>Need GitHub Pro, Team or Enterprise</td></tr>
           <tr><td>Environment reviewers and wait timers</td><td>Work</td><td>Not on Free, Pro or Team</td></tr>
           <tr><td>Artifact attestations</td><td>Work</td><td>Need GitHub Enterprise Cloud</td></tr>
           <tr><td>Risk</td><td>None: nothing real is deployed</td><td>A publish lab really pushes an image, a deploy lab really deploys</td></tr>
@@ -122,12 +125,16 @@ gh pr checks --watch                    # wait for the checks of this pull reque
         <tbody>
           <tr><td>1, 3, 4, 9 (structure), 18 and the gate jobs</td><td>Nothing. They only use <code>echo</code></td></tr>
           <tr><td>2, 5, 14 and "from scratch" 2</td><td>A .NET project in <code>src/api</code> (the <code>dotnet new</code> line above, or your real API)</td></tr>
-          <tr><td>6 and "from scratch" 3</td><td>The Angular app in <code>src/ui</code> with its <code>package-lock.json</code>. Use <code>infra-setup</code>, or copy the folder</td></tr>
-          <tr><td>7</td><td><code>gh secret set NOTIFY_API_KEY</code> and <code>gh variable set NOTIFY_URL --body https://…</code>; the comment step needs a pull request</td></tr>
-          <tr><td>8, 16 and "from scratch" 4</td><td>A Docker Hub access token: <code>gh variable set DOCKERHUB_USERNAME --body &lt;you&gt;</code> and <code>gh secret set DOCKERHUB_TOKEN</code>. A <code>Dockerfile</code> in <code>src/api</code></td></tr>
+          <tr><td>6 and "from scratch" 4</td><td>The Angular app in <code>src/ui</code> with its <code>package-lock.json</code>. Use <code>infra-setup</code>, or copy the folder</td></tr>
+          <tr><td>7</td><td><code>gh secret set NOTIFY_API_KEY</code> and <code>gh variable set NOTIFY_URL --body &lt;address&gt;</code>; the comment step needs a pull request</td></tr>
+          <tr><td>8, 16 and "from scratch" 5</td><td>A Docker Hub access token: <code>gh variable set DOCKERHUB_USERNAME --body &lt;you&gt;</code> and <code>gh secret set DOCKERHUB_TOKEN</code>. A <code>Dockerfile</code> in <code>src/api</code></td></tr>
           <tr><td>9 (for the gate to hold)</td><td>The environments <code>staging</code> and <code>production</code>, with you as a required reviewer on <code>production</code> (Settings → Environments)</td></tr>
-          <tr><td>10 and "from scratch" 6</td><td>An AWS account with GitHub as an OIDC provider and a role whose trust policy matches your repository's <code>sub</code>. Without it the login step fails, which is the expected result</td></tr>
+          <tr><td>10 and "from scratch" 9</td><td>An AWS account with GitHub as an OIDC provider and a role whose trust policy matches your repository's <code>sub</code>. Without it the login step fails, which is the expected result</td></tr>
           <tr><td>11 and 12</td><td>Both files in the repository: the caller needs <code>.github/workflows/build-image.yml</code> to exist</td></tr>
+          <tr><td>"From scratch" 3</td><td>The .NET project, the Angular app and a <code>Dockerfile</code> in <code>src/api</code>. No secrets and no settings: that is its point</td></tr>
+          <tr><td>"From scratch" 6 and 10</td><td>Every tab saved as its own file in <code>.github/workflows/</code>, with the name on the tab. For 6, 7 and 10: the environments, variables and secrets from step 15 (the loop that creates <code>dev</code>, <code>uat</code> and <code>prod</code>), and a <code>scripts/deploy.sh</code> or <code>scripts/migrate.sh</code> that is executable and only prints what it would do</td></tr>
+          <tr><td>"From scratch" 11</td><td>The variables <code>ASPNETCORE_ENVIRONMENT</code>, <code>API_BASE_URL</code> and <code>LOG_LEVEL</code> and the secret <code>DB_CONNECTION_STRING</code> on each environment. Without a cluster the <code>kubectl apply</code> step fails, which is the expected result: the settings file is written before it</td></tr>
+          <tr><td>"From scratch" 12</td><td>An AWS account with a bucket, a CloudFront distribution and an OIDC role. Without one, use the GitHub Pages workflow from step 15, which needs nothing but the repository</td></tr>
           <tr><td>13</td><td>Save it as <code>.github/actions/setup-todo-api/action.yml</code> and use it from a workflow after a checkout step</td></tr>
           <tr><td>15</td><td>A public repository (or GitHub Advanced Security), with the dependency graph enabled</td></tr>
           <tr><td>17 and 19</td><td>Save as <code>.github/dependabot.yml</code> and <code>.github/CODEOWNERS</code>. The CODEOWNERS teams must exist and have write access</td></tr>
@@ -148,7 +155,7 @@ gh secret set DOCKERHUB_TOKEN --env production     # an environment secret; it a
       <h3>6. Clean up</h3>
       <figure class="code"><figcaption>bash</figcaption><pre><code>gh run list --limit 20                  # anything still running?
 gh repo delete OWNER/actions-practice --yes     # needs the delete_repo scope: gh auth refresh -s delete_repo</code></pre></figure>
-      <div class="callout warn"><p><strong>Before you push a workflow to <code>infra-setup</code>.</strong> A workflow starts running the moment it reaches GitHub and its trigger matches. A file with <code>on: push</code> runs on that very push. Read its triggers, its <code>permissions</code> and what it publishes or deploys first, exactly as in step 17.</p></div>
+      <div class="callout warn"><p><strong>Before you push a workflow to <code>infra-setup</code>.</strong> A workflow starts running the moment it reaches GitHub and its trigger matches. A file with <code>on: push</code> runs on that very push. Read its triggers, its <code>permissions</code> and what it publishes or deploys first, exactly as in step 18.</p></div>
       <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/billing/concepts/product-billing/github-actions">GitHub Actions billing</a>, <a href="https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow">Manually running a workflow</a>, <a href="https://docs.github.com/en/actions/how-tos/monitor-workflows/enable-debug-logging">Enabling debug logging</a>, <a href="https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments">Managing environments</a></p>
       <div class="learn"><h4>What you just learned</h4><ul>
         <li>The loop is: lint, push, <code>gh run watch</code>, <code>gh run view --log-failed</code>.</li>
@@ -164,7 +171,7 @@ gh repo delete OWNER/actions-practice --yes     # needs the delete_repo scope: g
       <div class="table-wrap"><table>
         <thead><tr><th>What you see</th><th>Likely cause</th><th>What to do</th></tr></thead>
         <tbody>
-          <tr><td>The Actions tab shows <b>Invalid workflow file</b>, and no run starts</td><td>A YAML or structure error in the file</td><td>Run <code>actionlint</code> locally, or paste the file in the sandbox (step 18)</td></tr>
+          <tr><td>The Actions tab shows <b>Invalid workflow file</b>, and no run starts</td><td>A YAML or structure error in the file</td><td>Run <code>actionlint</code> locally, or paste the file in the sandbox (step 19)</td></tr>
           <tr><td>You pushed and nothing ran</td><td>A branch, tag or path filter does not match; the file is not on the default branch (for <code>schedule</code> and <code>workflow_dispatch</code>); the commit message has <code>[skip ci]</code> (or <code>[ci skip]</code>, <code>[no ci]</code>, <code>[skip actions]</code>, <code>[actions skip]</code>)</td><td>Use the run preview with the same event, and read the filters</td></tr>
           <tr><td>A required check stays <b>Pending</b> forever</td><td>The workflow was skipped by a path filter, a branch filter or a commit message, so its check never reported</td><td>Do not filter a required workflow. Require one gate job instead (step 13)</td></tr>
           <tr><td>A job shows <b>This check was skipped</b></td><td>Its <code>if</code> was false, or a job it <code>needs</code> failed or was skipped</td><td>Read the <code>if</code>. Check <code>github.ref</code> vs <code>github.ref_name</code>, and look for text around <code>${{ }}</code></td></tr>
@@ -174,7 +181,10 @@ gh repo delete OWNER/actions-practice --yes     # needs the delete_repo scope: g
           <tr><td>The cloud says <code>Not authorized to perform sts:AssumeRoleWithWebIdentity</code></td><td>The token's <code>sub</code> (or <code>aud</code>) does not match the role's trust policy: wrong environment, wrong repository, or old vs new subject format</td><td>Print the claims with <code>github/actions-oidc-debugger</code>; compare with the trust policy; check the job declares the environment</td></tr>
           <tr><td>A run was cancelled and nobody cancelled it</td><td><code>cancel-in-progress: true</code> in a concurrency group, or the job reached its <code>timeout-minutes</code></td><td>Check <code>concurrency</code> and timeouts; never cancel deploys</td></tr>
           <tr><td>A scheduled workflow stopped running</td><td>In a public repository, schedules are disabled after 60 days without repository activity</td><td><code>gh workflow enable &lt;file&gt;</code></td></tr>
-          <tr><td>Secrets are empty in a run for a pull request from a fork</td><td>Fork pull requests get a read-only token and no secrets, by design</td><td>Do not work around it with <code>pull_request_target</code> (step 17, scenario 10)</td></tr>
+          <tr><td>A variable or secret is empty in one environment and fine in another</td><td>It is not set for that environment, its name is spelled differently there, or the job does not name the environment. A missing name gives an empty text and no error</td><td><code>gh variable list --env uat</code> and <code>gh secret list --env uat</code>; check the job's <code>environment</code>; in a called workflow, check the caller passes <code>secrets: inherit</code> (step 15)</td></tr>
+          <tr><td>A .NET app ignores <code>appsettings.Uat.json</code> or a setting from an environment variable</td><td>The environment name does not match the file name letter for letter, the override has another shape than the setting, or the variable has one underscore where it needs two</td><td>Read the app's start-up log line <code>Hosting environment</code> (step 18, scenario 13)</td></tr>
+          <tr><td>Users still see the old web app after a release</td><td><code>index.html</code> was uploaded with a long cache, so browsers do not ask again</td><td>Long cache only for files with a hash in their name; <code>no-cache</code> for <code>index.html</code> (step 18, scenario 14)</td></tr>
+          <tr><td>Secrets are empty in a run for a pull request from a fork</td><td>Fork pull requests get a read-only token and no secrets, by design</td><td>Do not work around it with <code>pull_request_target</code> (step 18, scenario 10)</td></tr>
           <tr><td>An environment has required reviewers set but the job does not wait</td><td>Your plan does not support them for this repository (private repositories need a higher plan)</td><td>Check <b>Settings → Environments</b> for a warning, and the plan notes in step 9</td></tr>
           <tr><td>The lab says the checker is unavailable</td><td>The browser lacks WebAssembly or <code>DecompressionStream</code></td><td>Use a current Chrome, Edge, Firefox or Safari. The YAML and requirement checks still work</td></tr>
         </tbody>

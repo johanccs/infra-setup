@@ -1399,5 +1399,97 @@
   "outputs": [
    "helm-path"
   ]
+ },
+ "actions/configure-pages": {
+  "use": "v6",
+  "latestRelease": "v6.0.0",
+  "sha": "45bfe0192ca1faeb007ade9deae92b16b8254a0d",
+  "using": "node24",
+  "inputs": {
+   "static_site_generator": {
+    "required": false,
+    "default": null
+   },
+   "generator_config_file": {
+    "required": false,
+    "default": null
+   },
+   "token": {
+    "required": true,
+    "default": "${{ github.token }}"
+   },
+   "enablement": {
+    "required": false,
+    "default": "false"
+   }
+  },
+  "outputs": [
+   "base_url",
+   "origin",
+   "host",
+   "base_path"
+  ]
+ },
+ "actions/upload-pages-artifact": {
+  "use": "v5",
+  "latestRelease": "v5.0.0",
+  "sha": "fc324d3547104276b827a68afc52ff2a11cc49c9",
+  "using": "composite",
+  "inputs": {
+   "name": {
+    "required": false,
+    "default": "github-pages"
+   },
+   "path": {
+    "required": true,
+    "default": "_site/"
+   },
+   "retention-days": {
+    "required": false,
+    "default": "1"
+   },
+   "include-hidden-files": {
+    "required": false,
+    "default": "false"
+   }
+  },
+  "outputs": [
+   "artifact_id"
+  ]
+ },
+ "actions/deploy-pages": {
+  "use": "v5",
+  "latestRelease": "v5.0.1",
+  "sha": "368f82528645a54fb793d4d04e342629a3f51346",
+  "using": "node24",
+  "inputs": {
+   "token": {
+    "required": true,
+    "default": "${{ github.token }}"
+   },
+   "timeout": {
+    "required": false,
+    "default": "600000"
+   },
+   "error_count": {
+    "required": false,
+    "default": "10"
+   },
+   "reporting_interval": {
+    "required": false,
+    "default": "5000"
+   },
+   "artifact_name": {
+    "required": false,
+    "default": "github-pages"
+   },
+   "preview": {
+    "required": false,
+    "default": "false"
+   }
+  },
+  "outputs": [
+   "page_url"
+  ]
  }
 }

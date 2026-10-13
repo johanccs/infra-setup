@@ -1,0 +1,237 @@
+    <!-- ============ 15 ============ -->
+    <section class="step" id="delivery" data-step>
+      <div class="step-head"><span class="num">15</span><h2>Delivery patterns: several workflows, three environments, real apps</h2></div>
+      <p class="goal"><b>Goal:</b> know how a team's pipeline is split into files, how settings and passwords reach a job, how one build travels from dev to uat to prod, and what is different about deploying a .NET API and a single-page app.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>So far every lab was one file with one purpose. A real repository has several workflow files that share work, and the same build must run in three places with three sets of settings. Nothing here is new syntax. It is how the pieces you know are arranged, and where the settings come from. You read this step, then write all of it yourself in the next one.</p>
+      </div>
+
+      <h3>1. One file per purpose</h3>
+      <p>A workflow file answers two questions: <b>when</b> does it run, and <b>what is it allowed to do</b>. When two things have different answers, they belong in different files.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>File</th><th>Starts on</th><th>Does</th><th>May use</th></tr></thead>
+        <tbody>
+          <tr><td><code>pr.yml</code></td><td><code>pull_request</code></td><td>Builds and tests. Deploys nothing</td><td>No secrets, no environment, a read-only token</td></tr>
+          <tr><td><code>release.yml</code></td><td><code>push</code> to <code>main</code></td><td>Builds once, then dev, uat, prod</td><td>Environments, their secrets, cloud login</td></tr>
+          <tr><td><code>build.yml</code></td><td><code>workflow_call</code></td><td>The build itself, written once and called by the two above</td><td>Whatever the caller allows</td></tr>
+          <tr><td><code>deploy.yml</code></td><td><code>workflow_call</code></td><td>Deploys to the one environment it is told</td><td>That environment's variables and secrets</td></tr>
+        </tbody>
+      </table></div>
+      <ul>
+        <li><b>A pull request workflow that cannot deploy.</b> If <code>pr.yml</code> names no secret and no environment, no change to it by a contributor can reach production. A pull request from a fork gets no secrets and a read-only token in any case, so a build that needs neither works for everyone.</li>
+        <li><b>The build is written once.</b> The pull request check and the release call the same reusable <code>build.yml</code>, so what you tested is what you ship.</li>
+        <li><b>A called workflow is part of the caller's run.</b> Its artifacts can be downloaded by the caller's later jobs, and its outputs are read with <code>needs.&lt;job&gt;.outputs</code>.</li>
+        <li><b>A job that calls a workflow has no <code>runs-on</code>, no <code>steps</code> and no <code>environment</code>.</b> It has <code>uses</code>, <code>with</code>, <code>secrets</code> and <code>needs</code>.</li>
+      </ul>
+      <figure class="code"><figcaption>pr.yml: the whole file. The work is in build.yml</figcaption><pre><code>name: PR
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml</code></pre></figure>
+      <div class="callout"><p><strong>The other way to chain: <code>workflow_run</code>.</strong> It starts a workflow when another one is requested or completes. Use it only when the second workflow needs secrets that the first must not see, for example to comment on a pull request from a fork. It runs the file from the default branch, with secrets, and chains at most three levels deep. For "build, then deploy", a reusable workflow is simpler and shows as one run.</p></div>
+
+      <h3>2. How a value gets into a job</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Kind of value</th><th>Where you keep it</th><th>How the workflow reads it</th><th>Shown in logs</th></tr></thead>
+        <tbody>
+          <tr><td>The same everywhere, safe to read (<code>Release</code>)</td><td>In the file: <code>env:</code> on the workflow, a job or a step</td><td><code>$NAME</code> in a script, <code>env.NAME</code> in an expression</td><td>Yes</td></tr>
+          <tr><td>Differs per environment, not secret (a URL, a namespace)</td><td>A <b>variable</b>: Settings → Secrets and variables → Actions</td><td><code>${{ vars.NAME }}</code></td><td>Yes</td></tr>
+          <tr><td>Grants access (a password, a token)</td><td>A <b>secret</b>, in the same place</td><td><code>${{ secrets.NAME }}</code></td><td>Masked as <code>***</code></td></tr>
+          <tr><td>Worked out during the run (a version, an image tag)</td><td>Nowhere: a step writes it</td><td><code>echo "NAME=value" &gt;&gt; "$GITHUB_ENV"</code> for later steps, <code>&gt;&gt; "$GITHUB_OUTPUT"</code> for other steps and jobs</td><td>Yes</td></tr>
+        </tbody>
+      </table></div>
+      <ul>
+        <li><b>The most specific wins.</b> For variables and secrets: environment over repository over organization. For <code>env:</code>: step over job over workflow.</li>
+        <li><b>Environment values need the environment.</b> A job sees an environment's variables and secrets only when it has <code>environment: that-name</code>, and its secrets only after any required reviewer has approved.</li>
+        <li><b>A wrong name is silent.</b> A secret or variable that does not exist gives an empty text and no error. This is the most common reason for "it works in dev and not in uat".</li>
+        <li><b>Keep a secret narrow.</b> Put it in the <code>env</code> of the one step that needs it. At job or workflow level it is handed to every step, including actions written by other people. Never write <code>${{ secrets.X }}</code> inside a script.</li>
+        <li><b><code>$GITHUB_ENV</code> starts at the next step.</b> The step that writes a value cannot read it yet.</li>
+        <li><b>Not in <code>if</code>.</b> <code>secrets</code> cannot be read in an <code>if:</code>. Put it in <code>env</code> and test the variable.</li>
+        <li><b>A reusable workflow gets no secrets by itself.</b> The caller passes them, one by one or all with <code>secrets: inherit</code>.</li>
+      </ul>
+      <figure class="code"><figcaption>The four ways, in one job</figcaption><pre><code>env:
+  CONFIGURATION: Release                       # 1. fixed, in the file
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev                           # gives this job dev's variables and secrets
+    env:
+      API_BASE_URL: ${{ vars.API_BASE_URL }}   # 2. a variable
+    steps:
+      - run: echo "IMAGE_TAG=${GITHUB_SHA::7}" &gt;&gt; "$GITHUB_ENV"   # 4. worked out here ...
+      - run: echo "$CONFIGURATION $API_BASE_URL $IMAGE_TAG"         # ... and read from the next step on
+      - env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}                   # 3. a secret, for this step only
+        run: ./scripts/migrate.sh</code></pre></figure>
+
+      <h3>3. Dev, uat, prod: build once, deploy three times</h3>
+      <p>The rule is short: <b>the thing that reaches production is the same thing that was tested</b>. So the image or the publish folder is built in one job, and three deploy jobs take it to three places. What differs between the places is not in the YAML. It is in the three <b>environments</b> in the repository's settings.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Environment</th><th>Variable <code>K8S_NAMESPACE</code></th><th>Secret <code>DB_PASSWORD</code></th><th>Protection</th></tr></thead>
+        <tbody>
+          <tr><td><code>dev</code></td><td><code>todo-dev</code></td><td>the dev password</td><td>None: every merge deploys</td></tr>
+          <tr><td><code>uat</code></td><td><code>todo-uat</code></td><td>the uat password</td><td>A tester approves</td></tr>
+          <tr><td><code>prod</code></td><td><code>todo-prod</code></td><td>the prod password</td><td>A reviewer approves, and only <code>main</code> may deploy</td></tr>
+        </tbody>
+      </table></div>
+      <figure class="code"><figcaption>release.yml: one stage. The other two differ in one word and in what they wait for</figcaption><pre><code>  uat:
+    needs: [build, dev]                        # waits for dev, and may read build's outputs
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: uat
+      image_tag: ${{ needs.build.outputs.image_tag }}
+    secrets: inherit</code></pre></figure>
+      <ul>
+        <li><b>List <code>build</code> in every stage's <code>needs</code>.</b> A job can read the outputs of the jobs in its own <code>needs</code> list only. Through <code>dev</code> alone, <code>needs.build.outputs.image_tag</code> is empty.</li>
+        <li><b>One deployment per environment at a time</b>: <code>concurrency</code> with the environment in the group name and <code>cancel-in-progress: false</code>.</li>
+        <li><b>The job's name is a label.</b> Where it deploys is decided by the value of <code>environment</code>. Copying a stage and forgetting that one word is the classic mistake (scenario 12 in step 18).</li>
+      </ul>
+      <p>You can run all of this without a cluster. Make the three environments, give each a different variable, and let the deploy script print what it would do:</p>
+      <figure class="code"><figcaption>bash: three environments to practise with (in a public repository)</figcaption><pre><code>for e in dev uat prod; do
+  gh api --method PUT "repos/{owner}/{repo}/environments/$e"
+  gh variable set K8S_NAMESPACE --env "$e" --body "todo-$e"
+  gh secret set DB_PASSWORD --env "$e"        # asks for the value, so it stays out of your history
+done</code></pre></figure>
+      <div class="callout warn"><p><strong>Plans.</strong> Environments, their secrets and their protection rules work in public repositories on every plan. In a private repository they need GitHub Pro, Team or Enterprise, and required reviewers need Enterprise. Practise in the public repository from step 20.</p></div>
+
+      <h3>4. A .NET API: overwriting appsettings</h3>
+      <p>ASP.NET Core reads its settings from several places, one after the other, and <b>a later place wins</b> for any setting it also has:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Order</th><th>Source</th><th>What the pipeline does with it</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><code>appsettings.json</code></td><td>Nothing. It is in the repository, with the defaults</td></tr>
+          <tr><td>2</td><td><code>appsettings.&lt;Environment&gt;.json</code></td><td>Writes it at deploy time, for settings that are not secret</td></tr>
+          <tr><td>3</td><td>Environment variables</td><td>Sets them where the app runs, for secrets</td></tr>
+          <tr><td>4</td><td>Command-line arguments</td><td>Rarely used</td></tr>
+        </tbody>
+      </table></div>
+      <ul>
+        <li><b><code>&lt;Environment&gt;</code> is the value of <code>ASPNETCORE_ENVIRONMENT</code></b> where the app runs. When it is not set, the app uses <code>Production</code>.</li>
+        <li><b>The capital letters must match on Linux.</b> With <code>ASPNETCORE_ENVIRONMENT=uat</code>, the file <code>appsettings.Uat.json</code> is skipped, and a missing settings file is not an error.</li>
+        <li><b>In a variable name, <code>__</code> is the <code>:</code> between levels.</b> The setting <code>ConnectionStrings:Todos</code> is overridden by the variable <code>ConnectionStrings__Todos</code>. One underscore does nothing.</li>
+        <li><b>An override needs the same shape.</b> To replace <code>Api:BaseUrl</code>, the file must contain <code>{"Api": {"BaseUrl": …}}</code>. Anything else is a new setting that nobody reads.</li>
+        <li><b>Write JSON with <code>jq</code>, never with <code>echo</code> or <code>sed</code>.</b> <code>jq -n --arg</code> quotes every value correctly. It is already on GitHub's runners.</li>
+      </ul>
+      <figure class="code"><figcaption>The step, and the file it writes for uat</figcaption><pre><code>- name: Write the settings file for this environment
+  env:
+    API_BASE_URL: ${{ vars.API_BASE_URL }}
+    LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+  run: |
+    jq -n --arg url "$API_BASE_URL" --arg level "$LOG_LEVEL" \
+      '{Api: {BaseUrl: $url}, Logging: {LogLevel: {Default: $level}}}' \
+      &gt; "publish/appsettings.$ASPNETCORE_ENVIRONMENT.json"
+
+# publish/appsettings.Uat.json
+{
+  "Api": { "BaseUrl": "https://api.uat.example.com" },
+  "Logging": { "LogLevel": { "Default": "Warning" } }
+}</code></pre></figure>
+      <p>These are not claims from memory. This is a real .NET 10 app on Linux, with <code>Api:BaseUrl</code> and <code>ConnectionStrings:Todos</code> in <code>appsettings.json</code> and an <code>appsettings.Uat.json</code> beside it, started six ways:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Started with</th><th>The app's environment</th><th><code>Api:BaseUrl</code> came from</th><th><code>ConnectionStrings:Todos</code> came from</th></tr></thead>
+        <tbody>
+          <tr><td>Nothing set</td><td><code>Production</code></td><td><code>appsettings.Production.json</code></td><td><code>appsettings.json</code></td></tr>
+          <tr><td><code>ASPNETCORE_ENVIRONMENT=Uat</code></td><td><code>Uat</code></td><td><code>appsettings.Uat.json</code></td><td><code>appsettings.json</code></td></tr>
+          <tr><td><code>ASPNETCORE_ENVIRONMENT=uat</code></td><td><code>uat</code></td><td><code>appsettings.json</code>: the Uat file was skipped</td><td><code>appsettings.json</code></td></tr>
+          <tr><td><code>Uat</code> and <code>ConnectionStrings__Todos=…</code></td><td><code>Uat</code></td><td><code>appsettings.Uat.json</code></td><td>the variable</td></tr>
+          <tr><td><code>Uat</code> and <code>ConnectionStrings_Todos=…</code></td><td><code>Uat</code></td><td><code>appsettings.Uat.json</code></td><td><code>appsettings.json</code>: one underscore was ignored</td></tr>
+          <tr><td><code>Uat</code>, <code>Api__BaseUrl=…</code> and <code>--Api:BaseUrl=…</code></td><td><code>Uat</code></td><td>the command line</td><td><code>appsettings.json</code></td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>5. An Angular app, or any single-page app</h3>
+      <p>The output of <code>ng build</code> is a folder of static files. Deploying it means copying that folder to something that serves files: a bucket behind a CDN, GitHub Pages, or nginx in a container. Three things need care, and they are the same for React and Vue.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Problem</th><th>Why</th><th>What the pipeline does</th></tr></thead>
+        <tbody>
+          <tr><td><b>Settings are compiled in</b></td><td>Angular's <code>environment.ts</code> and <code>--configuration</code> are applied while building. A build made for dev points at dev for ever</td><td>Builds once. At deploy time it writes a small <code>config.json</code> next to <code>index.html</code>, and the app fetches it when it starts</td></tr>
+          <tr><td><b>Browsers keep files</b></td><td>A production build puts a hash in the name of each script and stylesheet (<code>main-5T3KQ2AB.js</code>), so those never change. <code>index.html</code> keeps its name and names the current scripts</td><td>Uploads <code>*.js</code> and <code>*.css</code> with a one-year cache, and everything else with <code>no-cache</code></td></tr>
+          <tr><td><b>A release is not instant</b></td><td>For a moment the server has a mix of old and new files, and open tabs still hold the old <code>index.html</code></td><td>Uploads the hashed files first and <code>index.html</code> last, and leaves the old hashed files in place</td></tr>
+        </tbody>
+      </table></div>
+      <figure class="code"><figcaption>The deploy steps for a bucket behind CloudFront</figcaption><pre><code>- name: Write the settings the app fetches when it starts
+  env:
+    API_BASE_URL: ${{ vars.API_BASE_URL }}
+  run: |
+    jq -n --arg api "$API_BASE_URL" '{apiBaseUrl: $api}' &gt; dist/config.json
+- name: Upload the hashed files first, cached for a year
+  run: aws s3 sync dist "s3://$BUCKET" --exclude "*" --include "*.js" --include "*.css" --cache-control "public,max-age=31536000,immutable"
+- name: Then everything else, never cached, and remove what is gone
+  run: aws s3 sync dist "s3://$BUCKET" --delete --exclude "*.js" --exclude "*.css" --cache-control "no-cache"
+- name: Tell CloudFront to fetch the entry files again
+  run: aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths "/index.html" "/config.json"</code></pre></figure>
+      <ul>
+        <li><b>Everything in <code>config.json</code> is public.</b> A browser app cannot keep a secret: anything it can read, its users can read. Passwords and keys stay on the API.</li>
+        <li><b>The filters are read left to right and the last match wins.</b> <code>--exclude "*" --include "*.js"</code> means nothing, except scripts. With <code>--delete</code>, files that a filter excludes are left alone in the bucket, which is how the old scripts survive.</li>
+        <li><b><code>no-cache</code> does not mean "do not store".</b> It means "ask the server whether it changed before using your copy". That is one tiny request, and a new release is seen at once.</li>
+        <li><b>A cached <code>index.html</code> cannot be fixed from the server.</b> If it ever went out with a one-year cache, the browsers that have it will not ask again (scenario 14 in step 18).</li>
+        <li><b>Routes need a fallback.</b> For <code>/todos/42</code> the server has no file, so it must answer with <code>index.html</code> and let the app's router take over. On CloudFront that is a custom error response, on nginx <code>try_files $uri $uri/ /index.html;</code>.</li>
+        <li><b>A sub-path needs a base href.</b> If the app is served from <code>/todo/</code> and not from <code>/</code>, build with <code>ng build --base-href /todo/</code>.</li>
+      </ul>
+      <p>The same app on GitHub Pages needs no cloud account, which makes it a good way to practise. Pages takes one artifact and publishes it. Choose <b>GitHub Actions</b> as the source under Settings → Pages first.</p>
+      <figure class="code"><figcaption>deploy-pages.yml: the UI on GitHub Pages</figcaption><pre><code>name: Deploy UI to Pages
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm ci
+        working-directory: src/ui
+      - run: npx ng build --configuration production --base-href "/${{ github.event.repository.name }}/"
+        working-directory: src/ui
+      - run: cp src/ui/dist/todo-ui/browser/index.html src/ui/dist/todo-ui/browser/404.html   # the fallback for routes
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: src/ui/dist/todo-ui/browser
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write        # to publish
+      id-token: write     # to prove the artifact came from this workflow
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5</code></pre></figure>
+
+      <h3>Now write them</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Pattern</th><th>Write it (step 16)</th><th>Fix it (step 18)</th></tr></thead>
+        <tbody>
+          <tr><td>A pipeline for pull requests only</td><td>Challenge 3</td><td></td></tr>
+          <tr><td>Several workflow files and one reusable build</td><td>Challenge 6</td><td></td></tr>
+          <tr><td>Variables and secrets</td><td>Challenge 7</td><td></td></tr>
+          <tr><td>Dev, uat, prod</td><td>Challenge 10</td><td>Scenario 12</td></tr>
+          <tr><td>.NET settings per environment</td><td>Challenge 11</td><td>Scenario 13</td></tr>
+          <tr><td>Deploying a single-page app</td><td>Challenge 12</td><td>Scenario 14</td></tr>
+        </tbody>
+      </table></div>
+      <p class="sources"><b>Sources.</b> <a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows">Reuse workflows</a>, <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/variables">Variables reference</a>, <a href="https://docs.github.com/en/actions/reference/security/secrets">Secrets reference</a>, <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments">Deployments and environments</a>, <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run">The workflow_run event</a>, <a href="https://learn.microsoft.com/en-us/aspnet/core/fundamentals/configuration/">Configuration in ASP.NET Core</a>, <a href="https://learn.microsoft.com/en-us/aspnet/core/fundamentals/environments">ASP.NET Core runtime environments</a>, <a href="https://angular.dev/tools/cli/deployment">Angular deployment</a>, <a href="https://angular.dev/tools/cli/environments">Angular build environments</a>, <a href="https://docs.aws.amazon.com/cli/latest/reference/s3/sync.html">aws s3 sync</a>, <a href="https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Expiration.html">CloudFront cache expiration</a>, <a href="https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site">Publishing a Pages site with Actions</a></p>
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>One workflow file per trigger and purpose. The pull request file builds and cannot deploy. The build is one reusable file.</li>
+        <li>Fixed values in <code>env</code>, per-environment settings in <code>vars</code>, anything that grants access in <code>secrets</code>, and a secret only in the step that needs it.</li>
+        <li>Build once, deploy three times. The environments hold the differences, and the YAML stays the same.</li>
+        <li>.NET: a later source wins, <code>__</code> is the separator, and the environment name must match the file name exactly.</li>
+        <li>A single-page app: settings from a file fetched at start-up, long cache only for hashed files, hashed files first and <code>index.html</code> last.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>

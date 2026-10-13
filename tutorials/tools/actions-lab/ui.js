@@ -62,7 +62,9 @@
     [/job "([^"]+)" needs job "([^"]+)" which does not exist/, function (m) { return '<code>needs: ' + m[2] + '</code> in job <code>' + m[1] + '</code> names a job that is not in this file. <code>needs</code> takes the job id (the key under <code>jobs:</code>), so check the spelling.'; }],
     [/"steps" section is missing in job "([^"]+)"/, function (m) { return 'Job <code>' + m[1] + '</code> has no <code>steps</code>. A job is a list of steps, and each step runs a command or an action.'; }],
     [/step must run script with "run" section or run action with "uses" section/, function () { return 'A step must do something: give it <code>run:</code> (a shell command) or <code>uses:</code> (an action), and not neither.'; }],
-    [/"([^"]+)" section is missing in workflow|"jobs" section is missing/, function () { return 'The workflow has no <code>jobs:</code> section, so there is nothing to run.'; }],
+    [/"on" section is missing in workflow/, function () { return 'The workflow has no <code>on:</code> section, so nothing would ever start it. Say which events start it, for example <code>on: push</code>.'; }],
+    [/"jobs" section is missing in workflow/, function () { return 'The workflow has no <code>jobs:</code> section, so there is nothing to run.'; }],
+    [/"([^"]+)" job should not be empty/, function (m) { return 'Job <code>' + m[1] + '</code> has nothing under it yet. Give it <code>runs-on</code> and <code>steps</code>.'; }],
     [/unexpected key "([^"]+)" for "([^"]+)" section\. expected one of (.*)/, function (m) { return '<code>' + m[1] + '</code> is not a valid key in this place (' + m[2] + '). The keys allowed here are: ' + m[3] + '.'; }],
     [/unknown Webhook event "([^"]+)"\. see https/, function (m) { return '<code>' + m[1] + '</code> is not an event GitHub knows. Check the spelling of the trigger under <code>on:</code>.'; }],
     [/property "([^"]+)" is not defined in object type/, function (m) { return '<code>' + m[1] + '</code> does not exist in that context. A typo in a <code>${{ }}</code> expression gives an empty value silently on GitHub, which is why this check matters.'; }],
@@ -87,7 +89,8 @@
   }
 
   // ------------------------------------------------------------------ the editor
-  function makeEditor(initial, onChange) {
+  function makeEditor(initial, onChange, hooks) {
+    hooks = hooks || {};
     var wrap = el('div', 'ed');
     var gut = el('div', 'ed-gut'), hl = el('div', 'ed-hl'), ta = el('textarea', 'ed-ta');
     ta.value = initial; ta.spellcheck = false; ta.setAttribute('wrap', 'off'); ta.setAttribute('autocapitalize', 'off'); ta.setAttribute('autocorrect', 'off');
@@ -104,12 +107,15 @@
       }
       var rows = Math.max(12, Math.min(n + 1, 34));
       ta.style.height = (rows * 21 + 16) + 'px';
+      gut.style.boxSizing = 'border-box'; gut.style.height = ta.style.height;   // a long file scrolls inside the editor, and the line numbers scroll with it
       sync();
     }
     function sync() { gut.scrollTop = ta.scrollTop; hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; }
     ta.addEventListener('scroll', sync);
     ta.addEventListener('input', function () { layout(); onChange(); });
+    ['keyup', 'click', 'focus'].forEach(function (ev) { ta.addEventListener(ev, function () { if (hooks.caret) hooks.caret(); }); });
     ta.addEventListener('keydown', function (e) {
+      if ((e.key === ' ' || e.code === 'Space') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (hooks.complete) hooks.complete(); return; }
       if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         var s = ta.selectionStart, en = ta.selectionEnd;
@@ -132,6 +138,7 @@
     layout();
     return {
       el: wrap, ta: ta, get: function () { return ta.value; },
+      replace: function (from, to, t) { ta.focus(); ta.setSelectionRange(from, to); insert(t); },
       set: function (v) { ta.value = v; layout(); onChange(); },
       mark: function (errLines, warnLines) {
         $$('.l', hl).forEach(function (d) { d.className = 'l'; });
@@ -237,21 +244,26 @@
 
   // ------------------------------------------------------------------ one lab
   var labs = {};
-  function markSectionDone(node) {
-    var sec = node.closest('section[data-step]');
-    if (!sec) return;
-    var all = $$('.lab[data-lab]', sec).filter(function (l) { return !l.closest('[data-set]'); });
-    if (!all.length) return;
-    if (all.every(function (l) { return l.classList.contains('passed'); })) {
-      var box = $('input[data-done]', sec);
-      if (box && !box.checked) { box.checked = true; box.dispatchEvent(new Event('change')); }
-    }
-  }
   function mountLab(root) {
     var id = root.getAttribute('data-lab');
     var spec = GA.labs[id];
     if (!spec) { root.innerHTML = '<p class="pv-empty">Missing lab ' + esc(id) + '</p>'; return; }
     var saved = store.get('ga-lab:' + id) || {};
+    // A lab has one file, or several (spec.files) shown as tabs. Every check names the file it reads.
+    var multi = Array.isArray(spec.files);
+    var files = multi ? spec.files : [{ name: null, starter: spec.starter || '', solution: spec.solution }];
+    // Guided starts from the lesson's file; Empty starts from nothing, and you type every line. The choice is kept, per lab,
+    // and the last choice is the default for labs you have not opened yet.
+    var canChoose = !multi && !spec.scenario && id !== 'free' && (spec.starter || '').trim() !== '';
+    var mode = canChoose ? (saved.mode || ((saved.code || '').trim() ? 'guided' : null) || store.get('ga-mode') || 'empty') : 'guided';
+    var chosen = !!saved.mode;                 // false: this lab follows the last choice made anywhere on the page
+    var starterOf = function (f) { return mode === 'empty' ? '' : (f.starter || ''); };
+    var kindOf = function (i) { return files[i].assist || spec.assist || (spec.format === 'text' ? 'none' : 'workflow'); };
+    var texts = files.map(function (f, i) {
+      if (multi) return saved.files && saved.files[f.name] !== undefined ? saved.files[f.name] : (f.starter || '');
+      return saved.code !== undefined ? saved.code : starterOf(f);
+    });
+    var active = 0;
     var hintsShown = 0, backup = null, revealed = false;
     root.innerHTML = '';
     root.classList.add('lab');
@@ -259,21 +271,77 @@
     head.innerHTML = '<span class="lab-tag">' + esc(spec.tag || 'Lab') + '</span><b>' + esc(spec.title) + '</b><span class="lab-lvl lvl-' + (spec.level || 1) + '">' + esc(['', 'Easy', 'Easy+', 'Medium', 'Hard', 'Expert'][spec.level || 1]) + '</span><span class="lab-status" aria-live="polite"></span>';
     root.appendChild(head);
     if (spec.scenario) root.appendChild(el('div', 'lab-scn', spec.scenario));
+    var modeBar = null, modeBtns = {}, modeNote = null;
+    if (canChoose) {
+      modeBar = el('div', 'lab-mode', '<span class="lab-mode-l">Start from</span>');
+      [['guided', 'Guided', 'The lesson\'s starting file: you add the new part'], ['empty', 'Empty', 'A blank file: you type every line']].forEach(function (m) {
+        var b = el('button', 'lab-mode-b', m[1]); b.type = 'button'; b.title = m[2]; b.setAttribute('data-mode', m[0]);
+        b.addEventListener('click', function () { setMode(m[0], b); });
+        modeBar.appendChild(b); modeBtns[m[0]] = b;
+      });
+      modeNote = el('span', 'lab-mode-n'); modeBar.appendChild(modeNote);
+      root.appendChild(modeBar);
+    }
     root.appendChild(el('div', 'lab-task', spec.task));
+    var blankNote = el('div', 'lab-blank'); blankNote.hidden = true; root.appendChild(blankNote);
+    var tabs = null, tabBtns = [];
+    if (multi) {
+      tabs = el('div', 'lab-tabs'); tabs.setAttribute('role', 'tablist');
+      files.forEach(function (f, i) {
+        var b = el('button', 'lab-tab', '<span class="dot" aria-hidden="true"></span>' + esc(f.name));
+        b.type = 'button'; b.setAttribute('role', 'tab');
+        b.addEventListener('click', function () { show(i); });
+        tabs.appendChild(b); tabBtns.push(b);
+      });
+      root.appendChild(tabs);
+    }
     var main = el('div', 'lab-main');
     var side = el('div', 'lab-side');
     var reqList = el('ul', 'reqs'), probs = el('div', 'probs');
     side.appendChild(el('h4', null, 'Requirements')); side.appendChild(reqList);
     side.appendChild(el('h4', null, 'Problems found')); side.appendChild(probs);
-    var editor = makeEditor(saved.code !== undefined ? saved.code : (spec.starter || ''), function () { schedule(); });
-    main.appendChild(editor.el); main.appendChild(side);
+    var assist = el('div', 'lab-assist'); assist.setAttribute('aria-live', 'off');
+    var lastSuggest = null;
+    function showAssist() {
+      var kind = kindOf(active);
+      if (kind === 'none' || !GA.suggest) { assist.hidden = true; return; }
+      var ta = editor.ta, sg = null;
+      if (ta.selectionStart === ta.selectionEnd) { try { sg = GA.suggest(ta.value, ta.selectionStart, kind); } catch (e) { sg = null; } }
+      lastSuggest = sg;
+      var ln = ta.value.slice(0, ta.selectionStart).split('\n').length;
+      assist.innerHTML = '';
+      if (!sg) { assist.appendChild(el('p', 'as-none', '<b>Line ' + ln + '.</b> Nothing to suggest here. Put the cursor where a key starts and the keys that fit are listed. <kbd>Ctrl</kbd>+<kbd>Space</kbd> types the first one.')); return; }
+      assist.appendChild(el('p', 'as-head', '<b>Line ' + ln + ', ' + esc(sg.where) + '.</b> ' + (sg.value ? 'Values that fit:' : sg.items.length ? 'Keys that fit here:' : '') + (sg.free ? ' ' + esc(sg.free) : '')));
+      var list = el('div', 'as-list');
+      sg.items.slice(0, 24).forEach(function (it, i) {
+        var b = el('button', 'as-item' + (i === 0 ? ' first' : ''), '<code>' + esc(it.label) + '</code><span>' + esc(it.desc) + '</span>');
+        b.type = 'button';
+        b.addEventListener('mousedown', function (e) { e.preventDefault(); });      // keep the cursor in the editor
+        b.addEventListener('click', function () { editor.replace(sg.from, sg.to, it.insert); showAssist(); });
+        list.appendChild(b);
+      });
+      if (sg.items.length) assist.appendChild(list);
+    }
+    var editor = makeEditor(texts[0], function () { texts[active] = editor.get(); schedule(); showAssist(); }, {
+      caret: showAssist,
+      complete: function () { showAssist(); if (lastSuggest && lastSuggest.items.length) { var it = lastSuggest.items[0]; editor.replace(lastSuggest.from, lastSuggest.to, it.insert); } },
+    });
+    var edCol = el('div', 'lab-ed');
+    edCol.appendChild(editor.el); edCol.appendChild(assist);
+    main.appendChild(edCol); main.appendChild(side);
     root.appendChild(main);
     var bar = el('div', 'lab-bar');
-    var bHint = el('button', null, 'Hint'), bSol = el('button', null, 'Show solution'), bReset = el('button', null, 'Start over'), bCopy = el('button', null, 'Copy');
-    [bHint, bSol, bReset, bCopy].forEach(function (b) { b.type = 'button'; b.className = 'copy'; bar.appendChild(b); });
+    var bHint = el('button', null, 'Hint'), bNext = el('button', null, 'Next line'), bSol = el('button', null, 'Show solution'), bReset = el('button', null, 'Start over'), bCopy = el('button', null, 'Copy');
+    bNext.title = 'Show only the next line this file still needs. Your text stays as it is.';
+    bSol.title = 'Open the finished file under the editor. Your text stays as it is.';
+    [bHint, bNext, bSol, bReset, bCopy].forEach(function (b) { b.type = 'button'; b.className = 'copy'; bar.appendChild(b); });
+    if (spec.scenario || id === 'free') bNext.hidden = true;       // a fix scenario is about finding the line yourself
+    if (id === 'free') { bSol.hidden = true; bHint.hidden = true; }
     var checker = el('span', 'lab-ck', ''); bar.appendChild(checker);
     root.appendChild(bar);
     var hintBox = el('div', 'lab-hint'); hintBox.hidden = true; root.appendChild(hintBox);
+    var nextBox = el('div', 'lab-next'); nextBox.hidden = true; root.appendChild(nextBox);
+    var solBox = el('div', 'lab-sol'); solBox.hidden = true; root.appendChild(solBox);
     var pvHost = el('div', 'lab-pv');
     var pvTitle = el('h4', null, 'What would run? <small>a preview of the run, from your YAML</small>');
     var curDoc = null;
@@ -281,50 +349,129 @@
     var pvWrap = el('div', 'lab-pvwrap'); pvWrap.appendChild(pvTitle); pvWrap.appendChild(pvHost); root.appendChild(pvWrap);
     var win = el('div', 'lab-win'); win.hidden = true; root.appendChild(win);
 
-    var timer = null, seq = 0, current = { pass: false };
-    function schedule() { clearTimeout(timer); timer = setTimeout(run, 180); }
-    function run() {
-      var text = editor.get();
+    function show(i) {
+      texts[active] = editor.get();
+      active = i;
+      editor.set(texts[i]);            // triggers a check
+      editor.ta.setAttribute('aria-label', multi ? 'Editor for ' + files[i].name : 'Workflow YAML editor');
+      showAssist();
+    }
+    // The note under the task in Empty mode: what the guided file would have given, and where help is.
+    function renderMode() {
+      if (!canChoose) return;
+      Object.keys(modeBtns).forEach(function (k) { modeBtns[k].classList.toggle('on', k === mode); modeBtns[k].setAttribute('aria-pressed', k === mode ? 'true' : 'false'); });
+      modeNote.textContent = mode === 'empty' ? 'A blank file: you type every line.' : 'The lesson\'s starting file: you add the new part.';
+      blankNote.hidden = mode !== 'empty';
+      if (mode !== 'empty') return;
+      var ids = [];
+      try { var sd = spec.format === 'text' ? null : yaml.load(spec.solution); if (sd && sd.jobs && typeof sd.jobs === 'object') ids = Object.keys(sd.jobs); } catch (e) {}
+      blankNote.innerHTML = '<p><b>Empty file.</b> Type the whole file yourself. The task above was written for the guided starting file, and here you write that part too.' +
+        (ids.length ? ' The checks look for ' + (ids.length === 1 ? 'the job id ' : 'these job ids: ') + ids.map(function (x) { return '<code>' + esc(x) + '</code>'; }).join(', ') + '.' : '') + '</p>' +
+        '<p>Under the editor you see the keys that fit on the line the cursor is on. Stuck? <b>Next line</b> shows only the next line you need, and <b>Show solution</b> opens the finished file beside your own. Neither changes what you typed.</p>' +
+        '<details><summary>See the guided starting file</summary><pre>' + esc(spec.starter || '') + '</pre></details>';
+    }
+    var armedMode = null;
+    function setMode(m, btn) {
+      if (m === mode) return;
+      var cur = editor.get(), untouched = cur.trim() === '' || cur === (files[0].starter || '');
+      if (!untouched && armedMode !== m) {
+        armedMode = m; modeNote.textContent = 'Click ' + btn.textContent + ' again: this replaces what you typed.';
+        setTimeout(function () { if (armedMode === m) { armedMode = null; renderMode(); } }, 4000); return;
+      }
+      armedMode = null; mode = m; chosen = true; store.set('ga-mode', m);
+      backup = null; revealed = false;
+      texts = files.map(starterOf); editor.set(texts[active]); renderMode(); persist();
+      document.dispatchEvent(new CustomEvent('ga-mode', { detail: { mode: m, from: id } }));
+    }
+    // The choice made in another lab becomes this lab's start too, as long as nothing was chosen or typed here.
+    if (canChoose) document.addEventListener('ga-mode', function (e) {
+      if (e.detail.from === id || chosen || e.detail.mode === mode || !root.isConnected) return;
+      if (editor.get() !== starterOf(files[0])) return;
+      mode = e.detail.mode; texts = files.map(starterOf); editor.set(texts[active]); renderMode();
+    });
+    // The next line: compare what is typed with the solution, by place in the file.
+    var nextOpen = false;
+    function renderNext() {
+      if (!nextOpen) { nextBox.hidden = true; return; }
+      var f = files[active], r = GA.nextLine(editor.get(), f.solution || '');
+      var crumbs = function (c) { return c.length ? ' under ' + c.map(function (x) { return x === '-' ? 'a list item' : '<code>' + esc(x.replace(/\|$/, '')) + '</code>'; }).join(' › ') : ' at the top level (no indent)'; };
+      var html;
+      if (r.kind === 'done') html = '<p><b>Nothing is missing.</b> Every line of the solution is in your file' + (current.pass ? '.' : '. If a requirement is still open, read the Problems panel.') + '</p>';
+      else if (r.kind === 'missing') {
+        var key = (/^\s*(?:-\s+)?([\w.\/-]+)\s*:/.exec(r.line) || [])[1];
+        var d = key && GA.describeKey ? GA.describeKey(r.crumbs, key, kindOf(active)) : null;
+        html = '<p><b>The next line your file needs</b>' + crumbs(r.crumbs) + ':</p><pre>' + esc(r.line) + '</pre>' + (d ? '<p class="nx-why"><code>' + esc(key) + '</code>: ' + esc(d) + '.</p>' : '') +
+          '<p class="nx-left">' + (r.left > 1 ? (r.left - 1) + ' more line' + (r.left === 2 ? '' : 's') + ' after this one. ' : 'This is the last one. ') + 'Type it, and this box moves on by itself.' + (kindOf(active) !== 'none' ? ' The spaces at the start matter: they say what the line belongs to.' : '') + '</p>';
+      } else html = '<p><b>All the lines are there, but line ' + r.yoursN + ' differs from the solution</b>' + crumbs(r.crumbs) + '. Another way of writing it can be just as right: the requirements decide.</p><pre>yours:    ' + esc(r.yours.trim()) + '\nsolution: ' + esc(r.line.trim()) + '</pre>';
+      nextBox.innerHTML = html; nextBox.hidden = false;
+    }
+    function renderSol() {
+      if (solBox.hidden) return;
+      solBox.innerHTML = '<div class="sol-head"><b>The solution</b><span>Read it and type what you need. Your own text is untouched.</span></div>';
+      files.forEach(function (f) { if (multi) solBox.appendChild(el('p', 'sol-file', esc(f.name))); solBox.appendChild(el('pre', null, esc(f.solution || ''))); });
+      var put = el('button', 'copy', backup !== null ? 'Back to my code' : 'Put it in the editor'); put.type = 'button';
+      put.addEventListener('click', function () {
+        if (backup !== null) { var b = backup; backup = null; revealed = false; setAll(b); renderSol(); return; }
+        texts[active] = editor.get(); backup = texts.slice(); revealed = true;
+        setAll(files.map(function (f) { return f.solution; }));
+        win.innerHTML = '<h4>The solution</h4>' + (spec.explain || ''); win.hidden = false; renderSol();
+      });
+      solBox.appendChild(put);
+    }
+    function persist(extra) {
       var prev = store.get('ga-lab:' + id) || {};
-      store.set('ga-lab:' + id, { code: text, passed: !!prev.passed, passedOnce: !!prev.passedOnce });   // typing after a pass must not forget the pass
-      var mine = ++seq;
+      var rec = { passed: !!prev.passed, passedOnce: !!prev.passedOnce };   // typing after a pass must not forget the pass
+      if (canChoose && (chosen || texts[0] !== starterOf(files[0]))) rec.mode = mode;   // an untouched lab keeps following the page's choice
+      if (multi) { rec.files = {}; files.forEach(function (f, i) { rec.files[f.name] = texts[i]; }); } else rec.code = texts[0];
+      Object.keys(extra || {}).forEach(function (k) { rec[k] = extra[k]; });
+      store.set('ga-lab:' + id, rec);
+    }
+    // Parse and lint one file.
+    function inspect(text) {
       var empty = text.trim() === '';
       var parsed = empty ? { doc: null } : (spec.format === 'text' ? { doc: {} } : parseWorkflow(text));
       var problems = [], lintRan = false;
       if (parsed.error) problems.push(parsed.error);
-      else if (!empty && spec.lint === false) { lintRan = true; }
-      else if (!empty) {
-        Checker.init();
-        var res = Checker.lint(text);
-        if (res) { problems = res.slice(); lintRan = true; }
-      }
-      curDoc = parsed.doc && typeof parsed.doc === 'object' ? parsed.doc : null;
+      else if (!empty && spec.lint === false) lintRan = true;
+      else if (!empty) { Checker.init(); var res = Checker.lint(text); if (res) { problems = res.slice(); lintRan = true; } }
+      var doc = parsed.doc && typeof parsed.doc === 'object' ? parsed.doc : null;
+      return { text: text, empty: empty, error: parsed.error, problems: problems, lintRan: lintRan, doc: doc, traps: [] };
+    }
+    var timer = null, current = { pass: false };
+    function schedule() { clearTimeout(timer); timer = setTimeout(run, 180); }
+    function run() {
+      texts[active] = editor.get();
+      persist();
+      var info = texts.map(inspect);
+      var all = {};
+      files.forEach(function (f, i) { all[f.name || 'file'] = { doc: info[i].doc, text: info[i].text }; });
+      var indexOf = function (name) { if (!multi || !name) return 0; for (var i = 0; i < files.length; i++) if (files[i].name === name) return i; return 0; };
       var reqs = (spec.checks || []).map(function (c) {
-        if (!curDoc) return { c: c, ok: false };
-        try { var r = c.test(curDoc, text); return { c: c, ok: r === true, msg: typeof r === 'string' ? r : null }; } catch (e) { return { c: c, ok: false }; }
+        var f = info[indexOf(c.file)];
+        if (!f.doc) return { c: c, ok: false };
+        try { return { c: c, ok: c.test(f.doc, f.text, all) === true }; } catch (e) { return { c: c, ok: false }; }
       });
-      var traps = [];
-      if (curDoc) (spec.traps || []).forEach(function (t) { try { if (t.test(curDoc, text)) traps.push(t); } catch (e) {} });
-      if (curDoc && spec.lint !== false && GA.globalTraps) {
-        var hasAction = problems.some(function (p) { return p.kind === 'action'; });
-        GA.globalTraps(curDoc, text).forEach(function (g) {
-          if (g.action && hasAction) return;
-          traps.push({ msg: g.msg, line: function () { return g.line; } });
-        });
-      }
+      (spec.traps || []).forEach(function (t) { var f = info[indexOf(t.file)]; if (!f.doc) return; try { if (t.test(f.doc, f.text, all)) f.traps.push(t); } catch (e) {} });
+      if (spec.lint !== false && GA.globalTraps) info.forEach(function (f) {
+        if (!f.doc) return;
+        var hasAction = f.problems.some(function (p) { return p.kind === 'action'; });
+        var gts = []; try { gts = GA.globalTraps(f.doc, f.text); } catch (e) {}
+        gts.forEach(function (g) { if (g.action && hasAction) return; f.traps.push({ msg: g.msg, line: function () { return g.line; } }); });
+      });
+      var cur = info[active];
+      curDoc = cur.doc;
       reqList.innerHTML = '';
       var blind = !!spec.scenario;   // read-and-fix: do not give the answer away, describe each requirement once it is met
       reqs.forEach(function (r, i) {
-        var text = blind && !r.ok ? 'Still to fix (' + (i + 1) + ' of ' + reqs.length + ')' : r.c.label;
-        var li = el('li', r.ok ? 'ok' : 'todo', '<span class="ic" aria-hidden="true">' + (r.ok ? '✓' : '○') + '</span><span>' + text + '</span>');
-        reqList.appendChild(li);
+        var label = blind && !r.ok ? 'Still to fix (' + (i + 1) + ' of ' + reqs.length + ')' : (multi && r.c.file ? '<span class="req-file">' + esc(r.c.file) + '</span> ' : '') + r.c.label;
+        reqList.appendChild(el('li', r.ok ? 'ok' : 'todo', '<span class="ic" aria-hidden="true">' + (r.ok ? '✓' : '○') + '</span><span>' + label + '</span>'));
       });
       probs.innerHTML = '';
       var errLines = [];
-      if (empty) probs.appendChild(el('p', 'probs-none', 'Start typing. Problems show up here as you type, each with the line number.'));
+      if (cur.empty) probs.appendChild(el('p', 'probs-none', 'Start typing. Problems show up here as you type, each with the line number.'));
       else {
-        problems.sort(function (a, b) { return a.line - b.line || a.column - b.column; });
-        problems.forEach(function (p) {
+        cur.problems.sort(function (a, b) { return a.line - b.line || a.column - b.column; });
+        cur.problems.forEach(function (p) {
           var f = friendly(p);
           var row = el('button', 'prob', '<span class="ln">Line ' + p.line + '</span><span class="msg">' + f.text + '</span>' + (f.raw ? '<span class="raw">' + esc(f.raw.length > 150 ? f.raw.slice(0, 150) + '…' : f.raw) + '</span>' : ''));
           row.type = 'button';
@@ -332,33 +479,46 @@
           probs.appendChild(row);
           errLines.push(p.line);
         });
-        traps.forEach(function (t) {
-          var tl = t.line ? t.line(text) : 0;
-          if (tl && problems.some(function (p) { return p.line === tl; })) return;   // the checker already explains that line
-          var row = el('div', 'prob trap', '<span class="ln">Mistake</span><span class="msg">' + t.msg + '</span>');
-          probs.appendChild(row);
-          if (t.line) { var ln = t.line(text); if (ln) errLines.push(ln); }
+        cur.traps.forEach(function (t) {
+          var tl = t.line ? t.line(cur.text) : 0;
+          if (tl && cur.problems.some(function (p) { return p.line === tl; })) return;   // the checker already explains that line
+          probs.appendChild(el('div', 'prob trap', '<span class="ln">Mistake</span><span class="msg">' + t.msg + '</span>'));
+          if (tl) errLines.push(tl);
         });
-        if (!problems.length && !traps.length && !parsed.error) probs.appendChild(el('p', 'probs-none ok', spec.lint === false ? (spec.format === 'text' ? '✓ No problems found in the lines.' : '✓ The YAML is valid.') : Checker.state === 'ready' ? '✓ No problems. The checker (GitHub\'s own actionlint rules) is happy with this file.' : (Checker.state === 'unavailable' ? 'The YAML is valid. The full checker could not start in this browser.' : 'The YAML is valid. Loading the full checker…')));
+        if (!cur.problems.length && !cur.traps.length) probs.appendChild(el('p', 'probs-none ok', spec.lint === false ? (spec.format === 'text' ? '✓ No problems found in the lines.' : '✓ The YAML is valid.') : Checker.state === 'ready' ? '✓ No problems. The checker (actionlint) is happy with this file.' : (Checker.state === 'unavailable' ? 'The YAML is valid. The full checker could not start in this browser.' : 'The YAML is valid. Loading the full checker…')));
       }
+      if (multi) info.forEach(function (f, i) {
+        var bad = f.empty || f.problems.length || f.traps.length;
+        tabBtns[i].className = 'lab-tab' + (i === active ? ' on' : '') + (f.empty ? ' empty' : bad ? ' bad' : ' good');
+        tabBtns[i].setAttribute('aria-selected', i === active ? 'true' : 'false');
+        if (i !== active && !f.empty && (f.problems.length || f.traps.length)) {
+          var n = f.problems.length + f.traps.length;
+          var go = el('button', 'prob other', '<span class="ln">' + esc(files[i].name) + '</span><span class="msg">' + n + ' problem' + (n === 1 ? '' : 's') + ' in the other file. Click to open it.</span>');
+          go.type = 'button'; go.addEventListener('click', function () { show(i); });
+          probs.appendChild(go);
+        }
+      });
       editor.mark(errLines);
       var okCount = reqs.filter(function (r) { return r.ok; }).length;
-      var pass = !empty && !parsed.error && lintRan && !problems.length && !traps.length && reqs.length > 0 && okCount === reqs.length;   // the sandbox has no requirements, so it never counts as passed
+      var clean = info.every(function (f) { return !f.empty && !f.error && f.lintRan && !f.problems.length && !f.traps.length; });
+      var pass = clean && reqs.length > 0 && okCount === reqs.length;   // the sandbox has no requirements, so it never counts as passed
       current.pass = pass;
       var status = $('.lab-status', head);
       status.textContent = pass ? '✓ Passed' : okCount + ' of ' + reqs.length + ' requirements';
       status.className = 'lab-status' + (pass ? ' pass' : '');
       root.classList.toggle('passed', pass || !!(store.get('ga-lab:' + id) || {}).passedOnce);
       if (pass) {
-        var st = store.get('ga-lab:' + id) || {}; st.passed = true; st.passedOnce = true; st.code = text; store.set('ga-lab:' + id, st);
+        persist({ passed: true, passedOnce: true });
         root.classList.add('passed');
         if (win.hidden) { win.innerHTML = '<h4>✓ You did it</h4>' + (spec.explain || ''); win.hidden = false; }
-        markSectionDone(root); root.dispatchEvent(new CustomEvent('labpass', { bubbles: true, detail: { id: id } }));
+        root.dispatchEvent(new CustomEvent('labpass', { bubbles: true, detail: { id: id } }));
       } else if (!win.hidden && !revealed) { win.hidden = true; }
       pvWrap.hidden = !(curDoc && spec.preview !== false);
       if (curDoc && spec.preview !== false) pvc.refresh();
+      renderNext();
       root.dispatchEvent(new CustomEvent('labchange', { bubbles: true, detail: { id: id, pass: pass } }));
     }
+    function setAll(values) { texts = values.slice(); editor.set(texts[active]); }
     Checker.onState(function (s) {
       checker.textContent = s === 'loading' ? 'Loading the checker…' : s === 'ready' ? 'Checker: actionlint ' + (window.ACTIONLINT_VERSION || '') : s === 'unavailable' ? 'Checker unavailable in this browser' : '';
       if (s === 'ready') run();
@@ -371,19 +531,19 @@
       hintBox.innerHTML = hs.slice(0, hintsShown).map(function (h, i) { return '<p><b>Hint ' + (i + 1) + ' of ' + hs.length + '.</b> ' + h + '</p>'; }).join('');
       bHint.textContent = hintsShown < hs.length ? 'Another hint' : 'No more hints';
     });
-    var armed = false;
-    bSol.addEventListener('click', function () {
-      if (backup !== null) { editor.set(backup); backup = null; bSol.textContent = 'Show solution'; revealed = false; return; }
-      if (!armed) { armed = true; bSol.textContent = 'Click again: replace my code'; setTimeout(function () { armed = false; if (backup === null) bSol.textContent = 'Show solution'; }, 4000); return; }
-      armed = false; backup = editor.get(); editor.set(spec.solution); revealed = true; bSol.textContent = 'Back to my code';
-      win.innerHTML = '<h4>The solution</h4>' + (spec.explain || ''); win.hidden = false;
-    });
+    bNext.addEventListener('click', function () { nextOpen = !nextOpen; bNext.textContent = nextOpen ? 'Hide next line' : 'Next line'; renderNext(); });
+    bSol.addEventListener('click', function () { solBox.hidden = !solBox.hidden; bSol.textContent = solBox.hidden ? 'Show solution' : 'Hide solution'; renderSol(); });
     var armed2 = false;
     bReset.addEventListener('click', function () {
       if (!armed2) { armed2 = true; bReset.textContent = 'Click again: start over'; setTimeout(function () { armed2 = false; bReset.textContent = 'Start over'; }, 4000); return; }
-      armed2 = false; bReset.textContent = 'Start over'; backup = null; revealed = false; bSol.textContent = 'Show solution'; hintsShown = 0; hintBox.hidden = true; bHint.textContent = 'Hint'; win.hidden = true;
-      store.set('ga-lab:' + id, {}); editor.set(spec.starter || '');
-      root.classList.remove('passed');
+      armed2 = false; bReset.textContent = 'Start over'; backup = null; revealed = false; hintsShown = 0; hintBox.hidden = true; bHint.textContent = 'Hint'; win.hidden = true;
+      solBox.hidden = true; bSol.textContent = 'Show solution'; nextOpen = false; bNext.textContent = 'Next line';
+      var keep = canChoose && chosen ? { mode: mode } : {};
+      store.set('ga-lab:' + id, keep);
+      texts = files.map(multi ? function (f) { return f.starter || ''; } : starterOf);
+      editor.ta.value = texts[active]; run(); store.set('ga-lab:' + id, keep);   // a fresh start also forgets the pass
+      editor.set(texts[active]);
+      root.classList.remove('passed'); syncTicks(); renderProgress();
     });
     bCopy.addEventListener('click', function () {
       var t = editor.get();
@@ -398,7 +558,11 @@
       io.observe(root);
     }
     editor.ta.addEventListener('focus', function () { Checker.init(); });
-    labs[id] = { root: root, editor: editor, run: run, spec: spec, passed: function () { return current.pass; } };
+    // For the tests: put text into the lab (a string, or { fileName: text } for a lab with several files) and check it now.
+    renderMode(); showAssist();
+    labs[id] = { root: root, editor: editor, run: run, spec: spec, passed: function () { return current.pass; },
+      mode: function () { return mode; }, setMode: function (m) { armedMode = m; setMode(m, modeBtns[m] || { textContent: m }); },
+      set: function (v) { if (multi) texts = files.map(function (f) { return v[f.name] !== undefined ? v[f.name] : ''; }); else texts = [String(v)]; editor.ta.value = texts[active]; editor.ta.dispatchEvent(new Event('input')); clearTimeout(timer); run(); } };
     run();
   }
 
@@ -427,10 +591,6 @@
     }
     root.addEventListener('labpass', function (e) {
       buttons[e.detail.id].classList.add('done'); count();
-      if (ids.every(function (x) { return buttons[x].classList.contains('done'); })) {
-        var sec = root.closest('section[data-step]'), box = sec && $('input[data-done]', sec);
-        if (box && !box.checked) { box.checked = true; box.dispatchEvent(new Event('change')); }
-      }
     });
     count();
     var last = store.get('ga-set:' + (root.getAttribute('data-set') || ''));
@@ -464,8 +624,6 @@
         out.innerHTML = '<p class="cmd-ok">✓ Correct. This is what each part does:</p><ul class="cmd-tok">' + r.tokens.map(function (t) { return '<li><code>' + esc(t.t) + '</code><span>' + t.why + '</span></li>'; }).join('') + '</ul>' + (spec.after ? '<p class="cmd-after">' + spec.after + '</p>' : '');
         var st = store.get('ga-cmd:' + id) || {}; st.ok = true; store.set('ga-cmd:' + id, st);
         root.dispatchEvent(new CustomEvent('cmdpass', { bubbles: true }));
-        var sec = root.closest('section[data-step]');
-        if (sec && $$('.cmd', sec).every(function (c) { return c.classList.contains('ok'); })) { var box = $('input[data-done]', sec); if (box && !box.checked) { box.checked = true; box.dispatchEvent(new Event('change')); } }
       } else out.innerHTML = '<ul class="cmd-bad">' + r.problems.map(function (p) { return '<li>' + p + '</li>'; }).join('') + '</ul>';
     }
     ta.addEventListener('input', function () { clearTimeout(ta._t); ta._t = setTimeout(run, 200); });
@@ -515,8 +673,6 @@
       if (all) {
         var st = store.get('ga-drill:' + id) || {}; st.ok = true; store.set('ga-drill:' + id, st);
         root.dispatchEvent(new CustomEvent('cmdpass', { bubbles: true }));
-        var sec = root.closest('section[data-step]');
-        if (sec && $$('.drill-lab, .cmd', sec).every(function (c) { return c.classList.contains('ok'); })) { var box = $('input[data-done]', sec); if (box && !box.checked) { box.checked = true; box.dispatchEvent(new Event('change')); } }
       }
     }
     ta.addEventListener('input', function () { clearTimeout(ta._t); ta._t = setTimeout(run, 150); });
@@ -567,6 +723,37 @@
     mountLab(host);
   }
 
+  // ------------------------------------------------------------------ a step's tick means: every exercise in it has been passed
+  function exercisesOf(sec) {
+    var out = [];
+    $$('[data-ids]', sec).forEach(function (n) { n.getAttribute('data-ids').split(/\s+/).filter(Boolean).forEach(function (id) { out.push(['lab', id]); }); });
+    $$('[data-lab]', sec).forEach(function (n) { var id = n.getAttribute('data-lab'); if (id !== 'free' && !n.closest('[data-set]') && !n.closest('[data-free]')) out.push(['lab', id]); });
+    $$('[data-cmd]', sec).forEach(function (n) { out.push(['cmd', n.getAttribute('data-cmd')]); });
+    $$('[data-drill]', sec).forEach(function (n) { out.push(['drill', n.getAttribute('data-drill')]); });
+    return out;
+  }
+  function exerciseDone(e) {
+    var s = store.get('ga-' + e[0] + ':' + e[1]) || {};
+    return e[0] === 'lab' ? !!s.passedOnce : !!s.ok;
+  }
+  function syncTicks() {
+    $$('section[data-step]').forEach(function (sec) {
+      var box = $('input[data-done]', sec);
+      if (!box) return;
+      var ex = exercisesOf(sec);
+      if (!ex.length || $('[data-manual-tick]', sec)) return;                                   // a reading step: you tick it yourself
+      var done = ex.filter(exerciseDone).length, all = done === ex.length;
+      box.disabled = true;
+      var label = box.parentNode;
+      var note = $('.done-note', label);
+      if (!note) { while (label.lastChild && label.lastChild !== box) label.removeChild(label.lastChild); note = el('span', 'done-note'); label.appendChild(note); }
+      note.textContent = all ? ' Done: every exercise in this step is passed' : ' ' + done + ' of ' + ex.length + ' exercises passed. This ticks itself when all are';
+      if (box.checked !== all) { box.checked = all; box.dispatchEvent(new Event('change')); }
+    });
+  }
+  document.addEventListener('labpass', syncTicks);
+  document.addEventListener('cmdpass', syncTicks);
+
   // ------------------------------------------------------------------ progress across the whole page
   function renderProgress() {
     var box = $('#ga-progress');
@@ -577,7 +764,7 @@
       ['Guided labs', ids.filter(function (i) { return /^A/.test(i); }), passed],
       ['Command drills', Object.keys(GA.cmds), function (i) { return !!(store.get('ga-cmd:' + i) || {}).ok; }],
       ['Expression and pattern drills', Object.keys(GA.drills), function (i) { return !!(store.get('ga-drill:' + i) || {}).ok; }],
-      ['Write from scratch', ids.filter(function (i) { return /^B[1-6]$/.test(i); }), passed],
+      ['Write from scratch', ids.filter(function (i) { return /^B/.test(i) && i !== 'B7'; }), passed],
       ['The capstone', ['B7'], passed],
       ['Read and fix', ids.filter(function (i) { return /^C/.test(i); }), passed],
     ];
@@ -604,6 +791,7 @@
     $$('[data-playground]').forEach(mountPlayground);
     $$('[data-free]').forEach(mountFree);
     renderProgress();
+    syncTicks();
   }
   window.GAUI = { init: init, labs: labs, Checker: Checker, parseWorkflow: parseWorkflow, friendly: friendly, renderPreview: renderPreview };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

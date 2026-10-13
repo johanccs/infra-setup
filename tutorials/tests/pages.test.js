@@ -25,7 +25,7 @@ const PAGES = [
   { file: 'scale-and-capacity-tutorial.html', name: 'Scale and Capacity', steps: 12, mid: 'database', link: 'rightsize' },
   { file: 'terraform-the-lab-tutorial.html', name: 'Terraform the Lab', steps: 17, mid: 'module', link: 'gateway' },
   { file: 'todo-on-eks-tutorial.html', name: 'Todo on EKS', steps: 16, mid: 'docker', link: 'cluster' },
-  { file: 'github-actions-tutorial.html', name: 'GitHub Actions Lab', steps: 22, mid: 'matrix', link: 'oidc' },
+  { file: 'github-actions-tutorial.html', name: 'GitHub Actions Lab', steps: 23, mid: 'matrix', link: 'oidc', labTicks: true },
 ];
 
 let fails = 0, passes = 0;
@@ -182,19 +182,21 @@ async function pageTests(browser, spec) {
 
   // progress
   check((await pg.textContent('#progress-text')).startsWith('0 of '), 'progress starts at 0');
-  const first = pg.locator('section[data-step] input[data-done]').first();
+  const first = pg.locator('section[data-step] input[data-done]:not([disabled])').first();
   await first.check();
   check((await pg.textContent('#progress-text')).startsWith('1 of '), 'ticking a step updates the progress text');
   await pg.reload(); await pg.waitForSelector('#rail-list li');
-  check(await pg.locator('section[data-step] input[data-done]').first().isChecked(), 'ticked step survives a reload');
-  await pg.locator('section[data-step] input[data-done]').first().uncheck();
+  check(await pg.locator('section[data-step] input[data-done]:not([disabled])').first().isChecked(), 'ticked step survives a reload');
+  await pg.locator('section[data-step] input[data-done]:not([disabled])').first().uncheck();
 
   // rail highlight
   await pg.evaluate((mid) => document.getElementById(mid).scrollIntoView(), spec.mid);
   await pg.waitForFunction((mid) => document.querySelector('#rail-list a[aria-current=step][href="#' + mid + '"]'), spec.mid, { timeout: 6000 }).catch(() => {});   // smooth scrolling takes a moment
   check(await pg.evaluate((mid) => { const a = document.querySelector('#rail-list a[aria-current=step]'); return !!a && a.getAttribute('href') === '#' + mid; }, spec.mid), 'rail highlights the step being read');
   const auto = await pg.evaluate((mid) => { const secs = [...document.querySelectorAll('section[data-step]')]; const at = secs.findIndex((s) => s.id === mid); const ticked = secs.map((s) => { const b = s.querySelector('input[data-done]'); return b ? b.checked : null; }); return { before: at > 0 && ticked.slice(0, at).every((v) => v !== false), after: ticked.slice(at).some(Boolean) }; }, spec.mid);
-  check(auto.before && !auto.after, 'steps you scroll past get a tick automatically; later ones do not');
+  // On the lab page a tick means "every exercise in the step is passed", so scrolling must not tick anything.
+  if (spec.labTicks) check(!(await pg.evaluate(() => [...document.querySelectorAll('input[data-done]')].some((b) => b.checked))), 'scrolling past a step does not tick it: ticks come from passing the exercises');
+  else check(auto.before && !auto.after, 'steps you scroll past get a tick automatically; later ones do not');
   await pg.evaluate(() => document.querySelectorAll('input[data-done]').forEach((b) => { if (b.checked) { b.checked = false; b.dispatchEvent(new Event('change')); } }));
 
   // tutorial menu
@@ -258,9 +260,9 @@ async function pageTests(browser, spec) {
   check((await bar()) > 99, 'reading bar is full at the bottom');
   await jump(0);
   await pg.evaluate(() => document.querySelectorAll('input[data-done]').forEach((b) => { if (b.checked) { b.checked = false; b.dispatchEvent(new Event('change')); } }));
-  await pg.locator('section[data-step] input[data-done]').nth(1).check();
+  await pg.locator('section[data-step] input[data-done]:not([disabled])').nth(1).check();
   check(/^[1-9]\d*\/\d+ done$/.test(await pg.textContent('#tb-done')), 'the toolbar counts ticked steps');
-  await pg.locator('section[data-step] input[data-done]').nth(1).uncheck();
+  await pg.locator('section[data-step] input[data-done]:not([disabled])').nth(1).uncheck();
 
   // resizable steps panel
   const railW = () => pg.evaluate(() => Math.round(document.querySelector('.rail').getBoundingClientRect().width));

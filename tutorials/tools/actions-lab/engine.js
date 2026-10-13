@@ -325,7 +325,10 @@
   function matrixCombos(matrix) {
     if (matrix === undefined || matrix === null) return null;
     if (typeof matrix === 'string') return { unknown: true, why: 'the matrix comes from an expression' };
-    const include = matrix.include, exclude = matrix.exclude;
+    if (typeof matrix !== 'object' || Array.isArray(matrix)) return null;
+    // half-typed entries ("- " with nothing after it yet) are null: leave them out
+    const rows = (v) => asList(v).filter((x) => x && typeof x === 'object');
+    const include = matrix.include ? rows(matrix.include) : null, exclude = matrix.exclude ? rows(matrix.exclude) : null;
     const keys = Object.keys(matrix).filter((k) => k !== 'include' && k !== 'exclude');
     if (keys.some((k) => typeof matrix[k] === 'string' && /\$\{\{/.test(matrix[k]))) return { unknown: true, why: 'a matrix value comes from an expression' };
     let combos = [{}];
@@ -424,8 +427,14 @@
   }
 
   // ---------------------------------------------------------------- reading steps and actions (for the checks)
-  function jobsOf(doc) { return doc && doc.jobs && typeof doc.jobs === 'object' ? doc.jobs : {}; }
-  function stepsOf(job) { return job && Array.isArray(job.steps) ? job.steps : []; }
+  // A file that is half typed has jobs and steps with nothing in them yet (null): read those as empty, never as an error.
+  function jobsOf(doc) {
+    if (!doc || !doc.jobs || typeof doc.jobs !== 'object' || Array.isArray(doc.jobs)) return {};
+    const out = {};
+    for (const [id, j] of Object.entries(doc.jobs)) out[id] = j && typeof j === 'object' && !Array.isArray(j) ? j : {};
+    return out;
+  }
+  function stepsOf(job) { return job && Array.isArray(job.steps) ? job.steps.filter((s) => s && typeof s === 'object' && !Array.isArray(s)) : []; }
   function allSteps(doc) { return Object.entries(jobsOf(doc)).flatMap(([id, j]) => stepsOf(j).map((s) => Object.assign({ __job: id }, s))); }
   // 'actions/checkout@v7' -> { repo: 'actions/checkout', path: '', ref: 'v7' }
   function parseUses(u) {

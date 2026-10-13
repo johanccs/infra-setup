@@ -178,10 +178,10 @@ jobs:                          # 2. JOBS: what to run
         <li><code>exclude</code> removes the combinations that match every key you list.</li>
         <li><code>include</code> adds values to the combinations it fits, or adds a new combination if it fits none without changing an original value.</li>
         <li>A run can have at most <b>256</b> matrix jobs.</li>
-        <li><b><code>fail-fast</code></b> defaults to <code>true</code>: one failure cancels the jobs still running or waiting. Set it <code>false</code> to see every failure. <b><code>max-parallel</code></b> limits how many run at once. <b><code>continue-on-error</code></b> lets one leg fail without failing the job.</li>
+        <li><b><code>fail-fast</code></b> defaults to <code>true</code>: one failure cancels the jobs still running or waiting. Set it <code>false</code> to see every failure. <b><code>max-parallel</code></b> limits how many run at once. <b><code>continue-on-error</code></b> on the job lets one matrix job fail without failing the run.</li>
         <li>The matrix can come from data: <code>matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}</code>.</li>
       </ul>
-      <figure class="code"><figcaption>Four combinations, minus one (from the GitHub docs' matrix pages)</figcaption><pre><code>strategy:
+      <figure class="code"><figcaption>Six combinations, minus one, and an extra value on another</figcaption><pre><code>strategy:
   fail-fast: false
   matrix:
     os: [ubuntu-latest, windows-latest]

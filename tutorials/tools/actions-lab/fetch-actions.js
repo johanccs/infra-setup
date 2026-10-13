@@ -14,7 +14,7 @@ const list = [
   ['actions/checkout'], ['actions/setup-dotnet'], ['actions/setup-node'], ['actions/cache'], ['actions/upload-artifact'], ['actions/download-artifact'],
   ['actions/github-script'], ['actions/dependency-review-action'], ['actions/attest'], ['docker/login-action'], ['docker/setup-buildx-action'],
   ['docker/build-push-action'], ['docker/metadata-action'], ['sigstore/cosign-installer'], ['aquasecurity/trivy-action'],
-  ['github/codeql-action', 'init'], ['github/codeql-action', 'analyze'], ['aws-actions/configure-aws-credentials'], ['azure/setup-helm'],
+  ['github/codeql-action', 'init'], ['github/codeql-action', 'analyze'], ['aws-actions/configure-aws-credentials'], ['azure/setup-helm'], ['actions/configure-pages'], ['actions/upload-pages-artifact'], ['actions/deploy-pages'],
 ];
 const out = {};
 for (const [repo, sub] of list) {

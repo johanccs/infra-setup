@@ -4,7 +4,7 @@
   var GA = window.GA, H = GA.h, lab = GA.lab, dl = GA.dl;
 
   lab({
-    id: 'A17', tag: 'Lab 17', title: 'Let Dependabot keep everything current', level: 3, lint: false, preview: false,
+    id: 'A17', assist: 'dependabot', tag: 'Lab 17', title: 'Let Dependabot keep everything current', level: 3, lint: false, preview: false,
     task: '<p>Pinned actions, NuGet packages, npm packages and base images all go out of date. Write <code>.github/dependabot.yml</code> so Dependabot opens pull requests for all four, once a week:</p><ol><li><code>version: 2</code>, and one entry under <code>updates</code> for each: <code>github-actions</code> (directory <code>/</code>), <code>nuget</code> (<code>/src/api</code>), <code>npm</code> (<code>/src/ui</code>) and <code>docker</code> (both <code>/src/api</code> and <code>/src/ui</code>, as a list with <code>directories</code>).</li><li>Every entry has <code>schedule.interval: weekly</code>.</li><li>Put all GitHub Actions updates into <b>one</b> pull request with <code>groups</code> (a group called <code>actions</code> with <code>patterns: [\'*\']</code>).</li><li>For <code>nuget</code> and <code>npm</code>, wait 7 days after a new release before proposing it: <code>cooldown</code> with <code>default-days: 7</code>.</li></ol>',
     starter: 'version: 2\nupdates:\n  - package-ecosystem: github-actions\n    directory: /\n    schedule:\n      interval: daily\n',
     solution: 'version: 2\nupdates:\n  - package-ecosystem: github-actions\n    directory: /\n    schedule:\n      interval: weekly\n    groups:\n      actions:\n        patterns: [\'*\']\n  - package-ecosystem: nuget\n    directory: /src/api\n    schedule:\n      interval: weekly\n    cooldown:\n      default-days: 7\n  - package-ecosystem: npm\n    directory: /src/ui\n    schedule:\n      interval: weekly\n    cooldown:\n      default-days: 7\n  - package-ecosystem: docker\n    directories:\n      - /src/api\n      - /src/ui\n    schedule:\n      interval: weekly\n',
@@ -50,7 +50,7 @@
     hints: ['<code>merge_group:</code> needs no options. Add it next to <code>pull_request</code>.', 'A job with <code>needs</code> is skipped when a needed job fails, unless it has a status check function in its <code>if</code>: <code>always()</code> keeps it running.', '<code>needs.*.result</code> is the list of every needed job\'s result, so <code>contains(needs.*.result, \'failure\')</code> asks "did any fail?".'],
     explain: dl([
       ['<code>merge_group</code>', 'A merge queue builds a temporary branch with your change on top of the latest <code>main</code> and the changes ahead of it, and runs your required checks there. It starts workflows with the <code>merge_group</code> event (type <code>checks_requested</code>).'],
-      ['A skipped job is a success', 'A job skipped by <code>if</code> reports success, and so does a whole workflow skipped by a path filter, though that stays "pending" for a required check. That is why you should not rely on path filters for required workflows.'],
+      ['A skipped job is a success', 'A job skipped by <code>if</code> reports success. A whole workflow skipped by a path filter reports nothing at all, so a check that is required stays "pending" for ever. That is why you should not put path filters on required workflows.'],
       ['The gate job', '<code>ci-ok</code> always runs and always reports. Rename or add jobs freely: the required check stays <code>ci-ok</code>. <code>needs.*.result</code> collects the results of every job it needs.'],
     ]),
   });
