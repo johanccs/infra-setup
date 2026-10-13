@@ -224,11 +224,90 @@ async function cryptoTests() {
   }
 }
 
+// ---- the certificate reader agrees with OpenSSL on certificates OpenSSL made
+async function certTests() {
+  const X = require(path.join(LAB, 'x509.js'));
+  const ossl = run('openssl', ['version']);
+  if (ossl.status !== 0) return skip('openssl is not installed: the certificate reader was not compared with it');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ia-cert-'));
+  const sh = (args, opts = {}) => { const r = run('openssl', args, { cwd: dir, ...opts }); if (r.status !== 0) throw new Error('openssl ' + args.join(' ') + '\n' + r.stderr); return r.stdout; };
+  const w = (n, c) => fs.writeFileSync(path.join(dir, n), c);
+  // root (RSA 2048) -> intermediate (EC P-256) -> leaf (EC P-384, with names), plus others
+  sh(['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', 'root.key', '-out', 'root.pem', '-days', '3650', '-subj', '/C=ZA/O=Lab Trust/CN=Lab Root CA', '-addext', 'basicConstraints=critical,CA:TRUE', '-addext', 'keyUsage=critical,keyCertSign,cRLSign']);
+  sh(['ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', 'int.key']);
+  sh(['req', '-new', '-key', 'int.key', '-out', 'int.csr', '-subj', '/C=ZA/O=Lab Trust/CN=Lab Issuing CA']);
+  w('int.ext', 'basicConstraints=critical,CA:TRUE,pathlen:0\nkeyUsage=critical,keyCertSign,cRLSign\n');
+  sh(['x509', '-req', '-in', 'int.csr', '-CA', 'root.pem', '-CAkey', 'root.key', '-CAcreateserial', '-out', 'int.pem', '-days', '1825', '-extfile', 'int.ext']);
+  sh(['ecparam', '-name', 'secp384r1', '-genkey', '-noout', '-out', 'leaf.key']);
+  sh(['req', '-new', '-key', 'leaf.key', '-out', 'leaf.csr', '-subj', '/CN=todo.lab.test']);
+  w('leaf.ext', 'basicConstraints=CA:FALSE\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:todo.lab.test,DNS:*.apps.lab.test,IP:127.0.0.1\n');
+  sh(['x509', '-req', '-in', 'leaf.csr', '-CA', 'int.pem', '-CAkey', 'int.key', '-CAcreateserial', '-out', 'leaf.pem', '-days', '90', '-extfile', 'leaf.ext']);
+  sh(['req', '-x509', '-newkey', 'ed25519', '-nodes', '-keyout', 'ed.key', '-out', 'ed.pem', '-days', '30', '-subj', '/CN=ed.lab.test', '-addext', 'subjectAltName=DNS:ed.lab.test']);
+  sh(['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', 'pss.key', '-out', 'pss.pem', '-days', '30', '-subj', '/CN=pss.lab.test', '-sigopt', 'rsa_padding_mode:pss', '-sha256']);
+  sh(['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', 'old.key', '-out', 'old.pem', '-subj', '/CN=old.lab.test', '-not_before', '20200101000000Z', '-not_after', '20200201000000Z', '-addext', 'subjectAltName=DNS:old.lab.test']);
+  const rd = (n) => fs.readFileSync(path.join(dir, n), 'utf8');
+  const stamp = (s) => new Date(s.trim().split('=')[1].replace(/ GMT$/, ' UTC'));
+  // fields
+  let ok = true, detail = [];
+  for (const n of ['root', 'int', 'leaf', 'ed', 'pss', 'old']) {
+    const c = X.parseAll(rd(n + '.pem')).certs[0];
+    const serial = sh(['x509', '-in', n + '.pem', '-noout', '-serial']).trim().split('=')[1].toLowerCase().replace(/^0+(?=.)/, '');
+    const subj = sh(['x509', '-in', n + '.pem', '-noout', '-subject', '-nameopt', 'oneline,-esc_msb']).trim().replace(/^subject=\s*/, '').replace(/ = /g, '=').replace(/ \/ /g, ', ');
+    const nb = stamp(sh(['x509', '-in', n + '.pem', '-noout', '-startdate'])), na = stamp(sh(['x509', '-in', n + '.pem', '-noout', '-enddate']));
+    if (c.serial.replace(/^0+(?=.)/, '') !== serial) { ok = false; detail.push(`${n}: serial ${c.serial} vs ${serial}`); }
+    if (c.subject.text.replace(/ = /g, '=') !== subj.replace(/^subject= */, '')) { ok = false; detail.push(`${n}: subject "${c.subject.text}" vs "${subj}"`); }
+    if (+c.notBefore !== +nb || +c.notAfter !== +na) { ok = false; detail.push(`${n}: dates ${c.notBefore.toISOString()}..${c.notAfter.toISOString()} vs ${nb.toISOString()}..${na.toISOString()}`); }
+  }
+  check(ok, 'serial, subject and validity dates of 6 generated certificates equal what openssl x509 prints', detail.join('\n'));
+  const leaf = X.parseAll(rd('leaf.pem')).certs[0];
+  check(leaf.san.dns.join(',') === 'todo.lab.test,*.apps.lab.test' && leaf.san.ip.join(',') === '127.0.0.1', 'subject alternative names (DNS and IP) are read');
+  check(leaf.basicConstraints && leaf.basicConstraints.ca === false && leaf.keyUsage.join() === 'digitalSignature' && leaf.extKeyUsage.join() === 'serverAuth', 'basic constraints, key usage and extended key usage are read');
+  const root = X.parseAll(rd('root.pem')).certs[0], inter = X.parseAll(rd('int.pem')).certs[0];
+  check(root.basicConstraints.ca && root.keyUsage.includes('keyCertSign') && root.publicKey.type === 'RSA' && root.publicKey.bits === 2048 && root.selfIssued, 'a root: CA:TRUE, keyCertSign, RSA 2048, self-issued');
+  check(inter.publicKey.curve === 'P-256' && inter.basicConstraints.pathLen === 0 && leaf.publicKey.curve === 'P-384', 'EC curves and a path length constraint are read');
+  const ed = X.parseAll(rd('ed.pem')).certs[0];
+  check(ed.publicKey.type === 'Ed25519' && ed.signatureAlgorithm.name === 'Ed25519', 'an Ed25519 certificate is read');
+  check(root.subjectKeyId && inter.authorityKeyId === root.subjectKeyId && leaf.authorityKeyId === inter.subjectKeyId, 'authority and subject key identifiers link each certificate to its issuer');
+  // signatures: every self-signed certificate verifies against itself, and the chain verifies link by link
+  const self = [];
+  for (const n of ['root', 'ed', 'pss', 'old']) { const c = X.parseAll(rd(n + '.pem')).certs[0]; const r = await X.verifySignature(c, c); self.push(n + (r.ok ? '' : ' FAILED: ' + r.reason)); }
+  check(self.every((s) => !/FAILED/.test(s)), 'self-signatures verify: RSA PKCS#1, RSA-PSS and Ed25519', self.join('; '));
+  const all = X.parseAll(rd('leaf.pem') + rd('int.pem') + rd('root.pem')).certs;
+  const good = await X.checkChain(all, { host: 'todo.lab.test', now: new Date() });
+  check(good.ok && good.chain.length === 3 && good.steps.map((s) => s.role).join() === 'leaf,intermediate,root', 'a complete chain (RSA root, EC intermediate, EC leaf) is ordered and verifies', JSON.stringify(good.problems));
+  const shuffled = await X.checkChain([all[2], all[0], all[1]], { host: 'todo.lab.test' });
+  check(shuffled.ok && shuffled.chain[0].subject.text === 'CN=todo.lab.test', 'the same certificates in any order give the same chain');
+  // what openssl verify says must be what we say
+  const osslGood = run('openssl', ['verify', '-CAfile', 'root.pem', '-untrusted', 'int.pem', 'leaf.pem'], { cwd: dir });
+  const osslMissing = run('openssl', ['verify', '-CAfile', 'root.pem', 'leaf.pem'], { cwd: dir });
+  const missing = await X.checkChain(X.parseAll(rd('leaf.pem')).certs, { host: 'todo.lab.test', trusted: [root] });
+  check(osslGood.status === 0 && good.ok && osslMissing.status !== 0 && !missing.ok, 'chain verdicts agree with openssl verify: complete passes, a missing intermediate fails', osslMissing.stdout + osslMissing.stderr);
+  check(missing.problems.some((p) => /not in what was supplied/.test(p.text)), 'a missing intermediate is explained in words');
+  const wrongName = await X.checkChain(all, { host: 'other.lab.test' });
+  check(!wrongName.ok && wrongName.problems.some((p) => /does not match other\.lab\.test/.test(p.text)), 'a wrong host name is reported');
+  const expired = await X.checkChain(X.parseAll(rd('old.pem')).certs, { host: 'old.lab.test', now: new Date() });
+  check(expired.problems.some((p) => /has expired/.test(p.text)), 'an expired certificate is reported');
+  const tampered = X.parseAll(rd('leaf.pem') + rd('int.pem') + rd('root.pem')).certs;
+  const t = tampered[0]; const tb = new Uint8Array(t.tbsDer); tb[tb.length - 5] ^= 1; t.tbsDer = tb;
+  const tr = await X.verifySignature(t, tampered[1]);
+  check(!tr.ok, 'a certificate whose content was changed fails its signature check');
+  // host names: RFC 9525 rules
+  const m = (h) => X.matchHost(leaf, h).ok;
+  check(m('todo.lab.test') && m('TODO.LAB.TEST') && m('shop.apps.lab.test') && m('127.0.0.1') && !m('a.b.apps.lab.test') && !m('apps.lab.test') && !m('lab.test') && !m('127.0.0.2') && !m('evil.todo.lab.test'), 'host name matching: exact, case-insensitive, a wildcard covers exactly one label, IP addresses use IP names');
+  const noSan = X.parseAll(rd('pss.pem')).certs[0];
+  check(!X.matchHost(noSan, 'pss.lab.test').ok, 'a certificate with only a common name matches no host (RFC 9525 does not use the common name)');
+  // PEM handling
+  const two = X.pemBlocks(rd('int.pem') + '\n# text between\n' + rd('root.pem'));
+  check(two.length === 2 && X.toPem(two[0].der) === rd('int.pem'), 'PEM in and out is exact, and text between blocks is ignored');
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 async function main() {
   const html = parity();
   if (typeof html === 'string') { structure(html); diagrams(html); }
   ledger();
   await cryptoTests();
+  await certTests();
   await browserTests();
   process.exit(summary());
 }
