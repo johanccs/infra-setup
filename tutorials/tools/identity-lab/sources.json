@@ -143,6 +143,193 @@
    "rfc": 5280,
    "status": "PROPOSED STANDARD",
    "checked": "2026-10-13"
+  },
+  {
+   "id": "s01-nist-authn",
+   "step": 1,
+   "claim": "Authentication is the process of determining the validity of one or more authenticators used to claim a digital identity.",
+   "doc": "NIST SP 800-63B-4",
+   "section": "1 Introduction",
+   "url": "https://pages.nist.gov/800-63-4/sp800-63b.html",
+   "rfc": null,
+   "status": "NIST final (July 2025)",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s01-factors",
+   "step": 1,
+   "claim": "A password is \"something you know\"; look-up secrets and out-of-band devices are \"something you have\"; a biometric match serves as \"something you are\" (and is not an authenticator by itself).",
+   "doc": "NIST SP 800-63B-4",
+   "section": "2 and 3.1",
+   "url": "https://pages.nist.gov/800-63-4/sp800-63b.html",
+   "rfc": null,
+   "status": "NIST final (July 2025)",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s01-403",
+   "step": 1,
+   "claim": "A 403 client SHOULD NOT automatically repeat the request with the same credentials; a request might be forbidden for reasons unrelated to credentials; a server may hide a resource with 404.",
+   "doc": "RFC 9110",
+   "section": "15.5.4",
+   "url": "https://www.rfc-editor.org/rfc/rfc9110",
+   "rfc": 9110,
+   "status": "INTERNET STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s01-bearer",
+   "step": 1,
+   "claim": "Bearer is an authentication scheme: the token is sent in the Authorization header; a 401 carries a WWW-Authenticate challenge.",
+   "doc": "RFC 6750",
+   "section": "2.1 and 3",
+   "url": "https://www.rfc-editor.org/rfc/rfc6750",
+   "rfc": 6750,
+   "status": "PROPOSED STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s02-hmac",
+   "step": 2,
+   "claim": "HMAC is a mechanism for message authentication using a cryptographic hash function in combination with a secret shared key.",
+   "doc": "RFC 2104",
+   "section": "Abstract",
+   "url": "https://www.rfc-editor.org/rfc/rfc2104",
+   "rfc": 2104,
+   "status": "INFORMATIONAL",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s02-b64url",
+   "step": 2,
+   "claim": "Base 64 Encoding with URL and Filename Safe Alphabet replaces + and / with - and _ .",
+   "doc": "RFC 4648",
+   "section": "5",
+   "url": "https://www.rfc-editor.org/rfc/rfc4648",
+   "rfc": 4648,
+   "status": "PROPOSED STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s02-md5",
+   "step": 2,
+   "claim": "RFC 6151 updates the security considerations for MD5 and HMAC-MD5.",
+   "doc": "RFC 6151",
+   "section": "Abstract",
+   "url": "https://www.rfc-editor.org/rfc/rfc6151",
+   "rfc": 6151,
+   "status": "INFORMATIONAL",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s02-sha1",
+   "step": 2,
+   "claim": "The first collision for full SHA-1 was produced in 2017 (received 28 February 2017).",
+   "doc": "Stevens, Bursztein, Karpman, Albertini, Markov: The first collision for full SHA-1, IACR ePrint 2017/190",
+   "section": "Abstract",
+   "url": "https://eprint.iacr.org/2017/190",
+   "rfc": null,
+   "status": "paper",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s03-cookie",
+   "step": 3,
+   "claim": "A server sets a cookie with a Set-Cookie header and the browser sends it back on later requests to the same place.",
+   "doc": "RFC 6265",
+   "section": "1 and 4",
+   "url": "https://www.rfc-editor.org/rfc/rfc6265",
+   "rfc": 6265,
+   "status": "PROPOSED STANDARD",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s03-attrs",
+   "step": 3,
+   "claim": "Secure is sent only on https (except localhost); HttpOnly forbids document.cookie access but the cookie is still sent with script-initiated requests; SameSite Strict/Lax/None semantics; Domain omitted means host-only; __Host- requires Secure, no Domain and Path=/.",
+   "doc": "MDN Web Docs, Set-Cookie; RFC 6265bis draft revision 22 (4.1.3.2 and 5.6.7)",
+   "section": "Set-Cookie attributes; \"__Host-\" prefix; \"Strict\" and \"Lax\" enforcement",
+   "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie",
+   "rfc": null,
+   "status": "MDN; Internet-Draft",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s03-lax",
+   "step": 3,
+   "claim": "Lax sends same-site cookies with cross-site requests if and only if they are top-level navigations using a safe method.",
+   "doc": "draft-ietf-httpbis-rfc6265bis-22",
+   "section": "5.6.7.1",
+   "url": "https://www.ietf.org/archive/id/draft-ietf-httpbis-rfc6265bis-22.txt",
+   "rfc": null,
+   "status": "Internet-Draft",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s03-pwstore",
+   "step": 3,
+   "claim": "Argon2id first (m=19456 KiB, t=2, p=1), then scrypt (N=2^17, r=8, p=1), bcrypt legacy (work factor 10+, 72 byte limit), PBKDF2 when FIPS-140 is required (HMAC-SHA256 600,000; HMAC-SHA512 220,000). A unique salt per password.",
+   "doc": "OWASP Password Storage Cheat Sheet",
+   "section": "Password Hashing Algorithms; Salting",
+   "url": "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html",
+   "rfc": null,
+   "status": "OWASP cheat sheet",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s03-identity",
+   "step": 3,
+   "claim": "ASP.NET Core Identity V3 hashing: PBKDF2 with HMAC-SHA512, 128-bit salt, 256-bit subkey, 100000 iterations by default (PasswordHasherOptions.IterationCount); format marker 0x01 then prf, iteration count and salt length as 4-byte values, salt, subkey; stored base64.",
+   "doc": "dotnet/aspnetcore src/Identity/Extensions.Core/src/PasswordHasher.cs and PasswordHasherOptions.cs (main, read 13 October 2026)",
+   "section": "header comment; HashPasswordV3; IterationCount",
+   "url": "https://github.com/dotnet/aspnetcore/blob/main/src/Identity/Extensions.Core/src/PasswordHasher.cs",
+   "rfc": null,
+   "status": "source code",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s03-nistpw",
+   "step": 3,
+   "claim": "Passwords used as a single factor SHALL be at least 15 characters; as part of multi-factor at least 8; verifiers SHOULD permit at least 64; no composition rules; no periodic change; compare against a blocklist; no knowledge-based questions; rate-limit failed attempts.",
+   "doc": "NIST SP 800-63B-4",
+   "section": "3.1.1.2 and 3.2.2",
+   "url": "https://pages.nist.gov/800-63-4/sp800-63b.html",
+   "rfc": null,
+   "status": "NIST final (July 2025)",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s03-session",
+   "step": 3,
+   "claim": "Session ids need at least 64 bits of entropy (128 bits for ids you make yourself, from a CSPRNG); renew the id after any privilege change; idle timeouts of 2-5 minutes (high value) or 15-30 minutes (low risk); absolute timeouts such as 4-8 hours; the server must invalidate the session at logout.",
+   "doc": "OWASP Session Management Cheat Sheet",
+   "section": "Session ID Properties; Renew the Session ID; Session Expiration",
+   "url": "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html",
+   "rfc": null,
+   "status": "OWASP cheat sheet",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s03-csrf",
+   "step": 3,
+   "claim": "CSRF defences: synchronizer token, signed double-submit cookie, custom request headers, Fetch Metadata (Sec-Fetch-Site) and Origin checks; do not change state on GET; SameSite is defence in depth and does not replace a proper CSRF defence in most deployments.",
+   "doc": "OWASP Cross-Site Request Forgery Prevention Cheat Sheet",
+   "section": "Defense in depth; SameSite",
+   "url": "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html",
+   "rfc": null,
+   "status": "OWASP cheat sheet",
+   "checked": "2026-10-13"
+  },
+  {
+   "id": "s03-site",
+   "step": 3,
+   "claim": "Subdomains of one registrable domain are the same site but different origins; a subdomain takeover can enable CSRF against a cookie-based BFF, and the __Host- prefix stops the cookie being shared with subdomains.",
+   "doc": "RFC 10017",
+   "section": "6.1.3.2 and 6.1.3.3.1",
+   "url": "https://www.rfc-editor.org/rfc/rfc10017",
+   "rfc": 10017,
+   "status": "BEST CURRENT PRACTICE",
+   "checked": "2026-10-13"
   }
  ]
 }

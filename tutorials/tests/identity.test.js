@@ -225,6 +225,57 @@ async function cryptoTests() {
   }
 }
 
+// ---- the cookie model, the exercises, and the lessons' use of them
+function cookieTests() {
+  const K = require(path.join(LAB, 'cookie.js'));
+  const base = { name: 'sid', sameSite: 'Lax', secure: true, httpOnly: true, domain: null, path: '/' };
+  const S = (c, id) => K.sent(Object.assign({}, base, c), K.SCENARIOS.find((s) => s.id === id)).sent;
+  // expected results written from the rules (RFC 6265bis 5.6.7, MDN Set-Cookie), one row per attribute setting
+  const table = [
+    [{ sameSite: 'Strict' }, { 'same-post': 1, 'same-sub': 0, link: 0, form: 0, img: 0, xfetch: 0, http: 0, 'other-path': 1 }],
+    [{ sameSite: 'Lax' }, { 'same-post': 1, 'same-sub': 0, link: 1, form: 0, img: 0, xfetch: 0, http: 0, 'other-path': 1 }],
+    [{ sameSite: 'None' }, { 'same-post': 1, 'same-sub': 0, link: 1, form: 1, img: 1, xfetch: 1, http: 0, 'other-path': 1 }],
+    [{ sameSite: 'None', domain: 'example.com' }, { 'same-post': 1, 'same-sub': 1, link: 1, form: 1, img: 1, xfetch: 1, http: 0, 'other-path': 1 }],
+    [{ sameSite: 'Lax', secure: false }, { 'same-post': 1, 'same-sub': 0, link: 1, form: 0, img: 0, xfetch: 0, http: 1, 'other-path': 1 }],
+    [{ sameSite: 'Strict', path: '/api' }, { 'same-post': 1, 'same-sub': 0, link: 0, form: 0, img: 0, xfetch: 0, http: 0, 'other-path': 0 }],
+  ];
+  let bad = [];
+  for (const [attrs, want] of table) for (const [id, w] of Object.entries(want)) if (S(attrs, id) !== !!w) bad.push(`${JSON.stringify(attrs)} ${id}`);
+  check(bad.length === 0, `cookie model: ${table.length * 8} situations come out as the rules say`, bad.join('\n'));
+  check(!K.accepted({ name: '__Host-sid', secure: true, domain: 'example.com', path: '/' }).ok && !K.accepted({ name: '__Host-sid', secure: false, domain: null, path: '/' }).ok && !K.accepted({ name: '__Host-sid', secure: true, domain: null, path: '/app' }).ok && K.accepted({ name: '__Host-sid', secure: true, domain: null, path: '/' }).ok, 'cookie model: a __Host- cookie needs Secure, no Domain and Path=/');
+  check(S({ sameSite: '' }, 'form') === false && /not set/.test(K.sent(Object.assign({}, base, { sameSite: '' }), K.SCENARIOS.find((s) => s.id === 'form')).why), 'cookie model: with no SameSite the model treats it as Lax, and says browsers differ');
+}
+
+// Load the exercises exactly as the page has them and prove every one can be passed and can be failed.
+function exerciseTests(html) {
+  const E = require(path.join(LAB, 'engine.js'));
+  const reg = {};
+  const sandbox = { window: { IA: { exercises: reg } } };
+  for (const f of fs.readdirSync(path.join(LAB, 'exercises')).filter((x) => /\.js$/.test(x)).sort()) new (require('node:vm').Script)(read(path.join(LAB, 'exercises', f))).runInNewContext(sandbox);
+  const ids = Object.keys(reg);
+  check(ids.length > 0, `the exercises load (${ids.length})`);
+  const used = [...html.matchAll(/data-ex="([^"]+)"/g)].map((m) => m[1]);
+  check(used.every((u) => reg[u]), 'every exercise a lesson shows exists', used.filter((u) => !reg[u]).join(', '));
+  check(ids.every((i) => used.includes(i)), 'every exercise is used by a lesson', ids.filter((i) => !used.includes(i)).join(', '));
+  check(new Set(used).size === used.length, 'no exercise is shown twice');
+  const broken = [];
+  for (const id of ids) {
+    const ex = reg[id];
+    try {
+      if (!E.judge(ex, E.solution(ex)).ok) broken.push(id + ': solution rejected');
+      if (E.judge(ex, E.wrongAnswer(ex)).ok) broken.push(id + ': a wrong answer is accepted');
+      const walk = (e) => (e.kind === 'quiz' ? [e] : e.kind === 'inspect' ? e.parts : []);
+      for (const q of walk(ex)) { if (!q.options.some((o) => o.ok)) broken.push(id + ': no correct option'); if (q.options.some((o) => !o.ok && !o.why)) broken.push(id + ': a wrong option has no reason'); }
+      if (ex.kind === 'sort' && ex.items.some((it) => !it.why)) broken.push(id + ': an item has no reason');
+    } catch (e) { broken.push(id + ': ' + e.message); }
+  }
+  check(broken.length === 0, 'every exercise: the solution passes, a wrong answer fails, and wrong options say why', broken.join('\n'));
+  // a quiz must not give itself away: its right answers should not all be the longest option
+  const quizzes = ids.filter((i) => reg[i].kind === 'quiz' && reg[i].options.length >= 3);
+  const longest = quizzes.filter((i) => { const o = reg[i].options; const lens = o.map((x) => x.t.length); const max = Math.max(...lens); return o.filter((x) => x.ok).every((x) => x.t.length === max); });
+  check(longest.length <= Math.ceil(quizzes.length * 0.6), 'the right answer is not always the longest option', `${longest.length} of ${quizzes.length} quizzes`);
+}
+
 // ---- the certificate reader agrees with OpenSSL on certificates OpenSSL made
 async function certTests() {
   const X = require(path.join(LAB, 'x509.js'));
@@ -416,7 +467,8 @@ async function toolsInBrowser(browser, base) {
 
 async function main() {
   const html = parity();
-  if (typeof html === 'string') { structure(html); diagrams(html); }
+  if (typeof html === 'string') { structure(html); diagrams(html); exerciseTests(html); }
+  cookieTests();
   ledger();
   engineTests();
   await cryptoTests();

@@ -55,3 +55,13 @@
 .ga-pg { position: relative; display: flex; justify-content: space-between; gap: 8px; padding: 9px 12px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 14px; }
 .ga-pg b { font: 600 13px var(--font-mono); font-variant-numeric: tabular-nums; }
 .ga-pg i { position: absolute; left: 0; bottom: 0; height: 4px; width: var(--w); background: var(--ok); border-radius: 0 0 0 8px; }
+
+.ck-form { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; }
+.ck-form label { display: grid; gap: 3px; font-size: 13px; color: var(--muted); }
+.ck-form .cmd-in { width: 11em; }
+.ck-form select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+.ck-b { display: flex !important; align-items: center; gap: 6px; color: var(--ink) !important; }
+.ck-hdr { margin: 12px 0 4px; overflow-wrap: anywhere; max-width: none; }
+.cookie tr.sent td:nth-child(2) { color: var(--ok); font-weight: 600; white-space: nowrap; }
+.cookie tr.blocked td:nth-child(2) { color: var(--warn); font-weight: 600; white-space: nowrap; }
+code.wrap { display: block; overflow-wrap: anywhere; white-space: normal; padding: 6px 8px; }

@@ -329,7 +329,67 @@
     tick(); var timer = setInterval(function () { if (!document.body.contains(q)) { clearInterval(timer); return; } tick(); }, 1000);
   }
 
-  var TOOLS = { jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp };
+
+  function toolCookie(root) {
+    var K = window.IACookie;
+    root.innerHTML = '';
+    var q = el('div', 'tool cookie');
+    q.innerHTML = '<div class="ck-form">' +
+      '<label>Name <input class="cmd-in mono ck-name" value="session" aria-label="Cookie name"></label>' +
+      '<label>SameSite <select class="ck-ss" aria-label="SameSite"><option value="">not set</option><option>Strict</option><option selected>Lax</option><option>None</option></select></label>' +
+      '<label>Path <input class="cmd-in mono ck-path" value="/" aria-label="Path"></label>' +
+      '<label class="ck-b"><input type="checkbox" class="ck-sec" checked> Secure</label>' +
+      '<label class="ck-b"><input type="checkbox" class="ck-ho" checked> HttpOnly</label>' +
+      '<label class="ck-b"><input type="checkbox" class="ck-dom"> Domain=example.com</label>' +
+      '</div><p class="ck-hdr"></p><div class="ck-msg"></div><div class="table-wrap"><table><thead><tr><th>What happens</th><th>Cookie sent?</th><th>Why</th></tr></thead><tbody class="ck-rows"></tbody></table></div><p class="ck-js"></p>';
+    root.appendChild(q);
+    function cookie() { return { name: $('.ck-name', q).value || 'session', sameSite: $('.ck-ss', q).value, secure: $('.ck-sec', q).checked, httpOnly: $('.ck-ho', q).checked, domain: $('.ck-dom', q).checked ? 'example.com' : null, path: $('.ck-path', q).value || '/' }; }
+    function render() {
+      var c = cookie();
+      var hdr = 'Set-Cookie: ' + c.name + '=3f9a…; Path=' + c.path + (c.domain ? '; Domain=' + c.domain : '') + (c.secure ? '; Secure' : '') + (c.httpOnly ? '; HttpOnly' : '') + (c.sameSite ? '; SameSite=' + c.sameSite : '');
+      $('.ck-hdr', q).innerHTML = '<code>' + esc(hdr) + '</code><br><span class="tool-note">set by <code>https://app.example.com</code></span>';
+      var acc = K.accepted(c), msg = $('.ck-msg', q);
+      msg.innerHTML = acc.ok ? (c.sameSite === 'None' && !c.secure ? '<p class="cmd-bad">SameSite=None must be used together with Secure (MDN). Browsers may handle this differently, so always set both.</p>' : '') : '<p class="cmd-bad">✗ The browser refuses to store this cookie: ' + esc(acc.problems.join('; ')) + '.</p>';
+      $('.ck-rows', q).innerHTML = K.SCENARIOS.map(function (s) {
+        var r = K.sent(c, s);
+        return '<tr class="' + (r.sent ? 'sent' : 'blocked') + '"><td><b>' + esc(s.label) + '</b><br><span class="tool-note">' + esc(s.detail) + '</span></td><td>' + (r.sent ? '✓ sent' : '✗ not sent') + '</td><td>' + esc(r.why) + '</td></tr>';
+      }).join('');
+      $('.ck-js', q).innerHTML = c.httpOnly ? '<b>Script on the page</b> cannot read this cookie (<code>document.cookie</code> does not show it), but the browser still sends it with requests the script makes.' : '<b>Script on the page can read this cookie</b> with <code>document.cookie</code>. If an attacker runs script in your page, the cookie leaves with it.';
+    }
+    $$('input, select', q).forEach(function (i) { i.addEventListener('input', render); i.addEventListener('change', render); });
+    render();
+  }
+
+  function toolCrypto(root) {
+    root.innerHTML = '';
+    var q = el('div', 'tool crypto');
+    q.innerHTML = '<label class="pg-l">Message</label><textarea class="cmd-in mono c-msg" rows="2" spellcheck="false" aria-label="Message">pay alice 10</textarea>' +
+      '<h4>1. A hash: the same input always gives the same fingerprint</h4><div class="c-hash"></div>' +
+      '<h4>2. A MAC: a hash that also needs a shared secret</h4><label class="pg-l">Shared secret</label><input class="cmd-in mono c-key" value="correct horse" aria-label="Shared secret"><div class="c-mac"></div>' +
+      '<h4>3. A signature: made with a private key, checked with the public key</h4><div class="lab-bar"><button type="button" class="copy c-gen">Make a key pair</button><button type="button" class="copy c-sign">Sign the message</button></div><div class="c-sig tool-note">Make a key pair first.</div>';
+    root.appendChild(q);
+    var msg = $('.c-msg', q), key = $('.c-key', q), pair = null, sig = null, signedText = null;
+    async function hashes() {
+      var m = msg.value, out = '';
+      for (var a of ['SHA-256', 'SHA-512']) out += '<p><b>' + a + '</b><br><code class="wrap">' + C.hexEnc(await C.sha(a, m)) + '</code></p>';
+      $('.c-hash', q).innerHTML = out + '<p class="tool-note">Change one letter of the message and every digit changes.</p>';
+      $('.c-mac', q).innerHTML = '<p><b>HMAC-SHA-256</b><br><code class="wrap">' + C.hexEnc(await C.hmac('SHA-256', key.value, m)) + '</code></p><p class="tool-note">Without the secret, nobody can make this value for a message they choose.</p>';
+      await verifyNow();
+    }
+    async function verifyNow() {
+      var box = $('.c-sig', q);
+      if (!pair) { box.textContent = 'Make a key pair first.'; return; }
+      if (!sig) { box.textContent = 'Key pair ready (ECDSA P-256). Now sign the message.'; return; }
+      var ok = await window.crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pair.publicKey, sig, C.utf8(msg.value));
+      box.innerHTML = '<p><b>Signature</b><br><code class="wrap">' + C.b64uEnc(new Uint8Array(sig)) + '</code></p><p class="' + (ok ? 'cmd-ok' : 'cmd-bad') + '">' + (ok ? '✓ The public key confirms this signature belongs to this exact message.' : '✗ The message is not the one that was signed' + (signedText !== null ? ' (it was “' + esc(signedText) + '”)' : '') + '. Verification fails.') + '</p>';
+    }
+    $('.c-gen', q).addEventListener('click', async function () { pair = await window.crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign', 'verify']); sig = null; signedText = null; verifyNow(); });
+    $('.c-sign', q).addEventListener('click', async function () { if (!pair) { $('.c-sig', q).textContent = 'Make a key pair first.'; return; } sig = await window.crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, pair.privateKey, C.utf8(msg.value)); signedText = msg.value; verifyNow(); });
+    msg.addEventListener('input', hashes); key.addEventListener('input', hashes);
+    hashes();
+  }
+
+  var TOOLS = { jwt: toolJwt, cert: toolCert, pkce: toolPkce, totp: toolTotp, cookie: toolCookie, crypto: toolCrypto };
   function mountTool(root) { var f = TOOLS[root.getAttribute('data-tool')]; if (f) f(root); }
 
   function init() {

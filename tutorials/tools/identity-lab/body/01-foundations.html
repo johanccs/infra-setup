@@ -1,0 +1,315 @@
+    <!-- ============ 1 ============ -->
+    <section class="step" id="who" data-step data-level="Easy">
+      <div class="step-head"><span class="num">01</span><h2>Who are you, and what may you do?</h2><span class="lvl-chip">Easy</span></div>
+      <p class="goal"><b>Goal:</b> tell <b>authentication</b> from <b>authorization</b> every time, and know when a server should answer <code>401</code>, <code>403</code> or <code>404</code>.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Every other lesson builds on two questions a system asks about every request: <em>who is this?</em> and <em>may they do that?</em> People mix the two up, and most real security bugs live in the gap between them. Get these two words straight first.</p>
+      </div>
+
+      <div class="what-is"><h4>What is it? Authentication</h4><dl>
+        <dt>What it is</dt><dd>Proving who or what is making a request. NIST describes it as the process of determining the validity of the authenticators used to claim a digital identity.</dd>
+        <dt>The problem it solves</dt><dd>A server cannot see who is on the other end of a connection. Anyone can type any name. Authentication is how a name is backed by proof.</dd>
+        <dt>Everyday comparison</dt><dd>Showing your passport at a border. The officer does not ask what you may do yet. They only check that you are who you say you are.</dd>
+        <dt>What it is not</dt><dd>It does not say what you are allowed to do. A valid passport does not let you into every room.</dd>
+        <dt>Where you meet it</dt><dd>The login page of the Todo app, a password, a passkey, a token an API checks, a certificate a server shows.</dd>
+      </dl></div>
+
+      <div class="what-is"><h4>What is it? Authorization</h4><dl>
+        <dt>What it is</dt><dd>Deciding what an already identified caller may do: which resources, and which actions on them.</dd>
+        <dt>The problem it solves</dt><dd>Knowing who someone is is not enough. Alice is Alice, but she may read her own todos and not Bob's.</dd>
+        <dt>Everyday comparison</dt><dd>The key card that opens your office but not the server room. The card reader knows the card is real (authentication) and then checks which doors it opens (authorization).</dd>
+        <dt>What it is not</dt><dd>It does not prove identity. It <em>assumes</em> authentication already happened, and it is only as good as that.</dd>
+        <dt>Where you meet it</dt><dd>Roles such as <code>admin</code>, "only the owner may delete", a 403 page, Kubernetes RBAC, a cloud permission policy.</dd>
+      </dl></div>
+
+      <h3>The vocabulary</h3>
+      <dl class="glossary">
+        <dt>Identity</dt><dd>Who or what someone claims to be: a user, an app, a service.</dd>
+        <dt>Credential</dt><dd>The thing used to back that claim: a password, a key, a token, a certificate.</dd>
+        <dt>Factor</dt><dd>A category of proof. NIST uses the familiar labels: a password is <em>something you know</em>, a code from a look-up list or a device is <em>something you have</em>, and a biometric match can serve as <em>something you are</em>. Using two different categories is <em>multi-factor</em>.</dd>
+        <dt>Caller, client</dt><dd>Whoever sends the request: a browser, a mobile app, another service.</dd>
+        <dt>Resource</dt><dd>What the request wants: a todo, a page, an API endpoint.</dd>
+      </dl>
+
+      <h3>Two gates, in this order</h3>
+      <p>A request goes through two checks, and the order matters. Gate 1 asks who you are. Only if it can answer does gate 2 ask whether you may do this. Watch what each gate answers:</p>
+      <figure class="anim" aria-label="Animated diagram: a request passes an authentication gate and then an authorization gate, with the status codes 401, 403 and 200">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="A client sends a request. Gate 1 checks who the caller is: with no credentials the answer is 401. Gate 2 checks what the caller may do: a signed-in user without permission gets 403. When both gates open the request reaches the todos and the answer is 200.">
+          <rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+          <path class="a-route" data-k="r1" d="M154 140 H230"/>
+          <path class="a-route" data-k="r2" d="M380 140 H430"/>
+          <path class="a-route" data-k="r3" d="M580 140 H630"/>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <g class="a-node" data-k="client"><rect x="24" y="100" width="130" height="80" rx="8"/><text class="a-t" x="89" y="136">Client</text><text class="a-s" x="89" y="156">sends a request</text></g>
+          <g class="a-node" data-k="gate1"><rect x="230" y="50" width="150" height="180" rx="8"/><text class="a-t" x="305" y="116">Gate 1</text><text class="a-t" x="305" y="136">Authentication</text><text class="a-s" x="305" y="160">who are you?</text></g>
+          <g class="a-node" data-k="gate2"><rect x="430" y="50" width="150" height="180" rx="8"/><text class="a-t" x="505" y="116">Gate 2</text><text class="a-t" x="505" y="136">Authorization</text><text class="a-s" x="505" y="160">may you do this?</text></g>
+          <g class="a-node" data-k="res"><rect x="630" y="100" width="110" height="80" rx="8"/><text class="a-t" x="685" y="136">Todos</text><text class="a-s" x="685" y="156">the resource</text></g>
+          <text class="a-badge" data-k="b401" x="305" y="266">401 Unauthorized</text>
+          <text class="a-badge" data-k="b403" x="505" y="266">403 Forbidden</text>
+          <text class="a-badge" data-k="b200" x="685" y="214">200 OK</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "client r1 gate1", "bad": "gate1 b401", "off": "b403 b200", "path": [[160, 140], [222, 140]], "text": "<b>No credentials.</b> Gate 1 cannot tell who is asking, so it stops the request with <code>401</code>. Gate 2 is never reached."},
+          {"on": "client r1 gate1 r2 gate2", "good": "gate1", "bad": "gate2 b403", "off": "b401 b200", "path": [[160, 140], [422, 140]], "text": "<b>Signed in, but not allowed.</b> Gate 1 knows this is Alice. Gate 2 sees that her role may not do this, so the answer is <code>403</code>."},
+          {"on": "client r1 gate1 r2 gate2 r3 res", "good": "gate1 gate2 res b200", "off": "b401 b403", "path": [[160, 140], [622, 140]], "text": "<b>Signed in and allowed.</b> Both gates open and the request reaches the todos: <code>200</code>."}
+        ]</script>
+      </figure>
+
+      <h3>401, 403 and 404</h3>
+      <p>HTTP has words for each outcome. Their exact meanings come from RFC 9110, and they are often used wrongly:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Code</th><th>Means</th><th>Use it when</th></tr></thead>
+        <tbody>
+          <tr><td><code>401</code> Unauthorized</td><td>The request lacks valid authentication credentials for the resource. The server must send a <code>WWW-Authenticate</code> header with at least one challenge.</td><td>There is no token, or it is expired, malformed or not signed by someone you trust.</td></tr>
+          <tr><td><code>403</code> Forbidden</td><td>The server understood the request and refuses to fulfil it. If credentials were given, they are not enough, and sending the same ones again will not help.</td><td>The caller is known and is not permitted.</td></tr>
+          <tr><td><code>404</code> Not Found</td><td>No representation was found, <em>or</em> the server is not willing to disclose that one exists.</td><td>Someone asks for another user's todo. Answering 404 instead of 403 does not reveal that it exists.</td></tr>
+        </tbody>
+      </table></div>
+      <p>The name <em>Unauthorized</em> for 401 is misleading: it is about <em>authentication</em>. Remember it as "I do not know who you are". The 403 is "I know who you are, and no".</p>
+
+      <details class="lbl"><summary>Line by line: a 401 on the wire</summary><div><dl>
+        <dt><code>GET /api/todos HTTP/1.1</code></dt><dd>The request has no <code>Authorization</code> header, so there is nothing to authenticate.</dd>
+        <dt><code>HTTP/1.1 401 Unauthorized</code></dt><dd>The status line. The server stops here.</dd>
+        <dt><code>WWW-Authenticate: Bearer realm="todo"</code></dt><dd>Required by RFC 9110 on a 401: it names the way to authenticate. <code>Bearer</code> means "send a token in the <code>Authorization</code> header".</dd>
+      </dl></div></details>
+
+      <h3>Practice</h3>
+      <div data-ex="f1-sort"></div>
+      <div data-ex="f1-codes"></div>
+      <div data-ex="f1-client"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>Authentication proves who you are. Authorization decides what you may do. The first must come before the second.</li>
+        <li><code>401</code> means no valid credentials. <code>403</code> means known, and not allowed. <code>404</code> can also be used to hide that something exists.</li>
+        <li>A password is "something you know". Two different kinds of proof make a multi-factor sign-in.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 2 ============ -->
+    <section class="step" id="crypto" data-step data-level="Easy">
+      <div class="step-head"><span class="num">02</span><h2>The cryptography you need</h2><span class="lvl-chip">Easy</span></div>
+      <p class="goal"><b>Goal:</b> choose between a <b>hash</b>, a <b>MAC</b>, <b>encryption</b> and a <b>signature</b>, and know that <b>base64 is not secrecy</b>.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Tokens, certificates, cookies and TLS are all built from four small tools. You do not need the mathematics. You need to know what each tool promises, and what it does <em>not</em> promise, because most mistakes are using the right-sounding tool for the wrong job.</p>
+        <p>This lesson builds on step 01. It asks nothing else of you.</p>
+      </div>
+
+      <div class="what-is"><h4>What is it? A hash</h4><dl>
+        <dt>What it is</dt><dd>A function that turns any input into a fixed-size fingerprint. The same input always gives the same fingerprint, and a tiny change gives a completely different one.</dd>
+        <dt>The problem it solves</dt><dd>Checking that something is unchanged, without comparing the whole thing.</dd>
+        <dt>Everyday comparison</dt><dd>A tamper seal on a jar. It does not hide what is inside. It shows that someone opened it.</dd>
+        <dt>What it is not</dt><dd>Not encryption: you cannot get the input back. Not proof of who made it: anyone can compute a hash.</dd>
+        <dt>Where you meet it</dt><dd>File checksums, Git commit ids, password storage (with a slow, salted hash, step 03), the SHA-256 inside signatures.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? A MAC (HMAC)</h4><dl>
+        <dt>What it is</dt><dd>A hash that also mixes in a shared secret key. HMAC, defined in RFC 2104, builds one from an ordinary hash.</dd>
+        <dt>The problem it solves</dt><dd>Proving that a message came from someone who knows the secret, and that it was not changed on the way.</dd>
+        <dt>Everyday comparison</dt><dd>A tamper seal that only you and your friend know how to make.</dd>
+        <dt>What it is not</dt><dd>Not a signature: both sides hold the same secret, so either could have made it, and you cannot prove to a third party which did.</dd>
+        <dt>Where you meet it</dt><dd>Webhook signatures, the signature of an <code>HS256</code> token, cookies signed by a framework.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? Encryption</h4><dl>
+        <dt>What it is</dt><dd>Scrambling data so that only someone with the right key can read it, and unscrambling it again with that key.</dd>
+        <dt>The problem it solves</dt><dd>Keeping data secret while it is stored or travels.</dd>
+        <dt>Everyday comparison</dt><dd>A locked box. Whoever has the key can open it.</dd>
+        <dt>What it is not</dt><dd>Not a guarantee that nobody changed it, unless the scheme also authenticates (modern ones do). Not the same as a hash: encryption can be reversed.</dd>
+        <dt>Where you meet it</dt><dd>HTTPS (step 04), encrypted disks and backups, encrypted tokens.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? A digital signature</h4><dl>
+        <dt>What it is</dt><dd>A value made from a message and a <em>private</em> key, which anyone can check with the matching <em>public</em> key.</dd>
+        <dt>The problem it solves</dt><dd>Letting many parties verify who made something and that it is unchanged, without sharing any secret with them.</dd>
+        <dt>Everyday comparison</dt><dd>A wax seal pressed with a ring only one person owns, whose pattern everyone knows.</dd>
+        <dt>What it is not</dt><dd>Not encryption: the message is still readable. The signature only shows who made it and that it is intact.</dd>
+        <dt>Where you meet it</dt><dd>Certificates (step 05), JWTs signed with RS256 or ES256 (step 09), signed container images, Git commit signatures.</dd>
+      </dl></div>
+
+      <h3>Try them</h3>
+      <p>Change the message below by one letter and watch each result. Then make a key pair, sign, and change the message again.</p>
+      <div data-tool="crypto"></div>
+
+      <h3>How a signature works</h3>
+      <figure class="anim" aria-label="Animated diagram: a signer signs a message with a private key, a verifier checks it with the public key, and a change to the message makes the check fail">
+        <div class="anim-stage"><svg viewBox="0 0 760 300" role="img" aria-label="A signer holds a private key and signs a message. The message and signature travel to a verifier who holds the public key. The check passes for the exact message. If an attacker changes one letter on the way the check fails.">
+          <rect class="a-zone" x="8" y="8" width="744" height="284" rx="12"/>
+          <path class="a-route" data-k="r1" d="M214 140 H300"/>
+          <path class="a-route" data-k="r2" d="M460 140 H546"/>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <g class="a-node" data-k="signer"><rect x="24" y="90" width="190" height="100" rx="8"/><text class="a-t" x="119" y="128">Signer</text><text class="a-s" x="119" y="150">private key: secret</text></g>
+          <g class="a-node" data-k="env"><rect x="300" y="100" width="160" height="80" rx="8"/><text class="a-t" x="380" y="134">message</text><text class="a-s" x="380" y="154">+ signature</text></g>
+          <g class="a-node" data-k="verifier"><rect x="546" y="90" width="190" height="100" rx="8"/><text class="a-t" x="641" y="128">Verifier</text><text class="a-s" x="641" y="150">public key: shared</text></g>
+          <g class="a-node" data-k="evil"><rect x="300" y="220" width="160" height="50" rx="8"/><text class="a-t" x="380" y="250">Attacker</text></g>
+          <text class="a-badge" data-k="ok" x="641" y="226">valid</text>
+          <text class="a-badge" data-k="no" x="641" y="226">INVALID</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "signer", "off": "ok no evil", "text": "<b>One secret, one public part.</b> The signer makes a key pair and keeps the private key to themselves. The public key can be given to anyone."},
+          {"on": "signer r1 env", "off": "ok no evil", "path": [[222, 140], [292, 140]], "text": "<b>Sign.</b> The signature is computed from the message and the private key. Only the holder of the private key can make it."},
+          {"on": "env r2 verifier", "off": "ok no evil", "path": [[468, 140], [538, 140]], "text": "<b>Send.</b> The message and its signature travel together. Both can be read by anyone. Nothing secret is in them."},
+          {"on": "verifier", "good": "verifier ok", "off": "no evil", "text": "<b>Verify.</b> The verifier checks the signature with the public key. It passes only for exactly this message, made with the matching private key."},
+          {"on": "env r2 verifier evil", "bad": "evil verifier no", "off": "ok", "text": "<b>Tamper.</b> If anyone changes even one letter of the message on the way, the check fails. A forger without the private key cannot make a new signature."}
+        ]</script>
+      </figure>
+
+      <h3>Encodings are not secrets</h3>
+      <p><b>Base64</b> turns bytes into text made only of letters, digits and a few symbols, so they can travel in places that only allow text. <b>Base64url</b> is the same idea with <code>-</code> and <code>_</code> in place of <code>+</code> and <code>/</code>, so it is safe in a web address (RFC 4648, section 5). Anyone can reverse it with no key. A JWT is base64url text, and that is why you can read what is inside one.</p>
+      <details class="lbl"><summary>Line by line: base64url</summary><div><dl>
+        <dt>Text → bytes</dt><dd>The text <code>hi?</code> is the three bytes <code>0x68 0x69 0x3F</code>.</dd>
+        <dt>Bytes → 6-bit groups</dt><dd>Three bytes are 24 bits, which split into four groups of 6 bits. Each 6-bit value (0 to 63) is one character from a 64-character alphabet.</dd>
+        <dt>The alphabet</dt><dd><code>A-Z a-z 0-9</code> and then <code>-</code> and <code>_</code> for base64url. Plain base64 uses <code>+</code> and <code>/</code>, which have special meanings in addresses.</dd>
+        <dt>Padding</dt><dd>Plain base64 pads with <code>=</code>. In JWTs the padding is left off.</dd>
+      </dl></div></details>
+
+      <h3>What you must never do</h3>
+      <ul>
+        <li><b>Do not invent your own algorithm.</b> Use the standard ones in well-reviewed libraries.</li>
+        <li><b>Do not use MD5 or SHA-1 where security matters.</b> RFC 6151 updates the security considerations for MD5, and researchers produced the first collision for full SHA-1 in 2017. Use SHA-256 or better.</li>
+        <li><b>Do not treat encoding as protection.</b> Base64 hides nothing.</li>
+        <li><b>Do not store passwords with a plain hash.</b> Step 03 shows what to use.</li>
+      </ul>
+
+      <h3>Practice</h3>
+      <div data-ex="f2-tools"></div>
+      <div data-ex="f2-order"></div>
+      <div data-ex="f2-key"></div>
+      <div data-ex="f2-b64"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A hash is a fingerprint. A MAC is a fingerprint with a shared secret. Encryption hides data. A signature proves who made something, checked with a public key.</li>
+        <li>You sign with the private key and verify with the public key. Never the other way round.</li>
+        <li>Base64url is an encoding, not protection: anyone can read it.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
+
+    <!-- ============ 3 ============ -->
+    <section class="step" id="sessions" data-step data-level="Intermediate">
+      <div class="step-head"><span class="num">03</span><h2>Passwords, sessions and cookies</h2><span class="lvl-chip">Intermediate</span></div>
+      <p class="goal"><b>Goal:</b> explain a classic login from end to end, store passwords correctly, set a session cookie's flags, and say what CSRF is and what stops it.</p>
+      <div class="why"><h4>Why this step</h4>
+        <p>Most websites still sign you in with a password and then remember you with a cookie. Even when you later move to tokens and OpenID Connect, a cookie is what keeps the browser signed in to your own app. The mistakes here (a weak password hash, a cookie any script can read, a forgeable request) are some of the most common in the world.</p>
+        <p>This lesson builds on steps 01 and 02: the two gates, and what a hash is.</p>
+      </div>
+
+      <div class="what-is"><h4>What is it? A session</h4><dl>
+        <dt>What it is</dt><dd>A record the server keeps, saying "this browser is signed in as Alice, since 10:02". A random <em>session id</em> names the record.</dd>
+        <dt>The problem it solves</dt><dd>HTTP forgets everything between requests. Without a session you would have to send your password with every click.</dd>
+        <dt>Everyday comparison</dt><dd>A cloakroom ticket. The ticket number means nothing alone. The attendant's list says whose coat it is.</dd>
+        <dt>What it is not</dt><dd>Not the login itself. The login happens once. The session is what is left afterwards, and whoever holds the id <em>is</em> that user until it ends.</dd>
+        <dt>Where you meet it</dt><dd>Almost every website with a login, including the sign-in the Todo app will get in level 6.</dd>
+      </dl></div>
+      <div class="what-is"><h4>What is it? A cookie</h4><dl>
+        <dt>What it is</dt><dd>A small named value a server asks the browser to store and send back on later requests to the same place. The server sets it with a <code>Set-Cookie</code> header (RFC 6265).</dd>
+        <dt>The problem it solves</dt><dd>It is how the browser carries the session id without the page having to do anything.</dd>
+        <dt>Everyday comparison</dt><dd>A sticker the shop puts on your jacket, which staff read each time you come back.</dd>
+        <dt>What it is not</dt><dd>Not a place for secrets in readable form, and not private: the browser attaches it automatically, even on requests another site triggers. That is exactly what CSRF abuses.</dd>
+        <dt>Where you meet it</dt><dd>Login sessions, language choices, shopping carts, "remember me".</dd>
+      </dl></div>
+
+      <h3>A classic login, end to end</h3>
+      <figure class="anim" aria-label="Animated diagram: a cookie login, and a cross-site forged request that is blocked by SameSite">
+        <div class="anim-stage"><svg viewBox="0 0 760 320" role="img" aria-label="A browser sends a username and password over HTTPS to the app. The app checks the password hash, creates a session and sets a cookie. The browser then sends the cookie on each request. A hidden form on another site tries to make the browser send a request to the app. SameSite stops the cookie being attached, so the request is refused.">
+          <rect class="a-zone" x="8" y="8" width="744" height="304" rx="12"/>
+          <path class="a-route" data-k="r1" d="M174 120 H556"/>
+          <path class="a-route" data-k="r2" d="M174 270 L556 150"/>
+          <g class="a-pkt off"><circle class="halo" r="12"/><circle class="core" r="6"/></g>
+          <g class="a-node" data-k="browser"><rect x="24" y="80" width="150" height="90" rx="8"/><text class="a-t" x="99" y="118">Browser</text><text class="a-s" x="99" y="140">Alice</text></g>
+          <g class="a-node" data-k="app"><rect x="556" y="80" width="180" height="100" rx="8"/><text class="a-t" x="646" y="116">app.example.com</text><text class="a-s" x="646" y="138">session store</text><text class="a-s" x="646" y="156">password hashes</text></g>
+          <g class="a-node" data-k="evil"><rect x="24" y="240" width="150" height="60" rx="8"/><text class="a-t" x="99" y="276">evil.test</text></g>
+          <text class="a-lbl" data-k="l1" x="365" y="108">username + password · over HTTPS</text>
+          <text class="a-lbl" data-k="l2" x="365" y="142">Set-Cookie: __Host-sid=…</text>
+          <text class="a-lbl" data-k="l3" x="365" y="108">Cookie: __Host-sid=… (on every request)</text>
+          <text class="a-lbl" data-k="r2" x="330" y="236">POST from a hidden form</text>
+          <text class="a-badge" data-k="ck" x="99" y="206">cookie: __Host-sid=…</text>
+          <text class="a-badge" data-k="no" x="646" y="222">no cookie → refused</text>
+        </svg></div>
+        <div class="anim-bar">
+          <p class="anim-text"></p>
+          <div class="anim-ctl"><span class="anim-count"></span><button type="button" class="copy" data-act="back" aria-label="Previous step">◀</button><button type="button" class="copy" data-act="play">Pause</button><button type="button" class="copy" data-act="next" aria-label="Next step">▶</button></div>
+        </div>
+        <script type="application/json">[
+          {"on": "browser app r1", "off": "ck no l2 l3 evil r2", "path": [[182, 120], [548, 120]], "text": "<b>1. Sign in.</b> The browser sends the username and password over HTTPS. This is the only time the password travels."},
+          {"on": "app r1 l2 ck", "good": "app", "off": "no l1 l3 evil r2", "path": [[548, 142], [182, 142]], "text": "<b>2. The server checks and remembers.</b> It compares the password with the stored hash, creates a session, and answers with <code>Set-Cookie</code>. The browser stores the cookie."},
+          {"on": "browser app r1 l3 ck", "good": "browser", "off": "no l1 l2 evil r2", "path": [[182, 120], [548, 120]], "text": "<b>3. Later requests carry the cookie.</b> The server looks the session up. That is how it knows who is calling."},
+          {"on": "evil browser r2 app ck", "bad": "evil", "off": "no l1 l2 l3 r1", "path": [[182, 268], [548, 152]], "text": "<b>4. A forged request.</b> Alice opens evil.test. A hidden form there posts to app.example.com. Left alone, the browser would attach her cookie, because that is what browsers do."},
+          {"on": "evil r2 app no", "good": "app", "bad": "evil", "off": "ck l1 l2 l3 r1", "path": [[182, 268], [548, 152]], "text": "<b>5. SameSite stops it.</b> With <code>SameSite=Strict</code> (or Lax, for a POST) the browser does not attach the cookie to a request that starts on another site. The request arrives anonymous and is refused."}
+        ]</script>
+      </figure>
+
+      <h3>Storing passwords</h3>
+      <p>The server must be able to check a password but should never be able to read it back. So it stores a <b>hash</b>, made with a <b>slow, salted password hashing function</b>:</p>
+      <ul>
+        <li><b>Salted:</b> a random value is mixed in for each password, so two users with the same password get different hashes and precomputed tables are useless.</li>
+        <li><b>Slow on purpose:</b> an ordinary hash such as SHA-256 is built to be fast, which helps an attacker try billions of guesses. A password hash has a cost setting that makes each guess expensive.</li>
+      </ul>
+      <p>OWASP's Password Storage Cheat Sheet ranks the choices. <b>Argon2id</b> is the first choice (at least 19 MiB of memory, 2 iterations, 1 degree of parallelism). <b>scrypt</b> is next (N=2<sup>17</sup>, r=8, p=1). <b>bcrypt</b> is for legacy systems (work factor 10 or more, and a 72-byte input limit). <b>PBKDF2</b> is for when FIPS-140 compliance is required (600,000 iterations with HMAC-SHA-256, 220,000 with HMAC-SHA-512).</p>
+      <p><b>In ASP.NET Core Identity,</b> the default password hasher uses PBKDF2 with HMAC-SHA-512, a 128-bit salt, a 256-bit subkey and 100,000 iterations. That is below OWASP's number for HMAC-SHA-512, and it can be raised with <code>PasswordHasherOptions.IterationCount</code>. The hash is stored with its own settings in front, so old hashes still verify and can be upgraded when the user next signs in.</p>
+      <details class="lbl"><summary>Line by line: what an ASP.NET Core Identity password hash contains</summary><div><dl>
+        <dt>Byte 0: <code>0x01</code></dt><dd>The format marker, "version 3".</dd>
+        <dt>Next 4 bytes</dt><dd>Which pseudo-random function was used (HMAC-SHA-512 by default).</dd>
+        <dt>Next 4 bytes</dt><dd>The iteration count (100,000 by default).</dd>
+        <dt>Next 4 bytes</dt><dd>The salt length in bytes (16 by default, which is 128 bits).</dd>
+        <dt>Then</dt><dd>The random salt, and then the 32-byte derived key. All of it is stored base64-encoded in one column.</dd>
+      </dl></div></details>
+      <h4>What the rules for passwords are today</h4>
+      <p>NIST's Digital Identity Guidelines (SP 800-63B, revision 4) changed some old habits. Where the password is the only factor it must be at least 15 characters long. Where it is only one part of multi-factor authentication, 8 is the minimum. Systems should accept at least 64 characters. They must not impose composition rules (such as "one capital, one symbol") and must not force periodic changes. They must check new passwords against a blocklist of known-compromised and common passwords, and limit failed attempts.</p>
+
+      <h3>Cookie attributes</h3>
+      <p>The attributes of a cookie decide who can read it and which requests carry it. Change them below and see what the browser does in eight situations:</p>
+      <div data-tool="cookie"></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Attribute</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>Secure</code></td><td>The cookie is sent only on <code>https</code> requests (browsers make an exception for localhost).</td></tr>
+          <tr><td><code>HttpOnly</code></td><td>JavaScript cannot read it through <code>document.cookie</code>. The browser still sends it with requests the script makes.</td></tr>
+          <tr><td><code>SameSite=Strict</code></td><td>Sent only on requests that start on the same site.</td></tr>
+          <tr><td><code>SameSite=Lax</code></td><td>As Strict, plus cross-site <em>top-level navigations</em> that use a safe method such as GET (following a link).</td></tr>
+          <tr><td><code>SameSite=None</code></td><td>Sent on cross-site requests too. Must be used with <code>Secure</code>.</td></tr>
+          <tr><td><code>Domain</code></td><td>If set, the cookie also goes to every subdomain. If left off, it goes only to the host that set it, which is safer.</td></tr>
+          <tr><td><code>Path</code></td><td>The cookie is sent only for addresses under this path.</td></tr>
+          <tr><td><code>Max-Age</code>, <code>Expires</code></td><td>How long the browser keeps it. Without either, it is a <em>session cookie</em> and goes when the browser closes.</td></tr>
+          <tr><td><code>__Host-</code> prefix</td><td>The browser accepts the cookie only if it also has <code>Secure</code>, no <code>Domain</code> and <code>Path=/</code>. It cannot be overwritten from a subdomain.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout"><p><strong>Site is not origin.</strong> An <em>origin</em> is scheme, host and port. A <em>site</em> is wider: <code>app.example.com</code> and <code>api.example.com</code> are different origins but the same site. <code>SameSite</code> is about sites. That is why a takeover of a sibling subdomain can still attack a cookie that is <code>SameSite=Strict</code>, and why the <code>__Host-</code> prefix matters.</p></div>
+
+      <h3>Session ids, fixation and logout</h3>
+      <ul>
+        <li><b>Random and long.</b> OWASP's session management cheat sheet asks for at least 64 bits of entropy and, for ids you make yourself, at least 128 bits from a cryptographically secure random number generator. Use your framework's, never your own.</li>
+        <li><b>New id at login.</b> If the id stays the same across login, an attacker who planted a known id before login owns the session after it. This is <em>session fixation</em>. Issue a new id after any change of privilege, and destroy the old one.</li>
+        <li><b>Expire it.</b> Use an idle timeout (the cheat sheet gives 2 to 5 minutes for high-value applications and 15 to 30 minutes for low-risk ones) and an absolute timeout (for example 4 to 8 hours for an office worker's session).</li>
+        <li><b>Logout means the server forgets.</b> Deleting the cookie in the browser does not invalidate a copy someone already stole. The server must end the session.</li>
+      </ul>
+
+      <h3>CSRF: a request the user never meant to make</h3>
+      <div class="what-is"><h4>What is it? CSRF</h4><dl>
+        <dt>What it is</dt><dd>Cross-site request forgery: a page on another site makes the user's browser send a request to your site, and the browser attaches the user's cookie automatically.</dd>
+        <dt>The problem it creates</dt><dd>Your site cannot tell a forged request from one the user chose to make. It sees a valid cookie.</dd>
+        <dt>Everyday comparison</dt><dd>Someone slips a pre-filled bank form into your hand while you are logged in at the counter, and the clerk accepts it because you are standing there.</dd>
+        <dt>What it is not</dt><dd>Not cross-site scripting (XSS): the attacker does not run code in your page and cannot read the response. They only cause a request.</dd>
+        <dt>What stops it</dt><dd>Never change state on GET. Use <code>SameSite</code> cookies as one layer, and a real defence on top: anti-forgery tokens, or a custom request header that a plain cross-site form cannot send, or checking <code>Origin</code> and <code>Sec-Fetch-Site</code>. OWASP calls SameSite a defence in depth that does not replace a proper CSRF defence in most deployments.</dd>
+      </dl></div>
+
+      <h3>Practice</h3>
+      <div data-ex="f3-cookie"></div>
+      <div data-ex="f3-store"></div>
+      <div data-ex="f3-rules"></div>
+      <div data-ex="f3-csrf"></div>
+      <div data-ex="f3-fix"></div>
+
+      <div class="learn"><h4>What you just learned</h4><ul>
+        <li>A login happens once. A session and its cookie carry it afterwards, so protect the cookie as you would the password.</li>
+        <li>Store passwords with a slow, salted function (Argon2id first). Never a fast hash, never encryption.</li>
+        <li>Set <code>Secure</code>, <code>HttpOnly</code> and <code>SameSite</code>, prefer <code>__Host-</code>, issue a new id at login, and end sessions on the server.</li>
+        <li>CSRF abuses the browser attaching cookies by itself. Use SameSite plus a real CSRF defence.</li>
+      </ul></div>
+      <div class="step-foot"><label class="done-toggle"><input type="checkbox" data-done> Mark this step as done</label></div>
+    </section>
