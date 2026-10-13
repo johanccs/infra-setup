@@ -76,6 +76,9 @@ function ledger() {
   const L = JSON.parse(read(path.join(LAB, 'sources.json'))).entries;
   check(L.length > 0 && L.every((e) => e.id && e.claim && e.doc && e.section && e.url && /^\d{4}-\d\d-\d\d$/.test(e.checked)), `the source ledger is complete (${L.length} entries: claim, document, section, link, date checked)`);
   check(new Set(L.map((e) => e.id)).size === L.length, 'ledger ids are unique');
+  const html = read(PAGE); const steps = [...html.matchAll(/<span class="num">(\d+)<\/span>/g)].map((m) => +m[1]).filter((n) => n > 0);
+  const uncovered = steps.filter((n) => !L.some((e) => e.step === n));
+  check(uncovered.length === 0, 'every lesson has entries in the source ledger', 'no entries for step(s) ' + uncovered.join(', '));
   const rfcs = [...new Set(L.filter((e) => e.rfc).map((e) => e.rfc))];
   const probe = run('curl', ['-s', '-m', '15', '-o', os.devNull, '-w', '%{http_code}', 'https://www.rfc-editor.org/rfc/rfc9110.json']);
   if (probe.stdout.trim() !== '200') return skip('the RFC Editor could not be reached: the ledger was not checked against it');
