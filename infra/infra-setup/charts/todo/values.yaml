@@ -3,10 +3,10 @@ registry: docker.io/9032
 tag: "e10590c"
 
 api:
-  replicas: 2
+  replicas: 5
 
 ui:
-  replicas: 2
+  replicas: 1
 
 db: 
   image: postgres:17
