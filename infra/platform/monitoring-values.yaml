@@ -1,0 +1,24 @@
+grafana:
+  adminPassword: lab-only-password
+  sidecar:
+    dashboards:
+      searchNamespace: ALL
+    additionalDataSources:
+      - name: Loki
+        type: loki
+        uid: loki
+        url: http://loki-gateway.monitoring.svc.cluster.local
+        access: proxy
+
+prometheus:
+  prometheusSpec:
+    scrapeInterval: 15s
+    retention: 2d
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+kubeEtcd: { enabled: false }
+kubeControllerManager: { enabled: false }
+kubeScheduler: { enabled: false }
+kubeProxy: { enabled: false }
