@@ -1,6 +1,6 @@
 registry: docker.io/9032
 
-tag: "f5e0237"
+tag: "da33e24"
 
 api:
   replicas: 2
