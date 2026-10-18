@@ -4,6 +4,9 @@ tag: "254a94d"
 
 api:
   replicas: 2
+  faultRate: "0"
+  slowMs: "0"
+  memoryHogMb: "0"
 
 ui:
   replicas: 2

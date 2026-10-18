@@ -14,7 +14,8 @@ spec:
         - name: api
           image: "{{ .Values.registry }}/todo-api:{{ .Values.tag }}"
           ports:
-            - containerPort: 8080
+            - name: http
+              containerPort: 8080
           env:
             - name: APP_VERSION
               value: {{ .Values.tag | quote }}
@@ -23,6 +24,12 @@ spec:
                 secretKeyRef: { name: todo-db, key: password }
             - name: ConnectionStrings__Todos
               value: "Host=todo-db;Database=todo;Username=todo;Password=$(DB_PASSWORD)"
+            - name: FAULT_RATE
+              value: {{ .Values.api.faultRate | quote }}
+            - name: SLOW_MS
+              value: {{ .Values.api.slowMs | quote }}
+            - name: MEMORY_HOG_MB
+              value: {{ .Values.api.memoryHogMb | quote }}
           readinessProbe:
             httpGet: { path: /readyz, port: 8080 }
           livenessProbe:
@@ -38,6 +45,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: todo-api
+  labels: { app: todo-api}
 spec:
   selector: { app: todo-api }
   ports:
