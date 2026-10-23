@@ -74,7 +74,19 @@ todos.AddEndpointFilter(async (context, next) =>
     return await next(context);
 });
 
-todos.MapGet("/", (TodoStore store) => store.AllAsync());
+todos.MapGet("/", (TodoStore store) =>
+{
+    if(DateTime.Now.Second % 2 == 0)
+    {
+        return store.AllAsync();
+    }
+    else
+    {
+        throw new Exception("Test random exceptions for metrices");
+    }
+});
+    
+    
 
 todos.MapPost("/", async (NewTodo input, TodoStore store) =>
 {

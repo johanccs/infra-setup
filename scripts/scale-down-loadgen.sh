@@ -1,0 +1,1 @@
+kubectl -n loadgen scale deploy/loadgen --replicas 0
