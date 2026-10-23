@@ -76,9 +76,9 @@ todos.AddEndpointFilter(async (context, next) =>
 
 todos.MapGet("/", (TodoStore store) =>
 {
-       // return store.AllAsync();
+       return store.AllAsync();
     
-        throw new Exception("Test random exceptions for metrices");
+        //throw new Exception("Test random exceptions for metrices");
 });
     
     
