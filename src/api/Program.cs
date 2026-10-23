@@ -76,14 +76,9 @@ todos.AddEndpointFilter(async (context, next) =>
 
 todos.MapGet("/", (TodoStore store) =>
 {
-    if(DateTime.Now.Second % 2 == 0)
-    {
-        return store.AllAsync();
-    }
-    else
-    {
+       // return store.AllAsync();
+    
         throw new Exception("Test random exceptions for metrices");
-    }
 });
     
     
